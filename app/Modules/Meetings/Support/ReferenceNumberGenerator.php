@@ -10,6 +10,7 @@ class ReferenceNumberGenerator
     private const TABLE_FOR_PREFIX = [
         'MTG' => 'meetings',
         'REC' => 'recommendations',
+        'RES' => 'meeting_resolutions',
     ];
 
     /**
@@ -21,6 +22,7 @@ class ReferenceNumberGenerator
     private const LOCK_KEY = [
         'MTG' => 1001,
         'REC' => 1002,
+        'RES' => 1003,
     ];
 
     public function generate(string $prefix, string $year): string

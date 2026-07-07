@@ -5,8 +5,10 @@ namespace App\Modules\Meetings\Providers;
 use App\Modules\Meetings\Console\Commands\CheckOverdueRecommendationsCommand;
 use App\Modules\Meetings\Console\Commands\SendMeetingRemindersCommand;
 use App\Modules\Meetings\Models\Meeting;
+use App\Modules\Meetings\Models\MeetingResolution;
 use App\Modules\Meetings\Models\Recommendation;
 use App\Modules\Meetings\Observers\MeetingObserver;
+use App\Modules\Meetings\Observers\MeetingResolutionObserver;
 use App\Modules\Meetings\Observers\RecommendationObserver;
 use App\Modules\Meetings\Services\MeetingsCapabilityProvider;
 use Illuminate\Support\Facades\Route;
@@ -52,6 +54,7 @@ class MeetingsServiceProvider extends ServiceProvider
 
         Meeting::observe(MeetingObserver::class);
         Recommendation::observe(RecommendationObserver::class);
+        MeetingResolution::observe(MeetingResolutionObserver::class);
     }
 
     protected function registerRoutes(): void

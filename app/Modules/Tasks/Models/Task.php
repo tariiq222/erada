@@ -9,6 +9,7 @@ use App\Modules\Core\Authorization\Contracts\ScopeAware;
 use App\Modules\Core\Models\ScopedRoleDefinition;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
+use App\Modules\Meetings\Models\MeetingResolution;
 use App\Modules\Meetings\Models\Recommendation;
 use App\Modules\OVR\Models\IncidentReport;
 use App\Modules\Performance\Models\Kpi;
@@ -258,13 +259,15 @@ class Task extends Model implements OwnerEditable, ScopeAware
                 return;
             }
 
-            // Branch (2) — legacy project/dept path. Applies ONLY to tasks
-            // WITHOUT a polymorphic source (source_type null). For tasks
-            // with a source, branch (3) is the authoritative path because
-            // a sensitive source (e.g. OVR confidential) must override
-            // the org-wide department-subtree visibility — otherwise a
-            // confidential OVR task would leak to any same-department
-            // user via the department_id match below.
+            // Branch (2) — legacy project/dept path. Applies to tasks WITHOUT
+            // a polymorphic source (source_type null) AND to tasks whose
+            // source_type is the auto-stamped "Project" / "Department"
+            // sentinel that TaskObserver::stampLegacySourceIfAbsent writes
+            // for new Eloquent-created rows. For tasks with a sensitive
+            // source (OVR confidential, MeetingResolution, etc.), branch
+            // (3) is the authoritative path — otherwise a confidential
+            // OVR task would leak to any same-department user via the
+            // department_id match below.
             $outer->orWhere(function (Builder $b) use (
                 $user,
                 $orgId,
@@ -274,7 +277,10 @@ class Task extends Model implements OwnerEditable, ScopeAware
                 $managedDeptIds,
                 $projectIdsWithRole
             ) {
-                $b->whereNull('source_type')
+                $b->where(function (Builder $legacy) {
+                    $legacy->whereNull('source_type')
+                        ->orWhereIn('source_type', ['Project', 'Department']);
+                })
                     ->where('type', '!=', TaskType::PERSONAL->value)
                     ->where(function (Builder $o) use ($orgId) {
                         $o->whereHas('project', fn (Builder $p) => $p->where('organization_id', $orgId))
@@ -372,13 +378,26 @@ class Task extends Model implements OwnerEditable, ScopeAware
                 }
             });
 
-            // Recommendation / Risk / Kpi / Milestone — org isolation only
-            // (no sensitivity variant for these in the current scope; their
-            // source's own scopeVisibleTo narrows further via the engine
-            // at the per-record layer).
+            // Recommendation / MeetingResolution / Risk / Kpi / Milestone —
+            // org isolation only (no sensitivity variant for these in the
+            // current scope; their source's own scopeVisibleTo narrows further
+            // via the engine at the per-record layer).
             $byType->orWhere(function (Builder $r) use ($orgId) {
                 $r->whereIn('tasks.source_type', ['Recommendation', 'recommendation', Recommendation::class])
                     ->where('tasks.organization_id', $orgId);
+            });
+
+            // Phase 3 / Direction R: tasks spawned by a meeting resolution
+            // carry `source_type = 'MeetingResolution'`. Their org is stamped
+            // at create time from the resolution's organization_id; this
+            // predicate isolates them by org only (the resolution's own
+            // scopeVisibleTo narrows further at the per-record layer).
+            $byType->orWhere(function (Builder $r) use ($orgId) {
+                $r->whereIn('tasks.source_type', [
+                    'MeetingResolution',
+                    'meeting_resolution',
+                    MeetingResolution::class,
+                ])->where('tasks.organization_id', $orgId);
             });
 
             foreach ([
@@ -635,6 +654,7 @@ class Task extends Model implements OwnerEditable, ScopeAware
         'Risk' => Risk::class,
         'IncidentReport' => IncidentReport::class,
         'Recommendation' => Recommendation::class,
+        'MeetingResolution' => MeetingResolution::class,
         'Kpi' => Kpi::class,
         'Milestone' => Milestone::class,
     ];

@@ -123,6 +123,17 @@ class Meeting extends Model implements ScopeAware
         return $this->hasMany(MeetingAgendaItem::class, 'meeting_id');
     }
 
+    /**
+     * Phase 1 / Direction R: typed outputs of the meeting under the new
+     * "resolutions" philosophy (kind = recommendation | decision). The legacy
+     * `recommendations()` relationship above still exists for Direction B
+     * data; the new flow writes exclusively through `resolutions()`.
+     */
+    public function resolutions(): HasMany
+    {
+        return $this->hasMany(MeetingResolution::class, 'meeting_id');
+    }
+
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);

@@ -17,6 +17,14 @@ class TaskFactory extends Factory
             'title' => $this->faker->sentence(4),
             'description' => $this->faker->paragraph(),
             'type' => 'project', // نوع المهمة - project افتراضياً
+            // source_type defaults to NULL — tasks are linked to their parent
+            // (project / department) via dedicated FK columns. The
+            // polymorphic source_type is reserved for engine-aware parents
+            // (Recommendation, MeetingResolution, Risk, etc.) which is what
+            // Task::scopeVisibleTo() branches against. Defaulting to 'Project'
+            // here broke the legacy branch (2) of the visibility scope.
+            'source_type' => null,
+            'source_id' => null,
             'status' => $this->faker->randomElement(['todo', 'in_progress', 'in_review', 'completed']),
             'priority' => $this->faker->randomElement(['low', 'medium', 'high', 'critical']),
             'due_date' => $this->faker->dateTimeBetween('now', '+3 months'),

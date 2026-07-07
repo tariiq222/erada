@@ -29,9 +29,21 @@ class TaskEngineVisibilityScopeTest extends TestCase
         $org = Organization::factory()->create();
         $dept = Department::factory()->create(['organization_id' => $org->id]);
         $user = User::factory()->create(['organization_id' => $org->id]);
-        // viewer Spatie role + 'viewer' org-scoped definition (seeded by RolesAndPermissionsSeeder)
-        // makes AccessDecision::grantsAtOrganization return true for tasks.view.
-        $user->assignRole('viewer');
+
+        // Grant the engine `tasks.view` capability via an org-scoped
+        // scoped_role definition (`member` is a legacy test role seeded
+        // by RolesAndPermissionsSeeder::seedLegacyTestRoles with every
+        // `view*` capability). The previous assertion incorrectly relied
+        // on the Spatie `viewer` role auto-granting engine capabilities,
+        // but Phase 3's ScopedDepartmentRolesSeeder narrowed the
+        // engine grant to explicit scoped_role_definitions rows only.
+        $user->scopedRoles()->create([
+            'role' => 'member',
+            'scope_type' => 'organization',
+            'scope_id' => $org->id,
+            'inherit_to_children' => true,
+            'source' => 'manual',
+        ]);
 
         // Pass department_id in same org so ProjectObserver::saving does not override organization_id.
         $project = Project::factory()->create([
