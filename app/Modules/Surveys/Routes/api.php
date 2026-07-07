@@ -69,7 +69,7 @@ Route::middleware('auth:sanctum')->group(function () {
             ->name('surveys.analytics');
 
         Route::get('/{survey}/export', [SurveyController::class, 'export'])
-            ->middleware('permission:view_survey_responses')
+            ->middleware('engine_capability:'.Capability::SURVEYS_REVIEW_RESPONSES)
             ->name('surveys.export');
 
         // نسخ الاستبيان
@@ -129,7 +129,11 @@ Route::middleware('auth:sanctum')->group(function () {
         // ========================================
         // الإجابات
         // ========================================
-        Route::prefix('{survey}/responses')->middleware('permission:view_survey_responses')->group(function () {
+        // Phase 8-D: `permission:view_survey_responses` (Spatie) → engine_capability.
+        // تصحيح Phase 1 القديم: الـ route يعرض response data (PII) لا survey metadata،
+        // فالـ capability الصحيح هو SURVEYS_REVIEW_RESPONSES (نفسه المستخدم في
+        // SurveyResponseController::authorize() و SurveyController::export::authorize()).
+        Route::prefix('{survey}/responses')->middleware('engine_capability:'.Capability::SURVEYS_REVIEW_RESPONSES)->group(function () {
             Route::get('/', [SurveyResponseController::class, 'index'])
                 ->name('surveys.responses.index');
             Route::get('/{response}', [SurveyResponseController::class, 'show'])
