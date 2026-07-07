@@ -50,8 +50,10 @@ final class CapabilityAlias
             'delete_users' => Capability::USERS_DELETE,
 
             // ── Dashboard / Reports ──
-            // ponytail: no dashboard/reports module capability — transition aliases, remove in Phase 4.
-            'view_dashboard' => null,
+            // Phase 8-C: view_dashboard now resolves to a canonical capability
+            // (dashboard.view). view_reports / export_reports remain ponytails
+            // until a reports module is introduced.
+            'view_dashboard' => Capability::DASHBOARD_VIEW,
             'view_reports' => null,
             'export_reports' => null,
 
@@ -114,8 +116,9 @@ final class CapabilityAlias
             // ── Surveys ──
             'view_survey_responses' => Capability::SURVEYS_VIEW,
             'review_survey_responses' => Capability::SURVEYS_REVIEW_RESPONSES,
-            // ponytail: no data-import capability — transition alias, remove in Phase 4.
-            'review_data_imports' => null,
+            // Phase 8-C: review_data_imports now resolves to a canonical capability
+            // (surveys.review_data_imports).
+            'review_data_imports' => Capability::SURVEYS_REVIEW_DATA_IMPORTS,
 
             // ── Departments ──
             'view_departments' => Capability::DEPARTMENTS_VIEW,

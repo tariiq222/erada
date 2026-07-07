@@ -60,8 +60,14 @@ class CapabilityAliasTest extends TestCase
             );
         }
 
-        // At least one known transition alias exists (regression guard).
-        $this->assertContains('view_dashboard', CapabilityAlias::transitionAliases());
+        // Phase 8-C: 'view_dashboard' was promoted off the ponytail in
+        // Phase 8-C and now resolves to Capability::DASHBOARD_VIEW. The
+        // remaining transition aliases live under Dashboard/Reports and
+        // RiskManagement — pick one of each as a regression guard so the
+        // transitionAliases() list never silently empties out.
+        $this->assertContains('view_reports', CapabilityAlias::transitionAliases());
+        $this->assertContains('view_own_risks', CapabilityAlias::transitionAliases());
+        $this->assertNotContains('view_dashboard', CapabilityAlias::transitionAliases());
     }
 
     /**

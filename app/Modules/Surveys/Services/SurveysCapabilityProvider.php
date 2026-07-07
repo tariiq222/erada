@@ -22,11 +22,12 @@ use App\Modules\Core\Models\User;
  * Record-scoped checks happen at the FormRequest authorize() / Policy layer.
  *
  * Wire keys (canonical after Phase 6 — Surveys Org-Isolation):
- *   - surveys.view            <-> Capability::SURVEYS_VIEW
- *   - surveys.create          <-> Capability::SURVEYS_CREATE
- *   - surveys.edit            <-> Capability::SURVEYS_EDIT
- *   - surveys.delete          <-> Capability::SURVEYS_DELETE
- *   - surveys.review_responses <-> Capability::SURVEYS_REVIEW_RESPONSES
+ *   - surveys.view                <-> Capability::SURVEYS_VIEW
+ *   - surveys.create              <-> Capability::SURVEYS_CREATE
+ *   - surveys.edit                <-> Capability::SURVEYS_EDIT
+ *   - surveys.delete              <-> Capability::SURVEYS_DELETE
+ *   - surveys.review_responses    <-> Capability::SURVEYS_REVIEW_RESPONSES
+ *   - surveys.review_data_imports <-> Capability::SURVEYS_REVIEW_DATA_IMPORTS
  */
 class SurveysCapabilityProvider implements CapabilityProvider
 {
@@ -38,6 +39,7 @@ class SurveysCapabilityProvider implements CapabilityProvider
             Capability::SURVEYS_EDIT => AccessDecision::can($user, Capability::SURVEYS_EDIT),
             Capability::SURVEYS_DELETE => AccessDecision::can($user, Capability::SURVEYS_DELETE),
             Capability::SURVEYS_REVIEW_RESPONSES => AccessDecision::can($user, Capability::SURVEYS_REVIEW_RESPONSES),
+            Capability::SURVEYS_REVIEW_DATA_IMPORTS => AccessDecision::can($user, Capability::SURVEYS_REVIEW_DATA_IMPORTS),
         ];
     }
 }

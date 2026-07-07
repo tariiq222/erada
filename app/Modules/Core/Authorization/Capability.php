@@ -261,6 +261,30 @@ final class Capability
 
     const SURVEYS_REVIEW_RESPONSES = 'surveys.review_responses';
 
+    // Phase 8-C: surfaces the engine capability for the legacy
+    // `review_data_imports` Spatie permission. The route
+    // `/api/data-imports/{id}/(approve|reject|apply|retry|bulk-*)`
+    // was previously gated by `permission:review_data_imports`; it
+    // now uses `engine_capability:surveys.review_data_imports`.
+    // Existing scoped_role_definitions.permissions[] rows that
+    // carried the legacy key were backfilled by the
+    // 2026_07_12_000001 migration.
+    const SURVEYS_REVIEW_DATA_IMPORTS = 'surveys.review_data_imports';
+
+    // ========================================================
+    // Dashboard — لوحة التحكم
+    // ========================================================
+
+    // Phase 8-C: surfaces the engine capability for the legacy
+    // `view_dashboard` Spatie permission. The route group
+    // `/api/dashboard/*` was previously gated by
+    // `can:view_dashboard`; it now uses
+    // `engine_capability:dashboard.view`. Existing
+    // scoped_role_definitions.permissions[] rows that carried the
+    // legacy key were backfilled by the
+    // 2026_07_12_000001 migration.
+    const DASHBOARD_VIEW = 'dashboard.view';
+
     // ========================================================
     // الأدوار والمستخدمون والإعدادات — Admin
     // ========================================================

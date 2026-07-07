@@ -75,6 +75,10 @@ final class CapabilityToAuthorizationRolePermission
         'audit' => ActivityLog::class,
         'core' => Organization::class,
         'roles' => AuthorizationRole::class,
+        // Phase 8-C: dashboards are organization-scoped; map to the
+        // Organization resource (the closest existing FQCN — the
+        // dashboard is an org-wide view, not a per-record resource).
+        'dashboard' => Organization::class,
     ];
 
     /**
