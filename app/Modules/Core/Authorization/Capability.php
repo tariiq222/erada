@@ -319,6 +319,28 @@ final class Capability
 
     const CORE_ASSIGN_ROLES = 'core.assign_roles';
 
+    /**
+     * Phase 9-D-B — Minimal cluster_tree engine primitive.
+     *
+     * Enables the cross-org rescue branch in `AccessDecision::whyCan()` ONLY
+     * when ALL of these conditions hold:
+     *   1. the requested capability is exactly this constant
+     *      (no widening to users.view / projects.view / etc.),
+     *   2. the user's organization is an ancestor of the target's organization
+     *      via the `parent_id` walk (depth cap 32, fail-closed on cycle),
+     *   3. the user holds a ScopedRole on `user.organization_id` whose
+     *      `ScopedRoleDefinition.permissions[]` contains this capability
+     *      (no is_admin_role shortcut, no inherit_to_children shortcut),
+     *   4. the target is NOT a `SensitivelyScoped` record with `isSensitive() = true`
+     *      (no bypassing the OVR confidential floor),
+     *   5. the target's organization is non-null and differs from the user's.
+     *
+     * Read-only at this stage. The capability is decoupled from per-module
+     * view capabilities by design — Phase 9-D-D (per-module widening) is
+     * what would authorize reading specific resource types under this primitive.
+     */
+    const CLUSTER_TREE_VIEW = 'core.cluster_tree.view';
+
     const AUDIT_VIEW = 'audit.view';
 
     const AUDIT_EXPORT = 'audit.export';

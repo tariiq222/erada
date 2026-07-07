@@ -10,6 +10,7 @@ use App\Modules\Core\Authorization\Models\AuthorizationResource;
 use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Authorization\Models\AuthorizationRolePermission;
 use App\Modules\Core\Authorization\Support\ScopeAssignmentResolver;
+use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\ScopedRoleDefinition;
 use App\Modules\Core\Models\User;
@@ -407,6 +408,17 @@ class AccessDecision
             return static::trace(true, 'super_admin', 'super_admin bypasses all checks');
         }
 
+        // 1.6 Phase 9-D-B — cluster_tree rescue (BEFORE org_isolation_denied).
+        //     كل شروط الفحص موجودة في helper واحد لتقليل التعقيد الإدراكي لـ whyCan.
+        if ($target !== null
+            && static::clusterTreeRescueApplies($user, $capability, $target)) {
+            return static::trace(
+                true,
+                'cluster_tree_rescue',
+                'user.org is a cluster-tree ancestor of target.org and the user holds a cluster tree grant'
+            );
+        }
+
         // 2. عزل المؤسسة
         if ($target !== null && ! static::sameOrganization($user, $target)) {
             return static::trace(false, 'org_isolation_denied', 'target belongs to another organization');
@@ -559,6 +571,138 @@ class AccessDecision
         }
 
         return (int) $user->organization_id === (int) $targetOrgId;
+    }
+
+    // ========================================================
+    // Phase 9-D-B — cluster_tree rescue (engine minimal)
+    // ========================================================
+    //
+    // هذا الـ primitive محدود:
+    //   - يُطلق فقط لـ Capability::CLUSTER_TREE_VIEW (لا يُفعّل رؤية users.view
+    //     أو projects.view تلقائياً).
+    //   - لا يتجاوز sensitive floor (SensitivelyScoped + isSensitive).
+    //   - يتطلب scoped role على user.organization_id (لا is_admin_role shortcut).
+    //   - يتطلب أن user.organization_id يكون ancestor لـ target.organization_id.
+    //   - read-only — لا يُفعّل create/update/delete.
+    //   - لا يُوسّع list/index scopes (Phase 9-D-D هو الذي يقرر per-module widening).
+    //
+    // لا يُعدّل sameOrganization / extractOrganizationId / buildScopeChain.
+    // لا يُعدّل ScopeAssignmentResolver. لا يُعدّل أي OrgGuard.
+    // لا يُعدّل أي User*Scope. لا يُعدّل أي module controller.
+
+    /**
+     * الفحص المسبق لإطلاق rescue branch — يُرجع true فقط إذا
+     *   - $capability === Capability::CLUSTER_TREE_VIEW
+     *   - الـ target غير حساس (SensitivelyScoped + isSensitive=false)
+     *   - sameOrganization سيفشل (cross-org case)
+     *   - crossOrgClusterTreeAdmitted فعلاً يُرجع true
+     */
+    protected static function clusterTreeRescueApplies(User $user, string $capability, Model $target): bool
+    {
+        if ($capability !== Capability::CLUSTER_TREE_VIEW) {
+            return false;
+        }
+
+        if ($target instanceof SensitivelyScoped && $target->isSensitive()) {
+            return false;
+        }
+
+        if (static::sameOrganization($user, $target)) {
+            return false; // same-org handled by strict-equality gate
+        }
+
+        return static::crossOrgClusterTreeAdmitted($user, $capability, $target);
+    }
+
+    /**
+     * الفحص الأساسي لـ cross-org cluster_tree grant.
+     *
+     * يرجع true إذا:
+     *   1. user.organization_id != null
+     *   2. target org id != null ومختلف عن user org
+     *   3. user.organization_id موجود في ancestors(target.organization_id)
+     *   4. المستخدم يحمل scoped role نشطة على user.organization_id
+     *      وفيها permission = Capability::CLUSTER_TREE_VIEW
+     */
+    protected static function crossOrgClusterTreeAdmitted(User $user, string $capability, Model $target): bool
+    {
+        if ($capability !== Capability::CLUSTER_TREE_VIEW || $user->organization_id === null) {
+            return false;
+        }
+
+        $targetOrgId = static::extractOrganizationId($target);
+        if ($targetOrgId === null || (int) $user->organization_id === (int) $targetOrgId) {
+            return false;
+        }
+
+        return static::userIsClusterAncestorOfTarget($user, (int) $targetOrgId, $capability);
+    }
+
+    /**
+     * هل user.org (المسجّل في $user) هو ancestor لمؤسسة الـ target،
+     * وهل المستخدم يحمل scoped role صريح على user.org فيها الـ capability؟
+     */
+    protected static function userIsClusterAncestorOfTarget(User $user, int $targetOrgId, string $capability): bool
+    {
+        $targetOrg = Organization::query()->find($targetOrgId);
+        if (! $targetOrg instanceof Organization) {
+            return false;
+        }
+
+        $userOrgId = (int) $user->organization_id;
+        if (! in_array($userOrgId, $targetOrg->ancestorIds(), true)) {
+            return false;
+        }
+
+        return static::userHasScopedRoleGrantingCapability($user, $userOrgId, $capability);
+    }
+
+    /**
+     * هل المستخدم يحمل scoped role فعّال على org المحدد
+     * وفي `ScopedRoleDefinition.permissions[]` الـ capability المطلوبة؟
+     *
+     * لا يعتمد على is_admin_role (لا wildcard override).
+     * لا يعتمد على inherit_to_children (لا يوسّع تلقائياً).
+     *
+     * يستخدم findByKey() كـ fallback — نفس الـ engine path — لأن
+     * model_has_scoped_roles ليس به role_definition_id FK column.
+     */
+    protected static function userHasScopedRoleGrantingCapability(User $user, int $orgId, string $capability): bool
+    {
+        $matched = false;
+
+        foreach (static::activeScopedRolesFor($user) as $scopedRole) {
+            if (static::scopedRoleGrantsCapabilityOnOrg($scopedRole, $orgId, $capability)) {
+                $matched = true;
+                break;
+            }
+        }
+
+        return $matched;
+    }
+
+    /**
+     * فحص scoped role واحد: هل type=organization و scope_id=orgId
+     * وفي permissions[] الـ capability المطلوبة؟
+     *
+     * يعتمد على findByKey() بدل roleDefinition relation لأن
+     * model_has_scoped_roles ليس به role_definition_id column.
+     */
+    protected static function scopedRoleGrantsCapabilityOnOrg(ScopedRole $scopedRole, int $orgId, string $capability): bool
+    {
+        $isMatchingOrgScope = $scopedRole->scope_type === ScopedRole::SCOPE_ORGANIZATION
+            && (int) $scopedRole->scope_id === $orgId;
+        if (! $isMatchingOrgScope) {
+            return false;
+        }
+
+        $definition = ScopedRoleDefinition::findByKey(
+            $scopedRole->scope_type,
+            $scopedRole->role,
+        );
+        $permissions = $definition?->permissions;
+
+        return is_array($permissions) && in_array($capability, $permissions, true);
     }
 
     /**
