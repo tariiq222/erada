@@ -20,6 +20,7 @@
 /storage/framework/testing/
 /storage/framework/logs/
 /storage/logs/
+/storage/app/private/comments/
 /bootstrap/cache/*.php
 .phpactor.json
 .phpunit.result.cache
