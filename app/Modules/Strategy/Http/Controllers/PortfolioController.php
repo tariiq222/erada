@@ -173,8 +173,15 @@ class PortfolioController extends Controller
                 ? ($validated['organization_id'] ?? $user?->organization_id)
                 : $user?->organization_id;
 
+            // Org-isolation floor: a strategy record with a null organization_id
+            // becomes invisible to every org-scoped query, so we refuse to save
+            // it instead of creating an orphan. Validation-style 422 (the user
+            // is authorized, the data is incomplete).
             if ($portfolioOrgId === null) {
-                abort(403, 'ليس لديك صلاحية الوصول لهذا العنصر');
+                return response()->json([
+                    'message' => 'لا يمكن إنشاء الالتزام التنفيذي بدون مؤسسة مرتبطة واضحة',
+                    'errors' => ['organization_id' => ['يجب تحديد المؤسسة أو تسجيل الدخول بحساب مرتبط بمؤسسة']],
+                ], 422);
             }
 
             unset($validated['organization_id']);

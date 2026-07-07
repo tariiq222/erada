@@ -8,6 +8,7 @@ use App\Modules\Core\Authorization\Capability;
 use App\Modules\Projects\Models\Project;
 use App\Modules\Shared\Traits\HasOrganizationScope;
 use App\Modules\Strategy\Http\Requests\DeleteBlockerRequest;
+use App\Modules\Strategy\Http\Requests\EscalateBlockerRequest;
 use App\Modules\Strategy\Http\Requests\ListBlockersRequest;
 use App\Modules\Strategy\Http\Requests\ResolveBlockerRequest;
 use App\Modules\Strategy\Http\Requests\StoreBlockerRequest;
@@ -125,6 +126,16 @@ class BlockerController extends Controller
 
         $this->assertSameOrganization($blockable);
 
+        // Org-isolation floor: a blocker with a null organization_id becomes
+        // invisible to every org-scoped query, so refuse to save it instead
+        // of creating an orphan. Validation-style 422.
+        if ($blockable->organization_id === null) {
+            return response()->json([
+                'message' => 'لا يمكن تسجيل تعثر على عنصر غير مرتبط بمؤسسة',
+                'errors' => ['blockable_id' => ['العنصر المرتبط يجب أن يكون مرتبطًا بمؤسسة']],
+            ], 422);
+        }
+
         $validated['blockable_type'] = $modelClass;
         $validated['reported_by'] = auth()->id();
         $validated['status'] = 'open';
@@ -209,11 +220,11 @@ class BlockerController extends Controller
     /**
      * Escalate a blocker.
      */
-    public function escalate(Blocker $blocker): JsonResponse
+    public function escalate(EscalateBlockerRequest $request, Blocker $blocker): JsonResponse
     {
-        $this->authorizeStrategy('update');
-        $this->assertSameOrganization($blocker);
-
+        // Authz (STRATEGY_EDIT on blocker) + org-isolation floor owned by
+        // EscalateBlockerRequest. Mirrors resolve() so both status-transition
+        // endpoints pass through the same target-bound engine check.
         $blocker->escalate();
 
         return response()->json([

@@ -117,6 +117,16 @@ class ReviewController extends Controller
 
         $this->assertSameOrganization($reviewable);
 
+        // Org-isolation floor: a review with a null organization_id becomes
+        // invisible to every org-scoped query, so refuse to save it instead
+        // of creating an orphan. Validation-style 422.
+        if ($reviewable->organization_id === null) {
+            return response()->json([
+                'message' => 'لا يمكن إنشاء مراجعة مرتبطة بعنصر غير مرتبط بمؤسسة',
+                'errors' => ['reviewable_id' => ['العنصر المرتبط يجب أن يكون مرتبطًا بمؤسسة']],
+            ], 422);
+        }
+
         $validated['reviewable_type'] = $modelClass;
         $validated['conducted_by'] = auth()->id();
         $validated['overall_status'] = $validated['overall_status'] ?? 'on_track';
