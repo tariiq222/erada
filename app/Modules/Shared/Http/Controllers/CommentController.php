@@ -14,6 +14,7 @@ use App\Modules\Shared\Models\ActivityLog;
 use App\Modules\Shared\Models\Attachment;
 use App\Modules\Shared\Models\Comment;
 use App\Modules\Shared\Notifications\MentionedInCommentNotification;
+use App\Modules\Shared\Services\ActivityLogOrganizationResolver;
 use App\Modules\Shared\Services\FileUploadValidator;
 use App\Modules\Tasks\Models\Task;
 use Illuminate\Http\JsonResponse;
@@ -513,7 +514,7 @@ class CommentController extends Controller
         $loggableType = $type === 'task' ? Task::class : Project::class;
 
         // اشتقاق organization_id من الـ loggable نفسه (لا من $request->user()).
-        $organizationId = app(\App\Modules\Shared\Services\ActivityLogOrganizationResolver::class)
+        $organizationId = app(ActivityLogOrganizationResolver::class)
             ->resolveForLoggable($loggableType, $model->id);
 
         ActivityLog::create([

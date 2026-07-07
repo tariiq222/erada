@@ -5,10 +5,9 @@ namespace Tests\Unit\Performance\Scopes;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\Performance\Models\Kpi;
-use App\Modules\Performance\Models\KpiMeasurement;
 use App\Modules\Performance\Models\KpiLink;
+use App\Modules\Performance\Models\KpiMeasurement;
 use App\Modules\Performance\Scopes\UserKpiScope;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 

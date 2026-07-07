@@ -8,6 +8,7 @@ use App\Modules\Core\Authorization\Capability;
 use App\Modules\Projects\Models\Project;
 use App\Modules\Projects\Services\ProjectSettingsService;
 use App\Modules\Shared\Models\ActivityLog;
+use App\Modules\Shared\Services\ActivityLogOrganizationResolver;
 use App\Modules\Shared\Services\FileUploadValidator;
 use App\Modules\Tasks\Models\Task;
 use Illuminate\Http\JsonResponse;
@@ -255,7 +256,7 @@ class UploadController extends Controller
             $projectId = (int) $request->project_id;
             // اشتقاق organization_id من الـ Project نفسه (source 1/2 في الـ Resolver)،
             // لا من $request->user()->organization_id.
-            $projectOrgId = app(\App\Modules\Shared\Services\ActivityLogOrganizationResolver::class)
+            $projectOrgId = app(ActivityLogOrganizationResolver::class)
                 ->resolveForLoggable(Project::class, $projectId);
             ActivityLog::create([
                 'loggable_type' => Project::class,
@@ -274,7 +275,7 @@ class UploadController extends Controller
         } elseif ($request->has('task_id')) {
             $taskId = (int) $request->task_id;
             $task = Task::find($taskId);
-            $taskOrgId = app(\App\Modules\Shared\Services\ActivityLogOrganizationResolver::class)
+            $taskOrgId = app(ActivityLogOrganizationResolver::class)
                 ->resolveForLoggable(Task::class, $taskId);
             ActivityLog::create([
                 'loggable_type' => Task::class,

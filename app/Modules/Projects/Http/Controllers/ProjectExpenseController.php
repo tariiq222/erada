@@ -12,6 +12,7 @@ use App\Modules\Projects\Http\Requests\UpdateProjectExpenseRequest;
 use App\Modules\Projects\Models\Project;
 use App\Modules\Projects\Models\ProjectExpense;
 use App\Modules\Shared\Models\ActivityLog;
+use App\Modules\Shared\Services\ActivityLogOrganizationResolver;
 use App\Modules\Tasks\Models\Task;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -159,7 +160,7 @@ class ProjectExpenseController extends Controller
             'action' => 'expense_added',
             'description' => "تم إضافة مصروف: {$expense->title} بمبلغ ".number_format($expense->amount, 2),
             // organization_id من الـ Project نفسه (لا من request user).
-            'organization_id' => app(\App\Modules\Shared\Services\ActivityLogOrganizationResolver::class)
+            'organization_id' => app(ActivityLogOrganizationResolver::class)
                 ->resolveForLoggable(Project::class, $project->id),
             // 'changes' ليس في $fillable، استبدل بـ new_values.
             'new_values' => [
@@ -264,7 +265,7 @@ class ProjectExpenseController extends Controller
                 'user_id' => $request->user()->id,
                 'action' => 'expense_updated',
                 'description' => "تم تعديل المصروف: {$expense->title}",
-                'organization_id' => app(\App\Modules\Shared\Services\ActivityLogOrganizationResolver::class)
+                'organization_id' => app(ActivityLogOrganizationResolver::class)
                     ->resolveForLoggable(Project::class, $project->id),
                 // 'changes' ليس في $fillable، استبدل بـ old_values + new_values.
                 'old_values' => [
@@ -322,7 +323,7 @@ class ProjectExpenseController extends Controller
             'user_id' => $request->user()->id,
             'action' => 'expense_deleted',
             'description' => "تم حذف المصروف: {$expenseTitle} بمبلغ ".number_format($expenseAmount, 2),
-            'organization_id' => app(\App\Modules\Shared\Services\ActivityLogOrganizationResolver::class)
+            'organization_id' => app(ActivityLogOrganizationResolver::class)
                 ->resolveForLoggable(Project::class, $project->id),
             // 'changes' ليس في $fillable، استبدل بـ old_values.
             'old_values' => [

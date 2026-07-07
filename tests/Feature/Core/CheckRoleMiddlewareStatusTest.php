@@ -2,13 +2,14 @@
 
 namespace Tests\Feature\Core;
 
+use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Http\Middleware\CheckPermission;
 use App\Modules\Core\Http\Middleware\CheckRole;
-use Illuminate\Auth\Middleware\Authenticate;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use Database\Seeders\RolesAndPermissionsSeeder;
+use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Router;
 use Tests\TestCase;
@@ -38,6 +39,8 @@ class CheckRoleMiddlewareStatusTest extends TestCase
     protected Department $deptA;
 
     protected Department $deptB;
+
+    private const SURVEYS_ROUTES_PATH = 'app/Modules/Surveys/Routes/api.php';
 
     protected function setUp(): void
     {
@@ -88,13 +91,84 @@ class CheckRoleMiddlewareStatusTest extends TestCase
         );
     }
 
-    public function test_permission_middleware_used_in_surveys_routes(): void
+    public function test_surveys_response_routes_use_engine_capability_not_spatie_permission(): void
     {
-        $surveysRoutes = file_get_contents(
-            base_path('app/Modules/Surveys/Routes/api.php')
-        );
+        // Phase 8-D migration: `permission:view_survey_responses` (Spatie) was
+        // replaced by engine_capability so the unified AccessDecision engine
+        // gates PII response data. This test pins that move — if a future
+        // change reverts surveys responses routes to Spatie permission, this
+        // assertion fires and the regression is caught at PR time.
+        //
+        // We assert against the call-form `'permission:view_survey_responses'`
+        // (inside a ->middleware(...) call) rather than the bare phrase so the
+        // Phase 8-D explanatory comments in the routes file do not trip the
+        // assertion.
+        $surveysRoutes = file_get_contents(base_path(self::SURVEYS_ROUTES_PATH));
 
-        $this->assertStringContainsString("middleware('permission:", $surveysRoutes);
+        $this->assertDoesNotMatchRegularExpression(
+            '/->middleware\(\s*[\'"]permission:view_survey_responses[\'"]/',
+            $surveysRoutes,
+            'surveys responses routes must NOT use the Spatie permission:'
+            ." 'view_survey_responses' — Phase 8-D migrated them to engine_capability."
+        );
+    }
+
+    public function test_surveys_response_routes_guard_via_engine_capability(): void
+    {
+        // Companion to the negative assertion above: surveys responses
+        // routes MUST be guarded via engine_capability:Capability::SURVEYS_REVIEW_RESPONSES.
+        // We assert the source-level literal because that is the form any
+        // future Phase reads — the runtime string only resolves after PHP
+        // evaluates `Capability::SURVEYS_REVIEW_RESPONSES`.
+        $surveysRoutes = file_get_contents(base_path(self::SURVEYS_ROUTES_PATH));
+
+        $expectedLiteral = "'engine_capability:'.Capability::SURVEYS_REVIEW_RESPONSES";
+
+        $this->assertStringContainsString(
+            $expectedLiteral,
+            $surveysRoutes,
+            'surveys responses routes must be guarded by engine_capability:'
+            .'Capability::SURVEYS_REVIEW_RESPONSES (the source-level literal,'
+            .' not the runtime-concatenated string).'
+        );
+    }
+
+    public function test_permission_middleware_alias_preserved_as_back_compat_seam(): void
+    {
+        // After Phase 8-C/D/E migrations, the `permission:` middleware is no
+        // longer wired into any route file (all consumers moved to the
+        // engine). The alias registration in
+        // test_permission_middleware_alias_registered() above pins the
+        // back-compat seam: external callers and unmigrated third-party
+        // routes that still rely on it must not break on kernel boot.
+        //
+        // This companion test makes the post-migration contract explicit:
+        // surveys (fully engine-driven) must NOT carry a permission: call.
+        $surveysRoutes = file_get_contents(base_path(self::SURVEYS_ROUTES_PATH));
+
+        $this->assertStringNotContainsString(
+            "middleware('permission:",
+            $surveysRoutes,
+            'surveys is fully engine-driven post Phase 8-D — permission:'
+            .' middleware should not appear in its routes.'
+        );
+    }
+
+    public function test_role_middleware_still_live_for_intended_legacy_callers(): void
+    {
+        // Like CheckPermission, CheckRole('role:') is the live legacy seam.
+        // It is intentionally absent from the surveys module (which is fully
+        // engine-driven) but Core still relies on it for super_admin guards.
+        // This test guards the route-file presence on the Core side so a
+        // removal in surveys routes cannot be misread as a global removal.
+        $surveysRoutes = file_get_contents(base_path(self::SURVEYS_ROUTES_PATH));
+
+        $this->assertStringNotContainsString(
+            "middleware('role:",
+            $surveysRoutes,
+            'surveys module is fully engine-driven — role: middleware should'
+            .' not appear in its routes (super_admin bypass lives in the engine).'
+        );
     }
 
     public function test_admin_org_b_cannot_view_org_a_user_via_policy_layer(): void

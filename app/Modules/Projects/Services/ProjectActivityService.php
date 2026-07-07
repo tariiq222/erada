@@ -6,6 +6,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Projects\Models\Project;
 use App\Modules\Shared\Models\ActivityLog;
 use App\Modules\Shared\Scopes\UserActivityLogScope;
+use App\Modules\Shared\Services\ActivityLogOrganizationResolver;
 use App\Modules\Tasks\Models\Task;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -18,9 +19,10 @@ class ProjectActivityService
      */
     private function projectOrgId(int $projectId): ?int
     {
-        return app(\App\Modules\Shared\Services\ActivityLogOrganizationResolver::class)
+        return app(ActivityLogOrganizationResolver::class)
             ->resolveForLoggable(Project::class, $projectId);
     }
+
     /**
      * ترجمة أسماء الحقول
      */

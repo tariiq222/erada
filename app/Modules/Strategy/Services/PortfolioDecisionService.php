@@ -4,6 +4,7 @@ namespace App\Modules\Strategy\Services;
 
 use App\Modules\Core\Models\User;
 use App\Modules\Shared\Models\ActivityLog;
+use App\Modules\Shared\Services\ActivityLogOrganizationResolver;
 use App\Modules\Strategy\Models\Portfolio;
 
 class PortfolioDecisionService
@@ -25,7 +26,7 @@ class PortfolioDecisionService
             'action' => 'portfolio_force_closed',
             'loggable_type' => Portfolio::class,
             'loggable_id' => $portfolio->id,
-            'organization_id' => app(\App\Modules\Shared\Services\ActivityLogOrganizationResolver::class)
+            'organization_id' => app(ActivityLogOrganizationResolver::class)
                 ->resolveForLoggable(Portfolio::class, $portfolio->id),
             'old_values' => [
                 'portfolio_status' => $portfolio->getOriginal('portfolio_status'),
@@ -56,7 +57,7 @@ class PortfolioDecisionService
             'action' => 'portfolio_strategic_status_changed',
             'loggable_type' => Portfolio::class,
             'loggable_id' => $portfolio->id,
-            'organization_id' => app(\App\Modules\Shared\Services\ActivityLogOrganizationResolver::class)
+            'organization_id' => app(ActivityLogOrganizationResolver::class)
                 ->resolveForLoggable(Portfolio::class, $portfolio->id),
             'old_values' => [
                 'portfolio_status' => $oldStatus,
@@ -84,7 +85,7 @@ class PortfolioDecisionService
             'action' => 'portfolio_priority_changed',
             'loggable_type' => Portfolio::class,
             'loggable_id' => $portfolio->id,
-            'organization_id' => app(\App\Modules\Shared\Services\ActivityLogOrganizationResolver::class)
+            'organization_id' => app(ActivityLogOrganizationResolver::class)
                 ->resolveForLoggable(Portfolio::class, $portfolio->id),
             'old_values' => $oldValues,
             'new_values' => $newValues,

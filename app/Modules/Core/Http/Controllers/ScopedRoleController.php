@@ -14,7 +14,10 @@ use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\HR\Services\ScopedDepartmentRoleSyncService;
 use App\Modules\Projects\Models\Project;
+use App\Modules\Shared\Http\Resources\ActivityLogResource;
 use App\Modules\Shared\Models\ActivityLog;
+use App\Modules\Shared\Scopes\UserActivityLogScope;
+use App\Modules\Shared\Services\ActivityLogOrganizationResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -127,7 +130,7 @@ class ScopedRoleController extends Controller
             'scope_id' => $project->id,
             'role' => $validated['role'],
             // اشتقاق organization_id من scope_type='project' عبر Resolver (source 4).
-            'organization_id' => app(\App\Modules\Shared\Services\ActivityLogOrganizationResolver::class)
+            'organization_id' => app(ActivityLogOrganizationResolver::class)
                 ->resolveForScope(ScopedRole::SCOPE_PROJECT, $project->id),
             'old_values' => ['role' => $oldRole],
             'new_values' => ['role' => $validated['role']],
@@ -414,7 +417,7 @@ class ScopedRoleController extends Controller
             ->orderBy('created_at', 'desc');
 
         // عزل المؤسسة عبر UserActivityLogScope (فلتر موحّد على activity_logs.organization_id)
-        app(\App\Modules\Shared\Scopes\UserActivityLogScope::class)->apply($query, $actor);
+        app(UserActivityLogScope::class)->apply($query, $actor);
 
         // فلاتر
         if ($request->has('event') || $request->has('action')) {
@@ -440,7 +443,7 @@ class ScopedRoleController extends Controller
         $logs = $query->paginate(min((int) $request->input('per_page', 50), 100));
 
         return response()->json([
-            'data' => \App\Modules\Shared\Http\Resources\ActivityLogResource::collection($logs->getCollection())->resolve($request),
+            'data' => ActivityLogResource::collection($logs->getCollection())->resolve($request),
             'meta' => [
                 'current_page' => $logs->currentPage(),
                 'last_page' => $logs->lastPage(),

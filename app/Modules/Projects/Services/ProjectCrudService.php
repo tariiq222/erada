@@ -16,6 +16,7 @@ use App\Modules\Projects\Services\Project\StakeholderService;
 use App\Modules\Projects\Services\Project\TaskService;
 use App\Modules\Projects\Services\Project\TeamService;
 use App\Modules\Shared\Models\ActivityLog;
+use App\Modules\Shared\Services\ActivityLogOrganizationResolver;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -460,7 +461,7 @@ class ProjectCrudService
             ?? auth('sanctum')->id()
             ?? request()->user()?->id;
 
-        $resolver = app(\App\Modules\Shared\Services\ActivityLogOrganizationResolver::class);
+        $resolver = app(ActivityLogOrganizationResolver::class);
 
         foreach ($models as $model) {
             $loggableType = get_class($model);
