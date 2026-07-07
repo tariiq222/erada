@@ -1,0 +1,307 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_migrations:
+        description: 'Skip running migrations'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  PHP_VERSION: '8.4'
+  NODE_VERSION: '20'
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════
+  # Job 1: Run Tests First
+  # ═══════════════════════════════════════════════════════════════
+  test:
+    name: 🧪 Run Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: iradah_pmo_test
+          POSTGRES_USER: iradah
+          POSTGRES_PASSWORD: secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: pdo, pdo_pgsql, redis
+
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+
+      - name: Install PHP dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install NPM dependencies
+        run: npm ci
+
+      - name: Build assets
+        run: npm run build
+
+      - name: Copy env
+        run: cp .env.testing .env
+
+      - name: Generate key
+        run: php artisan key:generate
+
+      - name: Run migrations
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: iradah_pmo_test
+          DB_USERNAME: iradah
+          DB_PASSWORD: secret
+        run: php artisan migrate --force
+
+      - name: Run tests
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: iradah_pmo_test
+          DB_USERNAME: iradah
+          DB_PASSWORD: secret
+        run: php artisan test
+
+  # ═══════════════════════════════════════════════════════════════
+  # Job 2: Backup DB before migration (P0-5)
+  # ═══════════════════════════════════════════════════════════════
+  backup:
+    name: 💾 Backup DB before migrate
+    runs-on: ubuntu-latest
+    needs: test
+    if: ${{ github.event.inputs.skip_migrations != 'true' }}
+    steps:
+      - name: Setup PostgreSQL client
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client
+
+      - name: Dump production database
+        env:
+          PGPASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_HOST:    ${{ secrets.DB_HOST }}
+          DB_PORT:    ${{ secrets.DB_PORT }}
+          DB_NAME:    ${{ secrets.DB_DATABASE }}
+          DB_USER:    ${{ secrets.DB_USERNAME }}
+          SHA:        ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          TS=$(date -u +%Y%m%d-%H%M%S)
+          FILE="pre-migrate-${SHA:0:7}-${TS}.dump"
+          echo "Dumping ${DB_NAME}@${DB_HOST} → ${FILE}"
+          pg_dump \
+            --host="$DB_HOST" \
+            --port="$DB_PORT" \
+            --username="$DB_USER" \
+            --dbname="$DB_NAME" \
+            --format=custom \
+            --no-owner \
+            --no-privileges \
+            --file="$FILE"
+          ls -lh "$FILE"
+          echo "DUMP_PATH=$FILE" >> "$GITHUB_ENV"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Upload to backup bucket (90-day prefix)
+        env:
+          BACKUP_BUCKET: ${{ secrets.BACKUP_BUCKET }}
+        run: |
+          aws s3 cp "$DUMP_PATH" \
+            "s3://${BACKUP_BUCKET}/pre-migrate/$DUMP_PATH" \
+            --storage-class STANDARD_IA \
+            --metadata "sha=${{ github.sha }},job=${{ github.run_id }}"
+
+      - name: Notify on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {"text": "❌ Pre-migration backup FAILED — deploy blocked.\n• Repo: ${{ github.repository }}\n• SHA: ${{ github.sha }}\n• Run: ${{ github.run_id }}\n• Job: ${{ github.job }}"}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # ═══════════════════════════════════════════════════════════════
+  # Job 3: Run Migrations on Production Database
+  # ═══════════════════════════════════════════════════════════════
+  migrate:
+    name: 🗄️ Run Migrations
+    runs-on: ubuntu-latest
+    needs: test, backup
+    if: ${{ github.event.inputs.skip_migrations != 'true' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: pdo, pdo_pgsql
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-dev
+
+      - name: Run production migrations
+        env:
+          APP_ENV: production
+          APP_KEY: ${{ secrets.APP_KEY }}
+          DB_CONNECTION: pgsql
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_DATABASE: ${{ secrets.DB_DATABASE }}
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          echo "🔄 Running migrations on production database..."
+          php artisan migrate --force --no-interaction
+          echo "✅ Migrations completed successfully"
+
+      - name: Check migration status
+        env:
+          APP_ENV: production
+          APP_KEY: ${{ secrets.APP_KEY }}
+          DB_CONNECTION: pgsql
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_DATABASE: ${{ secrets.DB_DATABASE }}
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: php artisan migrate:status
+
+  # ═══════════════════════════════════════════════════════════════
+  # Job 3: Trigger Dokploy Deployment
+  # ═══════════════════════════════════════════════════════════════
+  deploy:
+    name: 🚀 Deploy via Dokploy
+    runs-on: ubuntu-latest
+    needs: migrate
+
+    steps:
+      - name: Trigger Dokploy Webhook
+        run: |
+          echo "🚀 Triggering Dokploy deployment..."
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "${{ secrets.DOKPLOY_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}"}')
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "Response: $BODY"
+          echo "HTTP Code: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "✅ Dokploy deployment triggered successfully"
+          else
+            echo "❌ Failed to trigger Dokploy deployment"
+            exit 1
+          fi
+
+      - name: Wait for deployment
+        run: |
+          echo "⏳ Waiting 30 seconds for deployment to initialize..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          echo "🏥 Running health check..."
+
+          MAX_RETRIES=5
+          RETRY_DELAY=10
+
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Attempt $i of $MAX_RETRIES..."
+
+            RESPONSE=$(curl -s -w "\n%{http_code}" \
+              "${{ secrets.APP_URL }}/api/health" \
+              -H "Accept: application/json" \
+              --connect-timeout 10 \
+              --max-time 30)
+
+            HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Health check passed!"
+              exit 0
+            fi
+
+            echo "Health check failed (HTTP $HTTP_CODE), retrying in ${RETRY_DELAY}s..."
+            sleep $RETRY_DELAY
+          done
+
+          echo "⚠️ Health check failed after $MAX_RETRIES attempts"
+          echo "Deployment may still be in progress. Please verify manually."
+          # Don't fail the workflow, just warn
+          exit 0
+
+  # ═══════════════════════════════════════════════════════════════
+  # Job 4: Notify on completion
+  # ═══════════════════════════════════════════════════════════════
+  notify:
+    name: 📢 Notify
+    runs-on: ubuntu-latest
+    needs: [test, migrate, deploy]
+    if: always()
+
+    steps:
+      - name: Check job results
+        run: |
+          echo "📊 Deployment Summary:"
+          echo "  - Tests: ${{ needs.test.result }}"
+          echo "  - Migrations: ${{ needs.migrate.result }}"
+          echo "  - Deploy: ${{ needs.deploy.result }}"
+
+          if [ "${{ needs.deploy.result }}" = "success" ]; then
+            echo ""
+            echo "🎉 Deployment completed successfully!"
+            echo "   Commit: ${{ github.sha }}"
+            echo "   Branch: ${{ github.ref_name }}"
+          else
+            echo ""
+            echo "❌ Deployment failed. Check the logs above."
+          fi

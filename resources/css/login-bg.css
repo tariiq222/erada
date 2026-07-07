@@ -1,0 +1,24 @@
+/* ========================================
+   LOGIN BACKGROUND PATTERN
+   Calm institutional grid + dots.
+   Decorative only — pointer-events disabled.
+   ======================================== */
+
+.login-bg {
+  background-color: var(--surface-subtle);
+  background-image:
+    radial-gradient(circle, var(--bg-pattern-dot) 0.8px, transparent 1.2px),
+    linear-gradient(to right, var(--bg-pattern-line) 0.5px, transparent 0.5px),
+    linear-gradient(to bottom, var(--bg-pattern-line) 0.5px, transparent 0.5px);
+  background-size:
+    24px 24px,
+    96px 100%,
+    100% 96px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-bg {
+    /* static by design — no motion to disable; selector kept for future-proofing */
+    background-attachment: scroll;
+  }
+}

@@ -1,0 +1,44 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+    - phpstan-baseline.neon
+
+parameters:
+    paths:
+        - app/
+
+    # Level 2 - baseline for P0 merge; increase gradually for code quality
+    level: 2
+
+    # Ignore certain errors that are common in Laravel applications
+    ignoreErrors:
+        # Ignore dynamic Eloquent/model properties and methods at this baseline level.
+        -
+            identifier: property.notFound
+            path: app/*
+        -
+            identifier: method.notFound
+            path: app/*
+        - '#Call to an undefined method Illuminate\\Database\\Eloquent\\Builder::#'
+        # Ignore morphMany/morphTo return types
+        - '#should return .* but returns Illuminate\\Database\\Eloquent\\Relations\\MorphMany#'
+        # Ignore nullsafe on non-nullable (common defensive coding)
+        - '#Using nullsafe .* on non-nullable type#'
+        # Ignore instanceof always true/false (enum casting behavior)
+        - '#Instanceof between .* will always evaluate to#'
+        # Ignore strict comparison always false (enum values)
+        - '#Strict comparison using === between .* will always evaluate to false#'
+        # Ignore missing iterable value types
+        - '#no value type specified in iterable type array#'
+        # Ignore return type mismatches for diffInDays (returns float in Carbon)
+        - '#should return int\|null but returns float#'
+        # Ignore result of && always false (defensive checks)
+        - '#Result of && is always false#'
+        # Ignore booleanNot always true (defensive checks)
+        - '#Negated boolean expression is always#'
+
+    # Exclude generated files and test helpers
+    excludePaths:
+        - vendor/
+
+    # Report unmatched ignored errors
+    reportUnmatchedIgnoredErrors: false

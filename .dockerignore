@@ -1,0 +1,72 @@
+# Git
+.git
+.gitignore
+
+# Dependencies (will be installed fresh in container)
+node_modules
+vendor
+
+# Build outputs (will be built fresh in container)
+public/build
+public/hot
+
+# IDE & Editors
+.idea
+.vscode
+.fleet
+.nova
+.zed
+
+# Testing
+coverage
+.nyc_output
+cypress/videos
+cypress/screenshots
+cypress/downloads
+.jest-cache
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Docker files (not needed inside container)
+Dockerfile
+docker-compose*.yml
+
+# Claude/AI
+.claude
+.mcp.json
+
+# Keep README but exclude other markdown
+# *.md
+# !README.md
+
+# Environment files (secrets must never enter the build context)
+.env
+.env.*
+!.env.example
+
+# Never ship database dumps / backups into the image (H-04)
+backups
+db_backups
+*.dump
+*.sql
+*.sql.gz
+*.gz
+
+# AI/planning artifacts & local reports
+.planning
+.rpiv
+.kilo
+.kilocode
+qa-reports
+code
+
+# Runtime/test leftovers
+supervisord.log
+supervisord.pid
+.phpunit.result.cache

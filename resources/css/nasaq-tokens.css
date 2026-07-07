@@ -1,0 +1,310 @@
+/* Text scaling must not zoom layout containers; doing so creates viewport gaps. */
+[data-textscale="sm"] .nasaq-brand,
+[data-textscale="sm"] .nasaq-nav-group,
+[data-textscale="sm"] .nasaq-topbar > *,
+[data-textscale="sm"] .nasaq-content > * { zoom: 0.92; }
+[data-textscale="lg"] .nasaq-brand,
+[data-textscale="lg"] .nasaq-nav-group,
+[data-textscale="lg"] .nasaq-topbar > *,
+[data-textscale="lg"] .nasaq-content > * { zoom: 1.08; }
+[data-textscale="xl"] .nasaq-brand,
+[data-textscale="xl"] .nasaq-nav-group,
+[data-textscale="xl"] .nasaq-topbar > *,
+[data-textscale="xl"] .nasaq-content > * { zoom: 1.16; }
+
+[data-density="compact"] { --nasaq-density-y: 0.86; }
+[data-density="regular"] { --nasaq-density-y: 1; }
+[data-density="spacious"] { --nasaq-density-y: 1.16; }
+[data-character="soft"] { --r-sm: 10px; --r: 14px; --r-lg: 18px; --r-xl: 24px; }
+[data-character="balanced"] { --r-sm: 8px; --r: 11px; --r-lg: 15px; --r-xl: 20px; }
+[data-character="sharp"] { --r-sm: 4px; --r: 7px; --r-lg: 10px; --r-xl: 14px; }
+
+:root {
+  --font: 'IBM Plex Sans Arabic', system-ui, sans-serif;
+
+  /* cool slate base · LIGHT */
+  --bg: #F7F8FA;
+  --bg-grad: radial-gradient(130% 110% at 92% -12%, #F0F3F8 0%, #F7F8FA 46%);
+  --surface: var(--surface-base);
+  --surface-2: var(--surface-subtle);
+  --surface-3: var(--surface-muted);
+  --border: var(--border-default);
+  --border-2: var(--border-strong);
+  --text: var(--text-primary);
+  --text-2: var(--text-secondary);
+  --text-3: var(--text-tertiary);
+
+  /* corporate blue primary — aliased to design-tokens.css accent scale */
+  --primary: var(--accent-default);
+  --primary-2: var(--accent-hover);
+  --primary-ink: #FFFFFF; /* TODO: no design-tokens equivalent */
+  --primary-soft: var(--accent-subtle);
+  --primary-soft-2: color-mix(in srgb, var(--surface) 72%, var(--accent-subtle));
+  --ring: color-mix(in srgb, var(--accent-default) 22%, transparent);
+
+  /* functional status — aliased to design-tokens.css (single source).
+     info/neutral/violet removed: no consumer + no design-tokens equivalent. */
+  --ok: var(--status-success);       --ok-bg: var(--status-success-subtle);
+  --warn: var(--status-warning);       --warn-bg: var(--status-warning-subtle);
+  --danger: var(--status-danger);      --danger-bg: var(--status-danger-subtle);
+
+  /* shadows + radius — alias to design-tokens.css (imported after nasaq-tokens, so it wins the cascade) */
+  --shadow: var(--shadow-md);
+  --r-sm: var(--radius-sm);
+  --r: var(--radius-md);
+  --r-lg: var(--radius-lg);
+  --r-xl: 20px; /* TODO: no design-tokens equivalent */
+
+  --sidebar-w: 264px;
+  --sidebar-w-collapsed: 72px;
+  --nasaq-density-y: 1;
+}
+
+.dark {
+  --bg: #08151F;
+  --bg-grad: radial-gradient(130% 110% at 92% -12%, #0E2433 0%, #08151F 52%);
+  --surface: var(--surface-base);
+  --surface-2: var(--surface-muted);
+  --surface-3: #1E3849; /* nasaq 4th elevated layer — no design-tokens equivalent */
+  --border: var(--border-default);
+  --border-2: var(--border-strong);
+  --text: var(--text-primary);
+  --text-2: var(--text-secondary);
+  --text-3: var(--text-tertiary);
+
+  /* corporate blue primary — aliased to design-tokens.css .dark accent scale */
+  --primary: var(--accent-default);
+  --primary-2: var(--accent-hover);
+  --primary-ink: #06121C; /* TODO: no design-tokens equivalent */
+  --primary-soft: var(--accent-subtle);
+  --primary-soft-2: var(--accent-muted);
+  --ring: color-mix(in srgb, var(--accent-default) 30%, transparent);
+
+  /* functional status — alias to design-tokens.css .dark (identical values, single source) */
+  --ok: var(--status-success);       --ok-bg: var(--status-success-subtle);
+  --warn: var(--status-warning);       --warn-bg: var(--status-warning-subtle);
+  --danger: var(--status-danger);      --danger-bg: var(--status-danger-subtle);
+
+  /* shadows — alias to design-tokens.css .dark (which wins the cascade) */
+  --shadow: var(--shadow-md);
+}
+
+/* Brand & background-theme palettes (the runtime switcher) live in a SINGLE
+   source: NASAQ_PALETTES / NASAQ_BG_THEMES in resources/js/shared/nasaq/app.tsx.
+   AppLayout reads them and injects the values as inline CSS variables on
+   <html> (which override everything). The former [data-brand] / [data-bg-theme]
+   rule blocks here were dead code — inline styles always won, and the bg rules
+   never even matched (JS sets `data-bg`, not `data-bg-theme`). Removed to keep
+   one source of truth. The default (pre-switch) palette is the :root / .dark
+   aliases above, which derive from design-tokens.css. */
+
+/* font-family owned by app.css (single source, next to the @font-face) */
+body { background: var(--bg); color: var(--text); }
+::selection { background: var(--ring); }
+
+.nasaq-app { display: flex; height: 100vh; overflow: hidden; background: var(--bg-grad); color: var(--text); }
+.nasaq-app-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.nasaq-sidebar { width: var(--sidebar-w); min-width: var(--sidebar-w); max-width: var(--sidebar-w); flex-shrink: 0; background: color-mix(in srgb, var(--surface) 88%, var(--primary-soft)); border-inline-start: 1px solid color-mix(in srgb, var(--border) 78%, var(--primary-soft)); display: flex; flex-direction: column; height: 100vh; overflow: hidden; z-index: 30; box-sizing: border-box; }
+.nasaq-nav-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; display: flex; flex-direction: column; padding-block: 4px 8px; }
+[dir="ltr"] .nasaq-sidebar { order: -1; border-inline-start: 0; border-inline-end: 1px solid color-mix(in srgb, var(--border) 78%, var(--primary-soft)); }
+.nasaq-brand { display: flex; align-items: center; gap: 10px; padding: 12px 12px 10px; border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, var(--primary-soft)); flex: 0 0 auto; }
+.nasaq-brand-mark { width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0; display: grid; place-items: center; overflow: hidden; }
+.nasaq-brand-mark-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.sidebar-collapse-icon { transition: transform .18s ease; }
+[dir="rtl"] .sidebar-collapse-icon { transform: scaleX(-1); }
+.nasaq-brand-name { font-weight: 700; font-size: 16px; letter-spacing: -.2px; line-height: 1.1; }
+.nasaq-brand-sub { font-size: 11px; color: var(--text-3); font-weight: 500; margin-top: 2px; }
+.nasaq-nav-group { padding: 1px 8px; flex: 0 0 auto; }
+.nasaq-nav-group + .nasaq-nav-group { margin-top: 3px; padding-top: 5px; border-top: 1px solid color-mix(in srgb, var(--border) 86%, var(--primary-soft)); }
+.nasaq-nav-label { font-size: 11px; font-weight: 700; line-height: 1.2; letter-spacing: .26px; color: var(--text-3); padding: 5px 8px 3px; }
+.nasaq-nav-item { --nasaq-nav-accent: var(--accent-default); --nasaq-nav-accent-hover: var(--accent-hover); --nasaq-nav-accent-soft: var(--accent-subtle); --nasaq-nav-accent-muted: var(--accent-muted); --nasaq-nav-accent-text: var(--accent-text); display: flex; align-items: center; gap: 8px; width: 100%; min-height: 38px; padding: calc(3px * var(--nasaq-density-y)) 9px; border-radius: 999px; border: 1px solid transparent; background: transparent; color: var(--text); font-size: 14px; font-weight: 600; line-height: 1.25; text-align: start; transition: background .14s, border-color .14s, color .14s; position: relative; text-decoration: none; }
+.nasaq-nav-item[data-accent="primary"] { --nasaq-nav-accent: var(--accent-default); --nasaq-nav-accent-hover: var(--accent-hover); --nasaq-nav-accent-soft: var(--accent-subtle); --nasaq-nav-accent-muted: var(--accent-muted); --nasaq-nav-accent-text: var(--accent-text); }
+.nasaq-nav-item[data-accent="indigo"] { --nasaq-nav-accent: var(--support-indigo-default); --nasaq-nav-accent-hover: var(--support-indigo-hover); --nasaq-nav-accent-soft: var(--support-indigo-subtle); --nasaq-nav-accent-muted: var(--support-indigo-muted); --nasaq-nav-accent-text: var(--support-indigo-text); }
+.nasaq-nav-item[data-accent="teal"] { --nasaq-nav-accent: var(--support-teal-default); --nasaq-nav-accent-hover: var(--support-teal-hover); --nasaq-nav-accent-soft: var(--support-teal-subtle); --nasaq-nav-accent-muted: var(--support-teal-muted); --nasaq-nav-accent-text: var(--support-teal-text); }
+.nasaq-nav-item[data-accent="amber"] { --nasaq-nav-accent: var(--support-amber-default); --nasaq-nav-accent-hover: var(--support-amber-hover); --nasaq-nav-accent-soft: var(--support-amber-subtle); --nasaq-nav-accent-muted: var(--support-amber-muted); --nasaq-nav-accent-text: var(--support-amber-text); }
+.nasaq-nav-item[data-accent="violet"] { --nasaq-nav-accent: var(--support-violet-default); --nasaq-nav-accent-hover: var(--support-violet-hover); --nasaq-nav-accent-soft: var(--support-violet-subtle); --nasaq-nav-accent-muted: var(--support-violet-muted); --nasaq-nav-accent-text: var(--support-violet-text); }
+.nasaq-nav-item[data-accent="crisis"] { --nasaq-nav-accent: var(--crisis-base); --nasaq-nav-accent-hover: var(--crisis-dark); --nasaq-nav-accent-soft: var(--crisis-subtle); --nasaq-nav-accent-muted: var(--crisis-border); --nasaq-nav-accent-text: var(--crisis-text); }
+.nasaq-nav-item:hover { background: color-mix(in srgb, var(--surface-2) 78%, var(--nasaq-nav-accent-soft)); color: var(--text); border-color: color-mix(in srgb, var(--border) 82%, var(--nasaq-nav-accent-muted)); }
+.nasaq-nav-item.active { background: color-mix(in srgb, var(--nasaq-nav-accent-soft) 72%, var(--surface)); border-color: color-mix(in srgb, var(--nasaq-nav-accent) 32%, var(--border)); color: var(--nasaq-nav-accent-text); }
+.nasaq-nav-item.active::before { content: none; display: none; }
+.nasaq-nav-item .ic { width: 17px; height: 17px; flex-shrink: 0; opacity: 1; color: color-mix(in srgb, var(--nasaq-nav-accent-text) 54%, var(--text-3)); }
+.nasaq-nav-item:hover .ic, .nasaq-nav-item.active .ic { color: var(--nasaq-nav-accent-text); }
+.nasaq-nav-item > .nasaq-nav-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0; color: inherit; font: inherit; font-size: inherit; font-weight: inherit; line-height: inherit; letter-spacing: inherit; }
+.nasaq-nav-item span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nasaq-nav-acc { display: flex; flex-direction: column; }
+.nasaq-nav-parent.branch-active { color: var(--nasaq-nav-accent-text); }
+.nasaq-nav-caret { width: 13px; height: 13px; flex: 0 0 auto; opacity: .6; transition: transform .16s ease; }
+.nasaq-nav-caret.open { transform: rotate(180deg); }
+.nasaq-nav-children { display: flex; flex-direction: column; gap: 0; margin-top: 0; position: relative; }
+.nasaq-nav-children::before { content: ''; position: absolute; inset-block: 2px; inset-inline-start: 16px; width: 1px; border-radius: 2px; background: color-mix(in srgb, var(--border) 86%, var(--surface-3)); }
+.nasaq-nav-children .nasaq-nav-item { min-height: 34px; font-size: 13px; font-weight: 500; color: var(--text-2); padding-block: calc(2px * var(--nasaq-density-y)); padding-inline-start: 24px; }
+.nasaq-nav-children .nasaq-nav-item .ic { width: 15px; height: 15px; }
+.nasaq-nav-children .nasaq-nav-item:hover { color: var(--text); }
+.nasaq-nav-children .nasaq-nav-item.active { color: var(--nasaq-nav-accent-text); font-weight: 600; }
+.nasaq-nav-children .nasaq-nav-item.active::before { display: none; }
+.nasaq-nav-children .nasaq-nav-children::before { inset-inline-start: 32px; }
+.nasaq-nav-children .nasaq-nav-children .nasaq-nav-item { padding-inline-start: 40px; }
+.nasaq-sidebar-foot { margin-top: auto; padding: 6px; }
+.nasaq-org-card { display: flex; align-items: center; gap: 8px; padding: 7px; border: 1px solid color-mix(in srgb, var(--border) 78%, var(--primary-soft)); border-radius: var(--r-lg); background: color-mix(in srgb, var(--surface-2) 84%, var(--primary-soft)); box-shadow: none; }
+.nasaq-org-logo { width: 32px; height: 32px; border-radius: 9px; background: var(--primary-soft); color: var(--primary); display: grid; place-items: center; flex-shrink: 0; }
+.nasaq-org-name { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nasaq-org-meta { font-size: 11px; color: var(--text-3); margin-top: 1px; }
+.nasaq-topbar { height: 64px; flex-shrink: 0; display: flex; align-items: center; gap: 14px; padding: 0 22px; background: color-mix(in srgb, var(--surface) 88%, transparent); border-bottom: 1px solid var(--border); backdrop-filter: blur(18px) saturate(150%); z-index: 20; }
+.nasaq-mobile-menu { display: none; }
+.nasaq-crumbs { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 13px; min-width: 0; }
+.nasaq-crumbs b { color: var(--text); font-weight: 700; white-space: nowrap; }
+.nasaq-top-org-chip { height: 44px; max-width: 260px; min-width: 0; display: flex; align-items: center; gap: 9px; padding: 0 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); flex: 0 1 auto; }
+.nasaq-top-org-icon { width: 30px; height: 30px; border-radius: 9px; background: var(--primary-soft); color: var(--primary); display: grid; place-items: center; flex: 0 0 auto; }
+.nasaq-top-org-copy { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.nasaq-top-org-name { font-size: 13px; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nasaq-top-org-meta { font-size: 11px; color: var(--text-3); line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nasaq-org-menu { position: relative; flex: 0 1 auto; min-width: 0; }
+.nasaq-top-org-chip.is-interactive { font: inherit; text-align: start; cursor: pointer; }
+.nasaq-top-org-chip.is-interactive:hover { background: var(--surface-2); }
+.nasaq-top-org-chip.is-interactive:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.nasaq-top-org-caret { width: 15px; height: 15px; flex: 0 0 auto; color: var(--text-3); }
+.nasaq-org-menu-list { display: flex; flex-direction: column; gap: 2px; max-height: 280px; overflow-y: auto; }
+.nasaq-org-menu-item { width: 100%; min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent; color: var(--text); font: inherit; text-align: start; cursor: pointer; }
+.nasaq-org-menu-item:hover { background: var(--surface-2); }
+.nasaq-org-menu-item:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.nasaq-org-menu-item.is-current { background: var(--primary-soft); }
+.nasaq-org-menu-id { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.nasaq-org-menu-name { font-size: 13px; font-weight: 700; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nasaq-org-menu-code { font-size: 11px; color: var(--text-3); line-height: 1.1; }
+.nasaq-org-menu-tick { width: 17px; height: 17px; flex: 0 0 auto; color: var(--primary); }
+.nasaq-org-menu-manage { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 10px; margin-top: 6px; border: 0; border-top: 1px solid var(--border); border-radius: 0 0 10px 10px; background: transparent; color: var(--text-2); font: inherit; font-size: 13px; font-weight: 600; text-align: start; cursor: pointer; }
+.nasaq-org-menu-manage:hover { background: var(--surface-2); color: var(--text); }
+.nasaq-org-menu-manage .ic, .nasaq-org-menu-manage svg { width: 17px; height: 17px; flex-shrink: 0; color: var(--text-3); }
+.nasaq-header-sidebar-toggle { width: 32px; height: 32px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--border) 84%, var(--primary-soft)); background: color-mix(in srgb, var(--surface) 88%, var(--primary-soft)); color: var(--text-2); display: grid; place-items: center; flex: 0 0 auto; }
+.nasaq-header-sidebar-toggle:hover { color: var(--text); background: color-mix(in srgb, var(--surface-2) 84%, var(--primary-soft)); }
+.nasaq-header-sidebar-toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.nasaq-header-sidebar-toggle-icon { width: 22px; height: 18px; display: inline-flex; align-items: center; justify-content: center; color: inherit; }
+.nasaq-header-sidebar-toggle-bars { width: 16px; height: 16px; flex: 0 0 auto; }
+.nasaq-header-sidebar-toggle-arrow { width: 11px; height: 11px; flex: 0 0 auto; margin-inline-start: -5px; color: var(--text-3); }
+.nasaq-top-search { height: 44px; min-width: 240px; flex: 1; max-width: 520px; display: flex; align-items: center; gap: 9px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); color: var(--text-3); }
+.nasaq-top-search input { border: 0; outline: 0; background: transparent; color: var(--text); flex: 1; font: inherit; min-width: 0; }
+.nasaq-top-search kbd { font-size: 11px; color: var(--text-2); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; background: var(--surface-3); }
+.nasaq-top-actions { margin-inline-start: auto; display: flex; align-items: center; gap: 8px; }
+.nasaq-tech-dashboard-btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border)); background: color-mix(in srgb, var(--primary-soft) 74%, var(--surface)); color: var(--text); font: inherit; font-size: 13px; font-weight: 800; white-space: nowrap; cursor: pointer; }
+.nasaq-tech-dashboard-btn:hover { background: color-mix(in srgb, var(--primary-soft) 62%, var(--surface-2)); color: var(--primary-2); }
+.nasaq-tech-dashboard-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.nasaq-tech-dashboard-btn .ic { width: 18px; height: 18px; flex: 0 0 auto; color: var(--primary); }
+.nasaq-icon-btn { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); display: grid; place-items: center; position: relative; }
+.nasaq-icon-btn:hover { color: var(--text); background: var(--surface-2); }
+.nasaq-dot { position: absolute; top: 8px; inset-inline-end: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); border: 2px solid var(--surface); }
+.nasaq-user-menu { position: relative; }
+.nasaq-user-chip { display: flex; align-items: center; gap: 9px; height: 44px; padding: 0 6px 0 10px; border: 1px solid var(--border); background: var(--surface); border-radius: 12px; text-decoration: none; color: var(--text); font: inherit; text-align: start; cursor: pointer; }
+.nasaq-user-chip:hover { background: var(--surface-2); }
+.nasaq-user-chip:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.nasaq-user-chip .nm { font-size: 13px; font-weight: 700; line-height: 1.1; }
+.nasaq-user-chip .rl { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.nasaq-user-menu-head { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; margin-bottom: 6px; border-bottom: 1px solid var(--border); }
+.nasaq-user-menu-id { min-width: 0; }
+.nasaq-user-menu-name { font-size: 13px; font-weight: 800; line-height: 1.2; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nasaq-user-menu-role { font-size: 11px; color: var(--text-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nasaq-user-menu-item { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent; color: var(--text-2); font: inherit; font-size: 13px; font-weight: 600; text-align: start; cursor: pointer; }
+.nasaq-user-menu-item:hover { background: var(--surface-2); color: var(--text); }
+.nasaq-user-menu-item:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.nasaq-user-menu-item .ic, .nasaq-user-menu-item svg { width: 17px; height: 17px; flex-shrink: 0; color: var(--text-3); }
+.nasaq-user-menu-item.is-danger { color: var(--danger); }
+.nasaq-user-menu-item.is-danger .ic, .nasaq-user-menu-item.is-danger svg { color: var(--danger); }
+.nasaq-user-menu-item.is-danger:hover { background: var(--danger-soft, var(--surface-2)); color: var(--danger); }
+.avatar { border-radius: 999px; color: #fff; display: grid; place-items: center; font-weight: 800; flex-shrink: 0; }
+.nasaq-content { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px; max-width: 1800px; width: 100%; }
+.nasaq-settings-menu { position: relative; }
+.nasaq-menu-backdrop { position: fixed; inset: 0; z-index: 39; }
+.nasaq-menu-pop { position: absolute; top: calc(100% + 8px); inset-inline-end: 0; width: 280px; z-index: 40; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-lg); border-radius: var(--r-lg); padding: 12px; }
+.nasaq-menu-title { font-weight: 800; margin-bottom: 10px; }
+.nasaq-menu-sec { padding: 10px 0; border-top: 1px solid var(--border); }
+.nasaq-menu-sec:first-of-type { border-top: 0; padding-top: 0; }
+.nasaq-menu-lbl { display: flex; align-items: center; gap: 8px; color: var(--text-2); font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+.nasaq-menu-lbl .ic { width: 15px; height: 15px; }
+.nasaq-menu-seg { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--surface-2); }
+.nasaq-menu-seg button { flex: 1; min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: var(--text-2); font: inherit; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 5px; }
+.nasaq-menu-seg button.on { background: var(--surface); color: var(--primary); box-shadow: var(--shadow-sm); }
+.nasaq-menu-seg .ic, .nasaq-menu-seg svg { width: 16px; height: 16px; flex-shrink: 0; }
+.nasaq-menu-lbl .ic, .nasaq-menu-lbl svg { width: 15px; height: 15px; flex-shrink: 0; }
+.nasaq-empty-drawer { display: none; }
+
+.nasaq-sidebar { transition: width 200ms ease, min-width 200ms ease, max-width 200ms ease; }
+.nasaq-sidebar.collapsed { width: var(--sidebar-w-collapsed); min-width: var(--sidebar-w-collapsed); max-width: var(--sidebar-w-collapsed); }
+.nasaq-sidebar.collapsed .nasaq-nav-item { justify-content: center; padding-inline: 0; }
+.nasaq-sidebar.collapsed .nasaq-nav-item .nasaq-nav-label,
+.nasaq-sidebar.collapsed .nasaq-nav-group-label { display: none; }
+.nasaq-sidebar.collapsed .nasaq-nav-children { display: none; }
+.nasaq-sidebar.collapsed .nasaq-brand { justify-content: center; padding: 12px 0 10px; }
+.nasaq-sidebar.collapsed .nasaq-nav-group { padding: 1px 6px; }
+.nasaq-sidebar.collapsed .nasaq-sidebar-foot { padding: 6px; }
+.nasaq-top-search-btn {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  text-align: start;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+.nasaq-top-search-btn:hover { color: var(--text); }
+.nasaq-top-search-btn .nasaq-top-search-placeholder {
+  flex: 1;
+  text-align: start;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 1023px) {
+  .nasaq-app { display: block; height: auto; overflow: visible; }
+  .nasaq-content { overflow-y: visible; }
+  .nasaq-sidebar { position: fixed; inset-block: 0; inset-inline-start: auto; inset-inline-end: 0; transform: translateX(100%); transition: transform .2s ease; box-shadow: var(--shadow-lg); }
+  [dir="ltr"] .nasaq-sidebar { inset-inline-start: 0; inset-inline-end: auto; transform: translateX(-100%); }
+  .nasaq-sidebar.open { transform: translateX(0); }
+  .nasaq-mobile-menu { display: grid; }
+  .nasaq-sidebar-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.28); z-index: 25; }
+  .nasaq-topbar { padding: 0 12px; }
+  .nasaq-top-org-chip { height: 40px; max-width: 38vw; padding: 0 9px; }
+  .nasaq-top-org-icon { width: 28px; height: 28px; }
+  .nasaq-top-org-meta { display: none; }
+  .nasaq-top-search { display: none; }
+  .nasaq-tech-dashboard-btn { width: 40px; min-height: 40px; padding: 0; }
+  .nasaq-tech-dashboard-btn span { display: none; }
+  .nasaq-user-chip .nm, .nasaq-user-chip .rl { display: none; }
+  .nasaq-content { padding: 12px; }
+
+  @supports (padding: max(0px)) {
+    .nasaq-topbar {
+      height: calc(64px + env(safe-area-inset-top));
+      padding-top: env(safe-area-inset-top);
+      padding-left: max(12px, env(safe-area-inset-left));
+      padding-right: max(12px, env(safe-area-inset-right));
+    }
+
+    .nasaq-sidebar {
+      box-sizing: border-box;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+
+    .nasaq-content {
+      padding-inline-start: max(12px, env(safe-area-inset-left));
+      padding-inline-end: max(12px, env(safe-area-inset-right));
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nasaq-sidebar,
+  .nasaq-sidebar.open,
+  .nasaq-nav-caret,
+  .nasaq-nav-caret.open {
+    transition: none;
+    animation: none;
+  }
+}

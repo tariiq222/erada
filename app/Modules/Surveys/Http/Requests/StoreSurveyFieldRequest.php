@@ -1,0 +1,88 @@
+<?php
+
+namespace App\Modules\Surveys\Http\Requests;
+
+use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Capability;
+use App\Modules\Surveys\Enums\FieldType;
+use App\Modules\Surveys\Models\Survey;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+
+/**
+ * StoreSurveyFieldRequest - التحقق من صلاحية إضافة حقل لاستبيان.
+ *
+ * authz (engine-only): المستخدم يجب أن يمتلك القدرة SURVEYS_EDIT على الاستبيان
+ * المستهدف (المحرّك يعالج super_admin + عزل المؤسسة).
+ *
+ * قاعدة دورة الحياة (`canEdit` — مسودة فقط وغير مقفل) تبقى في withValidator
+ * لأنها قيد حالة مجال وليس قرار AuthZ.
+ */
+class StoreSurveyFieldRequest extends FormRequest
+{
+    protected ?Survey $survey = null;
+
+    public function authorize(): bool
+    {
+        $survey = $this->route('survey');
+
+        if (! $survey instanceof Survey) {
+            $survey = Survey::find($survey);
+        }
+
+        if (! $survey) {
+            return false;
+        }
+
+        $this->survey = $survey;
+
+        $user = $this->user();
+
+        return $user !== null
+            && AccessDecision::can($user, Capability::SURVEYS_EDIT, $survey);
+    }
+
+    public function rules(): array
+    {
+        $surveyId = $this->survey?->id;
+
+        return [
+            'section_id' => ['nullable', 'exists:survey_sections,id'],
+            'field_key' => [
+                'required',
+                'string',
+                'max:100',
+                'alpha_dash',
+                $surveyId !== null
+                    ? Rule::unique('survey_fields', 'field_key')->where('survey_id', $surveyId)
+                    : Rule::unique('survey_fields', 'field_key'),
+            ],
+            'name' => ['required', 'string', 'max:100'],
+            'label' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'type' => ['required', Rule::enum(FieldType::class)],
+            'config' => ['nullable', 'array'],
+            'is_required' => ['boolean'],
+            'is_visible' => ['boolean'],
+            'visibility_rules' => ['nullable', 'array'],
+        ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            if ($this->survey === null) {
+                return;
+            }
+
+            if (! $this->survey->canEdit()) {
+                abort(403, 'لا يمكن تعديل الاستبيان بعد نشره');
+            }
+        });
+    }
+
+    public function getSurvey(): ?Survey
+    {
+        return $this->survey;
+    }
+}

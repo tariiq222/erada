@@ -1,0 +1,288 @@
+/* ========================================
+   DESIGN SYSTEM TOKENS
+   Erada System — Corporate Blue (Nasaq-aligned)
+
+   RULES:
+   - Corporate blue primary with four restrained support colors
+   - NO gradients on content
+   - Support colors encode wayfinding, not decoration
+   - Semantic tokens ONLY
+   ======================================== */
+
+:root {
+  /* ========== PRIMARY (Corporate Blue) ========== */
+  --accent-default: oklch(54% 0.14 247);
+  --accent-hover: oklch(47% 0.14 247);
+  --accent-hover-deep: oklch(39% 0.13 247);
+  --accent-subtle: oklch(95% 0.026 247);
+  --accent-muted: oklch(84% 0.06 247);
+  --accent-text: oklch(38% 0.13 247);
+
+  /* ========== SECONDARY SUPPORT COLORS (Wayfinding Only) ========== */
+  --support-indigo-default: oklch(52% 0.13 276);
+  --support-indigo-hover: oklch(45% 0.13 276);
+  --support-indigo-subtle: oklch(95% 0.025 276);
+  --support-indigo-muted: oklch(86% 0.055 276);
+  --support-indigo-text: oklch(38% 0.12 276);
+
+  --support-teal-default: oklch(55% 0.095 185);
+  --support-teal-hover: oklch(47% 0.09 185);
+  --support-teal-subtle: oklch(95% 0.025 185);
+  --support-teal-muted: oklch(84% 0.05 185);
+  --support-teal-text: oklch(36% 0.085 185);
+
+  --support-amber-default: oklch(63% 0.12 78);
+  --support-amber-hover: oklch(53% 0.12 78);
+  --support-amber-subtle: oklch(96% 0.035 78);
+  --support-amber-muted: oklch(86% 0.065 78);
+  --support-amber-text: oklch(40% 0.095 78);
+
+  --support-violet-default: oklch(54% 0.12 310);
+  --support-violet-hover: oklch(46% 0.12 310);
+  --support-violet-subtle: oklch(95% 0.028 310);
+  --support-violet-muted: oklch(86% 0.055 310);
+  --support-violet-text: oklch(38% 0.115 310);
+
+  /* ========== TEXT ========== */
+  --text-primary: #0F1729;
+  --text-secondary: #4A5567;
+  --text-tertiary: #666F81; /* AA ≥4.5:1 on surface-base/subtle/muted */
+  --text-disabled: #AEB7C5; /* disabled text — exempt from WCAG 1.4.3 */
+  --text-inverse: #ffffff;
+
+  /* ========== SURFACES ========== */
+  /* النيوترال مائلة قليلاً نحو هوية الأزرق للتماسك (cool-gray) */
+  --surface-base: #FFFFFF;
+  --surface-subtle: #F5F7FB;
+  --surface-muted: #F1F4FA;
+  --surface-overlay: rgba(15, 23, 41, 0.45);
+  --control-knob: #FBFDFE; /* switch/toggle thumb — stays light in both themes */
+
+  /* ========== BORDERS ========== */
+  --border-default: #E4E8F1;
+  --border-strong: #D3D9E5;
+  --border-focus: var(--accent-default);
+
+  /* ========== STATUS (Functional Only) ========== */
+  --status-success: #047857; /* AA ≥4.5:1 on white */
+  --status-success-subtle: #E4F5EE;
+  --status-success-text: #065f46;
+
+  --status-warning: #B45309; /* AA ≥4.5:1 on white */
+  --status-warning-subtle: #F9EFDD;
+  --status-warning-text: #92400e;
+
+  --status-danger: #DC2626;
+  --status-danger-subtle: #FBEAE9;
+  --status-danger-text: #991b1b;
+
+  /* ========== ALIASES (legacy/extended token names → canonical) ========== */
+  --surface-primary: var(--surface-base);
+  --surface-secondary: var(--surface-subtle);
+  --surface-tertiary: var(--surface-muted);
+  --surface-hover: var(--surface-muted);
+  --bg-surface: var(--surface-base);
+  --bg-primary: var(--surface-base);
+  --bg-secondary: var(--surface-subtle);
+  --bg-tertiary: var(--surface-muted);
+  --bg-elevated: var(--surface-base);
+  --bg-hover: var(--surface-muted);
+  --border-primary: var(--border-default);
+  --border-subtle: var(--border-default);
+  --border-hover: var(--border-strong);
+  --text-muted: var(--text-tertiary);
+  --accent-soft: var(--accent-subtle);
+  --status-info: var(--accent-default);
+  --status-info-bg: var(--accent-subtle);
+  --status-info-subtle: var(--accent-subtle);
+  --status-success-bg: var(--status-success-subtle);
+  --status-warning-bg: var(--status-warning-subtle);
+  --status-danger-bg: var(--status-danger-subtle);
+
+  /* ========== SPACING SCALE (4px base) ========== */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* ========== SECONDARY FAMILIES (Module Attribution) ========== */
+  /* Indigo — projects / strategy */
+  --indigo-light: oklch(96% 0.018 280);
+  --indigo-base: oklch(56% 0.14 280);
+  --indigo-dark: oklch(33% 0.12 280);
+  --indigo-subtle: oklch(96% 0.018 280);
+  --indigo-text: oklch(30% 0.11 280);
+  --indigo-border: oklch(83% 0.04 280);
+
+  /* Teal — tasks / operations */
+  --teal-light: oklch(96% 0.018 190);
+  --teal-base: oklch(56% 0.12 190);
+  --teal-dark: oklch(32% 0.10 190);
+  --teal-subtle: oklch(96% 0.018 190);
+  --teal-text: oklch(28% 0.10 190);
+  --teal-border: oklch(83% 0.04 190);
+
+  /* Amber — OVR / risks */
+  --amber-light: oklch(96% 0.025 75);
+  --amber-base: oklch(64% 0.14 75);
+  --amber-dark: oklch(35% 0.12 75);
+  --amber-subtle: oklch(96% 0.025 75);
+  --amber-text: oklch(30% 0.11 75);
+  --amber-border: oklch(83% 0.05 75);
+
+  /* Violet — surveys / HR / admin */
+  --violet-light: oklch(96% 0.022 305);
+  --violet-base: oklch(58% 0.14 305);
+  --violet-dark: oklch(33% 0.12 305);
+  --violet-subtle: oklch(96% 0.022 305);
+  --violet-text: oklch(30% 0.11 305);
+  --violet-border: oklch(83% 0.045 305);
+
+  /* ========== CRISIS FAMILY (slate/steel) ========== */
+  --crisis-light: oklch(96% 0.025 240);
+  --crisis-base: oklch(55% 0.04 240);
+  --crisis-dark: oklch(32% 0.03 240);
+  --crisis-subtle: oklch(96% 0.025 240);
+  --crisis-text: oklch(28% 0.025 240);
+  --crisis-border: oklch(83% 0.03 240);
+
+  /* ========== BORDER RADIUS ========== */
+  --radius-sm: 8px;
+  --radius-md: 11px;
+  --radius-lg: 15px;
+
+  /* ========== SHADOWS (Soft, diffuse) ========== */
+  --shadow-sm: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.05);
+  --shadow-md: 0 2px 4px -2px rgba(16,24,40,.05), 0 6px 16px -6px rgba(16,24,40,.10);
+  --shadow-lg: 0 24px 48px -16px rgba(16,24,40,.20);
+
+  /* ========== TYPOGRAPHY ========== */
+  --text-display: 1.875rem;
+  --text-h1: 1.5rem;
+  --text-h2: 1.25rem;
+  --text-h3: 1rem;
+  --text-body: 0.875rem;
+  --text-small: 0.8125rem;
+  --text-caption: 0.75rem;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --leading-tight: 1.35;
+  --leading-snug: 1.45;
+  --leading-normal: 1.6;
+  --leading-relaxed: 1.75;
+}
+
+.dark {
+  /* PRIMARY — Corporate Blue */
+  --accent-default: oklch(73% 0.12 247);
+  --accent-hover: oklch(80% 0.11 247);
+  --accent-hover-deep: oklch(66% 0.11 247);
+  --accent-subtle: oklch(23% 0.04 247);
+  --accent-muted: oklch(30% 0.045 247);
+  --accent-text: oklch(83% 0.085 247);
+
+  /* SECONDARY SUPPORT COLORS */
+  --support-indigo-default: oklch(73% 0.105 276);
+  --support-indigo-hover: oklch(80% 0.095 276);
+  --support-indigo-subtle: oklch(24% 0.04 276);
+  --support-indigo-muted: oklch(30% 0.045 276);
+  --support-indigo-text: oklch(82% 0.075 276);
+
+  --support-teal-default: oklch(74% 0.085 185);
+  --support-teal-hover: oklch(80% 0.075 185);
+  --support-teal-subtle: oklch(23% 0.035 185);
+  --support-teal-muted: oklch(29% 0.04 185);
+  --support-teal-text: oklch(82% 0.065 185);
+
+  --support-amber-default: oklch(76% 0.10 78);
+  --support-amber-hover: oklch(82% 0.09 78);
+  --support-amber-subtle: oklch(25% 0.04 78);
+  --support-amber-muted: oklch(31% 0.045 78);
+  --support-amber-text: oklch(84% 0.075 78);
+
+  --support-violet-default: oklch(75% 0.095 310);
+  --support-violet-hover: oklch(81% 0.085 310);
+  --support-violet-subtle: oklch(24% 0.04 310);
+  --support-violet-muted: oklch(30% 0.045 310);
+  --support-violet-text: oklch(83% 0.075 310);
+
+  /* SECONDARY FAMILIES (darker ramp for dark mode) */
+  --indigo-light: oklch(75% 0.10 280);
+  --indigo-base: oklch(55% 0.14 280);
+  --indigo-dark: oklch(15% 0.05 280);
+  --indigo-subtle: oklch(15% 0.05 280);
+  --indigo-text: oklch(85% 0.075 280);
+  --indigo-border: oklch(28% 0.06 280);
+
+  --teal-light: oklch(75% 0.09 190);
+  --teal-base: oklch(56% 0.12 190);
+  --teal-dark: oklch(14% 0.045 190);
+  --teal-subtle: oklch(14% 0.045 190);
+  --teal-text: oklch(85% 0.06 190);
+  --teal-border: oklch(27% 0.05 190);
+
+  --amber-light: oklch(78% 0.10 75);
+  --amber-base: oklch(64% 0.14 75);
+  --amber-dark: oklch(15% 0.05 75);
+  --amber-subtle: oklch(15% 0.05 75);
+  --amber-text: oklch(86% 0.08 75);
+  --amber-border: oklch(28% 0.06 75);
+
+  --violet-light: oklch(76% 0.10 305);
+  --violet-base: oklch(58% 0.14 305);
+  --violet-dark: oklch(15% 0.05 305);
+  --violet-subtle: oklch(15% 0.05 305);
+  --violet-text: oklch(85% 0.075 305);
+  --violet-border: oklch(28% 0.06 305);
+
+  /* CRISIS FAMILY (darker ramp for dark mode) */
+  --crisis-light: oklch(70% 0.03 240);
+  --crisis-base: oklch(50% 0.04 240);
+  --crisis-dark: oklch(12% 0.02 240);
+  --crisis-subtle: oklch(12% 0.02 240);
+  --crisis-text: oklch(82% 0.025 240);
+  --crisis-border: oklch(26% 0.03 240);
+
+  /* TEXT — ramp re-tinted toward the blue accent (was cyan-green) */
+  --text-primary: #E9F0F7;
+  --text-secondary: #A3B6CC;
+  --text-tertiary: #7C90A6; /* AA ≥4.5:1 on dark surface */
+  --text-disabled: #4C6072;
+  --text-inverse: #06121C;
+
+  /* SURFACES — deep navy */
+  --surface-base: #102230;
+  --surface-subtle: #08151F;
+  --surface-muted: #162C3C;
+  --surface-overlay: rgba(0, 0, 0, 0.6);
+
+  /* BORDERS */
+  --border-default: #21404F;
+  --border-strong: #2D5365;
+  --border-focus: var(--accent-default);
+
+  /* STATUS */
+  --status-success: #34D399;
+  --status-success-subtle: #0E2E2C;
+  --status-success-text: #6ee7b7;
+
+  --status-warning: #E0A340;
+  --status-warning-subtle: #2F2A1C;
+  --status-warning-text: #fcd34d;
+
+  --status-danger: #F0726B;
+  --status-danger-subtle: #332022;
+  --status-danger-text: #fca5a5;
+
+  /* SHADOWS — deeper for dark */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+  --shadow-md: 0 2px 6px rgba(0,0,0,.35), 0 12px 28px -10px rgba(0,0,0,.55);
+  --shadow-lg: 0 28px 56px -22px rgba(0,0,0,.72);
+}

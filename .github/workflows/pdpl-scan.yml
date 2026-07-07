@@ -1,0 +1,31 @@
+name: PDPL Compliance
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+jobs:
+  pdpl-scan:
+    name: 🔒 PDPL Compliance Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: PDPL Compliance Scan
+        uses: imohad/pdpl-scanner@v1
+        with:
+          path: "."
+          fail-on: "critical"
+          # SARIF upload to GitHub Code Scanning is disabled: the action's internal
+          # codeql step needs 'Code scanning' enabled in repo settings, which
+          # requires a repo-admin toggle (Settings → Code security and analysis).
+          # The scan still runs and the full report is uploaded as a workflow
+          # artifact (pdpl-report.zip) for download/review.
+          upload-sarif: "false"

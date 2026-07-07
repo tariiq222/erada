@@ -1,0 +1,168 @@
+<?php
+
+namespace App\Modules\Core\Authorization;
+
+/**
+ * CapabilityAlias — the single place that maps a legacy flat permission string
+ * to its canonical `module.action` Capability (Phase 2 of ADR-UNIFIED-ROLE-ACCESS).
+ *
+ * `Capability` (module.action) is the single maintained capability vocabulary.
+ * The flat Spatie permission strings that the SPA still gates on
+ * (view_projects, edit_departments, ...) are DERIVED aliases over that
+ * vocabulary — declared here once, not hand-maintained as an independent list.
+ *
+ * Two buckets:
+ *   1. flat string HAS a canonical Capability  -> maps to that constant.
+ *   2. flat string has NO canonical Capability yet -> maps to null and is
+ *      kept as a TRANSITION ALIAS (ponytail: remove once the SPA route guards
+ *      move to module.action or the capability is introduced).
+ *
+ * This map is projection/vocabulary only. It does NOT grant anything and MUST
+ * NOT be consulted by AccessDecision — the decision path stays engine-only.
+ *
+ * Phase 9 note: the legacy kebab Meetings strings (view-meetings,
+ * manage-meetings, record-decisions) were retired. Only the canonical
+ * dotted strings remain in this map and in the Permission enum.
+ */
+final class CapabilityAlias
+{
+    /**
+     * legacy flat string => canonical Capability constant (or null for a
+     * transition alias with no capability equivalent yet).
+     *
+     * @return array<string, string|null>
+     */
+    public static function map(): array
+    {
+        return [
+            // ── Organizations / Core admin ──
+            'view_organizations' => Capability::CORE_VIEW_ORGANIZATIONS,
+            'assign_roles' => Capability::CORE_ASSIGN_ROLES,
+            // ponytail: no create/edit/delete-organization capability yet — transition aliases, remove in Phase 4.
+            'create_organizations' => null,
+            'edit_organizations' => null,
+            'delete_organizations' => null,
+
+            // ── Users ──
+            'view_users' => Capability::USERS_VIEW,
+            'create_users' => Capability::USERS_CREATE,
+            'edit_users' => Capability::USERS_EDIT,
+            'delete_users' => Capability::USERS_DELETE,
+
+            // ── Dashboard / Reports ──
+            // ponytail: no dashboard/reports module capability — transition aliases, remove in Phase 4.
+            'view_dashboard' => null,
+            'view_reports' => null,
+            'export_reports' => null,
+
+            // ── Projects ──
+            'view_projects' => Capability::PROJECTS_VIEW,
+            'create_projects' => Capability::PROJECTS_CREATE,
+            'edit_projects' => Capability::PROJECTS_EDIT,
+            'delete_projects' => Capability::PROJECTS_DELETE,
+
+            // ── Tasks ──
+            'view_tasks' => Capability::TASKS_VIEW,
+            'create_tasks' => Capability::TASKS_CREATE,
+            'edit_tasks' => Capability::TASKS_EDIT,
+            'delete_tasks' => Capability::TASKS_DELETE,
+
+            // ── Roles ──
+            'view_roles' => Capability::ROLES_VIEW,
+            'create_roles' => Capability::ROLES_CREATE,
+            'edit_roles' => Capability::ROLES_EDIT,
+            'delete_roles' => Capability::ROLES_DELETE,
+
+            // ── Attachments ──
+            'upload_attachments' => Capability::ATTACHMENTS_UPLOAD,
+            'download_attachments' => Capability::ATTACHMENTS_VIEW,
+            'delete_attachments' => Capability::ATTACHMENTS_DELETE,
+
+            // ── Comments ──
+            'create_comments' => Capability::COMMENTS_CREATE,
+            'edit_comments' => Capability::COMMENTS_EDIT,
+            'delete_comments' => Capability::COMMENTS_DELETE,
+            // ponytail: no "any comment" capability variant — transition aliases, remove in Phase 4.
+            'edit_any_comment' => null,
+            'delete_any_comment' => null,
+
+            // ── Audit ──
+            'view_audit_logs' => Capability::AUDIT_VIEW,
+            'export_audit_logs' => Capability::AUDIT_EXPORT,
+
+            // ── Strategy ──
+            'view_strategy' => Capability::STRATEGY_VIEW,
+            'create_strategy' => Capability::STRATEGY_CREATE,
+            'edit_strategy' => Capability::STRATEGY_EDIT,
+            'delete_strategy' => Capability::STRATEGY_DELETE,
+
+            // ── Meetings ──
+            // Phase 9: legacy kebab strings (view-meetings,
+            // manage-meetings, record-decisions) and their alias
+            // entries are removed. Only the canonical dotted
+            // capability strings remain in this map and in the
+            // Permission enum. The canonical dotted strings must
+            // stay here as long as any Permission enum case uses
+            // them, so CapabilityAliasTest's "every flat permission
+            // enum case has an alias entry" assertion keeps passing.
+            'meetings.view' => Capability::MEETINGS_VIEW,
+            'meetings.create' => Capability::MEETINGS_CREATE,
+            'meetings.edit' => Capability::MEETINGS_EDIT,
+            'meetings.delete' => Capability::MEETINGS_DELETE,
+            'meetings.record_decisions' => Capability::MEETINGS_RECORD_DECISIONS,
+
+            // ── Surveys ──
+            'view_survey_responses' => Capability::SURVEYS_VIEW,
+            'review_survey_responses' => Capability::SURVEYS_REVIEW_RESPONSES,
+            // ponytail: no data-import capability — transition alias, remove in Phase 4.
+            'review_data_imports' => null,
+
+            // ── Departments ──
+            'view_departments' => Capability::DEPARTMENTS_VIEW,
+            'create_departments' => Capability::DEPARTMENTS_CREATE,
+            'edit_departments' => Capability::DEPARTMENTS_EDIT,
+            'delete_departments' => Capability::DEPARTMENTS_DELETE,
+
+            // ── OVR (already module.action-shaped for most) ──
+            'ovr.view_all' => Capability::OVR_VIEW_ALL,
+            'ovr.confidential' => Capability::OVR_CONFIDENTIAL,
+            'ovr.create' => Capability::OVR_CREATE,
+            'ovr.edit_all' => Capability::OVR_EDIT,
+            'ovr.change_status' => Capability::OVR_CHANGE_STATUS,
+            'ovr.assign' => Capability::OVR_ASSIGN,
+            'ovr.comment' => Capability::OVR_COMMENT,
+            'ovr.view_internal_comments' => Capability::OVR_VIEW_INTERNAL_COMMENTS,
+            'ovr.export' => Capability::OVR_EXPORT,
+            'ovr.view_statistics' => Capability::OVR_VIEW_STATISTICS,
+
+            // ── Risk Management (own/department ladder handled by the engine's
+            // scope, not a distinct capability) ──
+            // ponytail: scope-ladder flat strings have no capability equivalent —
+            // the engine resolves reach via scope. Transition aliases, remove in Phase 4.
+            'view_department_risks' => null,
+            'view_own_risks' => null,
+            'edit_department_risks' => null,
+            'edit_own_risks' => null,
+        ];
+    }
+
+    /**
+     * The canonical Capability for a legacy flat string, or null if the string
+     * has no capability equivalent (transition alias).
+     */
+    public static function toCapability(string $flat): ?string
+    {
+        return self::map()[$flat] ?? null;
+    }
+
+    /**
+     * Flat strings that still have NO canonical capability (transition aliases
+     * to remove in Phase 4). Kept as documentation/verification helper.
+     *
+     * @return array<int, string>
+     */
+    public static function transitionAliases(): array
+    {
+        return array_keys(array_filter(self::map(), fn ($cap) => $cap === null));
+    }
+}

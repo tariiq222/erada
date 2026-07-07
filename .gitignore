@@ -1,0 +1,102 @@
+# =====================================================================
+# Erada PMO — Consolidated .gitignore
+# Postgres-only (no SQLite), Docker-only (no Homestead/Vagrant),
+# Pint only (no php-cs-fixer/phpcs), Playwright (no Cypress),
+# Filament removed (no /public/css/filament).
+# =====================================================================
+
+# -------------------- Laravel core --------------------
+/vendor
+/node_modules
+/public/build
+/public/hot
+/public/storage
+/storage/*.key
+/storage/oauth-*.key
+/storage/pail
+/bootstrap/cache/*.php
+.phpactor.json
+.phpunit.result.cache
+/.phpunit.cache
+.phpunit.cache/
+
+# -------------------- Environment --------------------
+.env
+.env.*
+!.env.example
+/auth.json
+
+# -------------------- Logs & caches --------------------
+*.log
+/.phpunit-watcher.yml
+.php-cs-fixer.cache
+.phpcs-cache
+phpstan.neon.cache
+coverage.xml
+
+# -------------------- IDE & editors --------------------
+/.fleet
+/.idea
+/.nova
+/.vscode
+/.zed
+*.swp
+*.swo
+
+# -------------------- OS files --------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
+nul
+
+# -------------------- Tests & coverage --------------------
+/coverage
+/coverage.backup*
+/.nyc_output
+/test-results
+/playwright-report
+/playwright/.cache
+# Generated e2e fixtures (ephemeral DB ids from scripts/qa/seed-completion-e2e.php)
+e2e/.fixtures.json
+
+# -------------------- Build & compiled --------------------
+*.compiled.php
+
+# -------------------- Security --------------------
+*.pem
+*.crt
+
+# -------------------- Vite & Vitest --------------------
+.vite
+
+# -------------------- AI / Claude / agent tooling --------------------
+/.claude
+/.opencode
+/.kilo
+/.agents
+/.planning
+/.impeccable
+/.config
+.mcp.json
+/.playwright-mcp
+# Local planning/spec drafts (never commit)
+/docs/superpowers/
+
+# -------------------- Tariq / per-machine local memory --------------------
+.tariq/
+.qa-memory/
+
+# -------------------- Database backups (never commit) --------------------
+/db_backups/
+
+# -------------------- PDPL scanner output (generated, never commit) --------------------
+/pdpl-findings.json
+/pdpl-results.sarif
+/pdpl-report.md
+# Local DB backups (never commit production data)
+backups/
+
+# -------------------- Runtime artefacts --------------------
+# supervisord PID + log written by the app container's entrypoint
+/supervisord.pid
+/supervisord.log

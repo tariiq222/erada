@@ -1,0 +1,85 @@
+name: Daily Production Backup
+
+on:
+  schedule:
+    - cron: '7 3 * * *'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'What to back up'
+        required: true
+        type: choice
+        default: 'all'
+        options:
+          - db
+          - storage
+          - all
+
+env:
+  PG_DUMP_FORMAT: custom
+
+jobs:
+  backup-database:
+    name: 💾 Backup PostgreSQL
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.target != 'storage' }}
+    steps:
+      - name: Install Postgres client
+        run: sudo apt-get update -y && sudo apt-get install -y postgresql-client
+
+      - name: Dump database
+        env:
+          PGPASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_HOST:    ${{ secrets.DB_HOST }}
+          DB_PORT:    ${{ secrets.DB_PORT }}
+          DB_NAME:    ${{ secrets.DB_DATABASE }}
+          DB_USER:    ${{ secrets.DB_USERNAME }}
+        run: |
+          set -euo pipefail
+          TS=$(date -u +%Y%m%d-%H%M%S)
+          FILE="erada-${DB_NAME}-${TS}.dump"
+          pg_dump \
+            --host="$DB_HOST" --port="$DB_PORT" \
+            --username="$DB_USER" --dbname="$DB_NAME" \
+            --format=custom --no-owner --no-privileges \
+            --file="$FILE"
+          gzip -9 "$FILE"
+          ls -lh "${FILE}.gz"
+          echo "DUMP_PATH=${FILE}.gz" >> "$GITHUB_ENV"
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Upload to S3 (daily/ prefix, lifecycle=30d)
+        env:
+          BACKUP_BUCKET: ${{ secrets.BACKUP_BUCKET }}
+        run: |
+          aws s3 cp "$DUMP_PATH" \
+            "s3://${BACKUP_BUCKET}/daily/$DUMP_PATH" \
+            --storage-class STANDARD_IA \
+            --metadata "source=daily-cron,run_id=${{ github.run_id }}"
+
+      - name: Prune local artifact
+        run: rm -f "$DUMP_PATH"
+
+      - name: Notify success
+        if: success()
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {"text": "✅ Daily DB backup OK — `${{ env.DUMP_PATH }}` uploaded to `s3://${{ secrets.BACKUP_BUCKET }}/daily/`."}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Notify failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {"text": "❌ Daily DB backup FAILED for `${{ secrets.DB_DATABASE }}` — investigate before next cycle.\n• Run: ${{ github.run_id }}\n• Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

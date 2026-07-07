@@ -1,0 +1,16 @@
+entity:
+  type: government
+  data_classification: confidential
+  is_public_entity: true
+  is_foreign_entity: false
+  processes_sensitive_data: true
+  processes_children_data: false
+  cross_border_transfers: false
+  large_scale_processing: true
+  uses_ai_on_personal_data: false
+scan:
+  paths: ["app", "resources/js", "config", "database"]
+  exclude: ["vendor", "node_modules", "dist", "build", ".worktrees", "storage", "bootstrap/cache", "tests", "__tests__", "e2e", "docs", ".claude"]
+gate:
+  fail_on: [critical]
+  weights: { critical: 25, high: 10, medium: 4, low: 1 }

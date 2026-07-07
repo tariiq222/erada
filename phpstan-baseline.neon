@@ -1,0 +1,2713 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$department_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Http/Controllers/AuthController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$email\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Modules/Core/Http/Controllers/AuthController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Modules/Core/Http/Controllers/AuthController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Modules/Core/Http/Controllers/AuthController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$email\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Http/Controllers/RoleController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Http/Controllers/RoleController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Http/Controllers/RoleController.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Core\\Http\\Controllers\\RoleController\:\:authorize\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Core/Http/Controllers/RoleController.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Core\\Http\\Controllers\\ScopedRoleController\:\:authorize\(\)\.$#'
+			identifier: method.notFound
+			count: 5
+			path: app/Modules/Core/Http/Controllers/ScopedRoleController.php
+
+		-
+			message: '#^PHPDoc tag @param references unknown parameter\: \$context$#'
+			identifier: parameter.notFound
+			count: 1
+			path: app/Modules/Core/Http/Controllers/UserController.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Core\\Http\\Resources\\UserResource\:\:\$avatar\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Http/Resources/UserResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Core\\Http\\Resources\\UserResource\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Http/Resources/UserResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Core\\Http\\Resources\\UserResource\:\:\$department\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Core/Http/Resources/UserResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Core\\Http\\Resources\\UserResource\:\:\$email\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Http/Resources/UserResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Core\\Http\\Resources\\UserResource\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Core/Http/Resources/UserResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Core\\Http\\Resources\\UserResource\:\:\$is_active\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Http/Resources/UserResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Core\\Http\\Resources\\UserResource\:\:\$job_title\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Http/Resources/UserResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Core\\Http\\Resources\\UserResource\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Http/Resources/UserResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Core\\Http\\Resources\\UserResource\:\:\$roles\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Http/Resources/UserResource.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getLoggableAttributes\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Modules/Core/Models/Organization.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getTrackedFields\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Core/Models/Organization.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:logActivity\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: app/Modules/Core/Models/Organization.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getLabel\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Core/Models/ScopedRole.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$display_name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Models/User.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$expires_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Models/User.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$inherit_to_children\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Models/User.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$role\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Models/User.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$scope_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Models/User.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$scope_type\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Models/User.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getLoggableAttributes\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Modules/Core/Models/User.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getTrackedFields\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Core/Models/User.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:logActivity\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: app/Modules/Core/Models/User.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Relations\\HasMany\:\:active\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Core/Models/User.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Relations\\HasMany\:\:inScope\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Modules/Core/Models/User.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Relations\\HasMany\:\:ofType\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: app/Modules/Core/Models/User.php
+
+		-
+			message: '#^Cannot call method isFuture\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Modules/Core/Models/User.php
+
+		-
+			message: '#^Cannot call method isPast\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Modules/Core/Services/OtpService.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\HR\\Models\\Department\:\:\$active_projects_count\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Services/DashboardStatisticsService.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\HR\\Models\\Department\:\:\$completed_projects_count\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Core/Services/DashboardStatisticsService.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\HR\\Models\\Department\:\:\$overdue_projects_count\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Services/DashboardStatisticsService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$avg_days\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Services/DashboardStatisticsService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$over_budget_count\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Services/DashboardStatisticsService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$total_actual\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Services/DashboardStatisticsService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$total_budget\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Core/Services/DashboardStatisticsService.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getAllChildren\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/HR/Models/Department.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getLoggableAttributes\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Modules/HR/Models/Department.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getTrackedFields\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/HR/Models/Department.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:logActivity\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: app/Modules/HR/Models/Department.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Invitations/Http/Controllers/AcceptInvitationController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Invitations/Http/Controllers/AcceptInvitationController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Modules/Invitations/Mail/InvitationMail.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Invitations/Mail/InvitationMail.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getLoggableAttributes\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Modules/Invitations/Models/Invitation.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getTrackedFields\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Invitations/Models/Invitation.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:logActivity\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: app/Modules/Invitations/Models/Invitation.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Invitations/Notifications/InvitationAcceptedNotification.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Invitations/Notifications/InvitationAcceptedNotification.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:notify\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Invitations/Services/InvitationService.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Models\\Project\:\:\$completed_tasks_count\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Controllers/ProjectController.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Models\\Project\:\:\$overdue_tasks_count\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Controllers/ProjectController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$indicator\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Controllers/ProjectController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Controllers/ProjectController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$risk\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Projects/Http/Controllers/ProjectController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$role\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Controllers/ProjectController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$expense_date\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Controllers/ProjectExpenseController.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$actual_cost\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$actual_end_date\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$actual_start_date\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$budget\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$code\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$department\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$description\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$end_date\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$manager\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$priority\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$progress\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$sponsor\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$start_date\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$supervisor\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Http\\Resources\\ProjectResource\:\:\$updated_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Http/Resources/ProjectResource.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getLoggableAttributes\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Modules/Projects/Models/Milestone.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getTrackedFields\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Projects/Models/Milestone.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:logActivity\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: app/Modules/Projects/Models/Milestone.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:project\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Projects/Models/MilestoneDeliverable.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getLoggableAttributes\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Modules/Projects/Models/ProjectExpense.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getTrackedFields\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Projects/Models/ProjectExpense.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:logActivity\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: app/Modules/Projects/Models/ProjectExpense.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getLoggableAttributes\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Modules/Projects/Models/ProjectRisk.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getTrackedFields\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Projects/Models/ProjectRisk.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:logActivity\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: app/Modules/Projects/Models/ProjectRisk.php
+
+		-
+			message: '#^Unsafe usage of new static\(\)\.$#'
+			identifier: new.static
+			count: 1
+			path: app/Modules/Projects/Models/ProjectSetting.php
+
+		-
+			message: '#^Unsafe usage of new static\(\)\.$#'
+			identifier: new.static
+			count: 1
+			path: app/Modules/RiskManagement/Models/RiskSetting.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Models\\Project\:\:\$sponsor_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Observers/ProjectObserver.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$manager_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Observers/TaskObserver.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$supervisor_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Observers/TaskObserver.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:updateProgress\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Tasks/Observers/TaskObserver.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Models\\Project\:\:\$sponsor_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Policies/ProjectPolicy.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Models\\Project\:\:\$sponsor_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Services/Project/StakeholderService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Services/ProjectActivityService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Services/ProjectActivityService.php
+
+		-
+			message: '#^Variable \$displayNew on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.variable
+			count: 1
+			path: app/Modules/Projects/Services/ProjectActivityService.php
+
+		-
+			message: '#^Variable \$displayOld on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.variable
+			count: 1
+			path: app/Modules/Projects/Services/ProjectActivityService.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Projects\\Models\\Project\:\:\$sponsor_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Projects/Services/ProjectAuthorizationService.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:deliverables\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Projects/Services/ProjectCrudService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Formatters/ActivityLogFormatter.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Formatters/ActivityLogFormatter.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$attachments\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Controllers/CommentController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$content\.$#'
+			identifier: property.notFound
+			count: 4
+			path: app/Modules/Shared/Http/Controllers/CommentController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Shared/Http/Controllers/CommentController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$created_by\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Controllers/CommentController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$department_id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Shared/Http/Controllers/CommentController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$file_path\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Shared/Http/Controllers/CommentController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$file_size\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Controllers/CommentController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$file_type\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Controllers/CommentController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$formatted_size\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Controllers/CommentController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 7
+			path: app/Modules/Shared/Http/Controllers/CommentController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$manager_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Controllers/CommentController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Controllers/CommentController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$updated_at\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Shared/Http/Controllers/CommentController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$user\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Shared/Http/Controllers/CommentController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:attachments\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Controllers/CommentController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:members\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Controllers/CommentController.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Shared\\Http\\Resources\\AttachmentResource\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Resources/AttachmentResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Shared\\Http\\Resources\\AttachmentResource\:\:\$filename\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Resources/AttachmentResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Shared\\Http\\Resources\\AttachmentResource\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Shared/Http/Resources/AttachmentResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Shared\\Http\\Resources\\AttachmentResource\:\:\$mime_type\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Resources/AttachmentResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Shared\\Http\\Resources\\AttachmentResource\:\:\$original_name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Resources/AttachmentResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Shared\\Http\\Resources\\AttachmentResource\:\:\$size\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Resources/AttachmentResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Shared\\Http\\Resources\\AttachmentResource\:\:\$uploader\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Resources/AttachmentResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Shared\\Http\\Resources\\AttachmentResource\:\:\$url\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Resources/AttachmentResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Shared\\Http\\Resources\\CommentResource\:\:\$content\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Resources/CommentResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Shared\\Http\\Resources\\CommentResource\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Resources/CommentResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Shared\\Http\\Resources\\CommentResource\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Resources/CommentResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Shared\\Http\\Resources\\CommentResource\:\:\$is_internal\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Resources/CommentResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Shared\\Http\\Resources\\CommentResource\:\:\$updated_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Resources/CommentResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Shared\\Http\\Resources\\CommentResource\:\:\$user\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Shared/Http/Resources/CommentResource.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getLoggableAttributes\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Modules/Shared/Models/Attachment.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getTrackedFields\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Shared/Models/Attachment.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:logActivity\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: app/Modules/Shared/Models/Attachment.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getLoggableAttributes\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Modules/Shared/Models/Comment.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getTrackedFields\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Shared/Models/Comment.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:logActivity\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: app/Modules/Shared/Models/Comment.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Models\\Portfolio\:\:\$progress\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Strategy/Http/Controllers/PortfolioController.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Models\\StrategicKpi\:\:\$status_label\.$#'
+			identifier: property.notFound
+			count: 4
+			path: app/Modules/Strategy/Http/Controllers/StrategicKpiController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$code\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Strategy/Http/Controllers/StrategyDashboardController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Strategy/Http/Controllers/StrategyDashboardController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Strategy/Http/Controllers/StrategyDashboardController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$portfolio\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Controllers/StrategyDashboardController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Strategy/Http/Controllers/StrategyDashboardController.php
+
+		-
+			message: '#^Class App\\Modules\\Strategy\\Enums\\PortfolioStatus not found\.$#'
+			identifier: class.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Requests/StorePortfolioRequest.php
+
+		-
+			message: '#^Class App\\Modules\\Strategy\\Enums\\PortfolioStatus not found\.$#'
+			identifier: class.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Requests/UpdatePortfolioRequest.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$code\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$creator\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$description\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$directive_source\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$directive_source_label\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$directive_source_other\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$end_date\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$order\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$owner\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$portfolio_owner_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$portfolio_progress\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$portfolio_status\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$portfolio_status_label\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$priority_rank\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$programs_count\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$progress\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$rationale\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$start_date\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$status_label\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$strategic_plan_link\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$updated_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:\$weight\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Strategy\\Http\\Resources\\PortfolioResource\:\:canBeClosedStrategically\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/PortfolioResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$blockers_count\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$budget\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$budget_utilization\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$code\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$created_by\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$creator\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$department\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$department_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$description\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$end_date\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$executiveSponsor\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$executive_sponsor_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$order\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$owner\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$owner_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$portfolio\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$portfolio_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$priority\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$priority_label\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$programManager\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$program_manager_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$progress\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$progress_calculation_method\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$progress_method_label\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$projects_count\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$spent_amount\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$start_date\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$status_label\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$total_program_budget\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$updated_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Http\\Resources\\ProgramResource\:\:\$weight\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Http/Resources/ProgramResource.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$value\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Models/StrategicKpi.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Models\\StrategicObjective\:\:\$bsc_perspective\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Models/StrategicObjective.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Models\\StrategicObjective\:\:\$code\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Models/StrategicObjective.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Models\\StrategicObjective\:\:\$current_value\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Models/StrategicObjective.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Models\\StrategicObjective\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Models/StrategicObjective.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Strategy\\Models\\StrategicObjective\:\:\$target_value\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Models/StrategicObjective.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$progress\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Models/StrategicObjective.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$weight\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Strategy/Models/StrategicObjective.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$thank_you_message\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Controllers/PublicSurveyController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Relations\\HasMany\:\:flagged\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Controllers/SurveyController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Relations\\HasMany\:\:submitted\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Controllers/SurveyController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$email\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Controllers/SurveyInvitationController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Controllers/SurveyInvitationController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$token\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Modules/Surveys/Http/Controllers/SurveyInvitationController.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$applied_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$applied_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$diff\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$error_message\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$operation\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$payload\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$priority\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$rejection_reason\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$requested_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$response\.$#'
+			identifier: property.notFound
+			count: 7
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$response_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$reviewed_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$reviewer\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$target_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$target_table\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$template\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$template_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$updated_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$upsert_key_field\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:\$upsert_key_value\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:canApply\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:canApprove\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:canReject\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:getOperationSummary\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:getTargetTableLabel\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Surveys\\Http\\Resources\\DataImportRequestResource\:\:hasConflict\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataImportRequestResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataMappingTemplateResource\:\:\$conflict_policy\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Http/Resources/DataMappingTemplateResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataMappingTemplateResource\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataMappingTemplateResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataMappingTemplateResource\:\:\$creator\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Http/Resources/DataMappingTemplateResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataMappingTemplateResource\:\:\$description\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataMappingTemplateResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataMappingTemplateResource\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataMappingTemplateResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataMappingTemplateResource\:\:\$insert_policy\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Http/Resources/DataMappingTemplateResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataMappingTemplateResource\:\:\$is_active\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataMappingTemplateResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataMappingTemplateResource\:\:\$mappings\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataMappingTemplateResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataMappingTemplateResource\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataMappingTemplateResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataMappingTemplateResource\:\:\$survey_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataMappingTemplateResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataMappingTemplateResource\:\:\$target_model\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataMappingTemplateResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\DataMappingTemplateResource\:\:\$updated_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataMappingTemplateResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Surveys\\Http\\Resources\\DataMappingTemplateResource\:\:getRequiredFields\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataMappingTemplateResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Surveys\\Http\\Resources\\DataMappingTemplateResource\:\:getTargetModelInfo\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataMappingTemplateResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Surveys\\Http\\Resources\\DataMappingTemplateResource\:\:getUpsertKeyFields\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/DataMappingTemplateResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyFieldResource\:\:\$config\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyFieldResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyFieldResource\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyFieldResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyFieldResource\:\:\$description\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyFieldResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyFieldResource\:\:\$field_key\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyFieldResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyFieldResource\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyFieldResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyFieldResource\:\:\$is_required\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyFieldResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyFieldResource\:\:\$is_visible\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyFieldResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyFieldResource\:\:\$label\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyFieldResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyFieldResource\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyFieldResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyFieldResource\:\:\$order\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyFieldResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyFieldResource\:\:\$section_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyFieldResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyFieldResource\:\:\$survey_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyFieldResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyFieldResource\:\:\$type\.$#'
+			identifier: property.notFound
+			count: 6
+			path: app/Modules/Surveys/Http/Resources/SurveyFieldResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyFieldResource\:\:\$updated_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyFieldResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyFieldResource\:\:\$visibility_rules\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyFieldResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Surveys\\Http\\Resources\\SurveyFieldResource\:\:getOptions\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyFieldResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyPublicResource\:\:\$allow_multiple_responses\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyPublicResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyPublicResource\:\:\$code\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyPublicResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyPublicResource\:\:\$consent_required\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyPublicResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyPublicResource\:\:\$consent_text\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyPublicResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyPublicResource\:\:\$description\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyPublicResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyPublicResource\:\:\$fields\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyPublicResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyPublicResource\:\:\$sections\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyPublicResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyPublicResource\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyPublicResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyPublicResource\:\:\$type\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyPublicResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyPublicResource\:\:\$welcome_message\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyPublicResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$accepting_responses\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$allow_edit_response\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$allow_multiple_responses\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$canonical_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$category\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$close_reason\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$closed_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$code\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$consent_required\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$consent_text\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$creator\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$description\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$ends_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$is_public\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$locked_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$mappingTemplates\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$published_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$requires_auth\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$revision\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$settings\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$starts_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$thank_you_message\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$type\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$updated_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:\$welcome_message\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:canClose\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:canEdit\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:canPublish\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:getPublicUrl\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:isActive\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Surveys\\Http\\Resources\\SurveyResource\:\:isLocked\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResponseResource\:\:\$answers\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResponseResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResponseResource\:\:\$completion_time\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Http/Resources/SurveyResponseResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResponseResource\:\:\$consented_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResponseResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResponseResource\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResponseResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResponseResource\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResponseResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResponseResource\:\:\$importRequests\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResponseResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResponseResource\:\:\$respondent_email\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResponseResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResponseResource\:\:\$respondent_name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResponseResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResponseResource\:\:\$respondent_phone\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResponseResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResponseResource\:\:\$respondent_type\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResponseResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResponseResource\:\:\$reviewed_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResponseResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResponseResource\:\:\$reviewer\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Http/Resources/SurveyResponseResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResponseResource\:\:\$reviewer_notes\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResponseResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResponseResource\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Modules/Surveys/Http/Resources/SurveyResponseResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResponseResource\:\:\$submitted_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResponseResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveyResponseResource\:\:\$survey_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResponseResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Surveys\\Http\\Resources\\SurveyResponseResource\:\:getRespondentDisplayName\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveyResponseResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveySectionResource\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveySectionResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveySectionResource\:\:\$description\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveySectionResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveySectionResource\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveySectionResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveySectionResource\:\:\$is_visible\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveySectionResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveySectionResource\:\:\$order\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveySectionResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveySectionResource\:\:\$survey_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveySectionResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveySectionResource\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveySectionResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveySectionResource\:\:\$updated_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveySectionResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Http\\Resources\\SurveySectionResource\:\:\$visibility_rules\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Http/Resources/SurveySectionResource.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getLoggableAttributes\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Modules/Surveys/Models/DataImportRequest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getTrackedFields\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Models/DataImportRequest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:logActivity\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: app/Modules/Surveys/Models/DataImportRequest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$fields\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Models/Survey.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Models/Survey.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$survey_id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Models/Survey.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getLoggableAttributes\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Modules/Surveys/Models/Survey.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getTrackedFields\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Models/Survey.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:logActivity\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: app/Modules/Surveys/Models/Survey.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$type\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Models/SurveyFieldAnswer.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getConfigValue\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Models/SurveyFieldAnswer.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getOptions\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Models/SurveyFieldAnswer.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:isActive\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Models/SurveyInvitation.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Models/SurveyResponse.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$config\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Models/SurveyVersion.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$description\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Models/SurveyVersion.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$field_key\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Models/SurveyVersion.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Models/SurveyVersion.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$is_required\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Models/SurveyVersion.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$is_visible\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Models/SurveyVersion.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$label\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Models/SurveyVersion.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Models/SurveyVersion.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$order\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Models/SurveyVersion.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$section_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Models/SurveyVersion.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Models/SurveyVersion.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$type\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Models/SurveyVersion.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$visibility_rules\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Models/SurveyVersion.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$activeMappingTemplate\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Services/DataMappingService.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getModelClass\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Services/DataMappingService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$field_key\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Services/ResponseService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$is_required\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Services/ResponseService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$label\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Services/ResponseService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$type\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Services/ResponseService.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:isSecuritySensitive\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Surveys/Services/ResponseService.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:isVisibleForAnswers\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: app/Modules/Surveys/Services/ResponseService.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Surveys\\Models\\SurveyResponse\:\:\$started_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Services/SurveyExportService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$email\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Services/SurveyExportService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Services/SurveyExportService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$label\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Services/SurveyExportService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Services/SurveyExportService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$type\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Services/SurveyExportService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$value\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Services/SurveyExportService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$config\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Services/VersioningService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$field_key\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Services/VersioningService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Surveys/Services/VersioningService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$order\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Services/VersioningService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Services/VersioningService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$type\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Surveys/Services/VersioningService.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$actual_hours\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$assigned_to\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$assignee\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$completed_date\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$created_by\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$creator\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$days_elapsed\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$days_remaining\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$department\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$department_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$description\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$due_date\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$estimated_hours\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$is_private\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$milestone\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$milestone_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$order\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$owner\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$owner_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$parent\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$parent_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$priority\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$progress\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$project\.$#'
+			identifier: property.notFound
+			count: 4
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$project_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$recurrence_rule\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$start_date\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$subtasks\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$time_indicator\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$time_progress\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$total_days\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$type\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:\$updated_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:attachments\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:comments\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:isOverdue\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Call to an undefined method App\\Modules\\Tasks\\Http\\Resources\\TaskResource\:\:subtasks\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: app/Modules/Tasks/Http/Resources/TaskResource.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$department_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Tasks/Policies/TaskPolicy.php

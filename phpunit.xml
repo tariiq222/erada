@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+        <testsuite name="Architecture">
+            <directory>tests/Architecture</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <ini name="memory_limit" value="2048M"/>
+        <env name="APP_ENV" value="testing"/>
+        <server name="APP_KEY" value="base64:wdEEnAJFsXeQ8KIMgvNk42L6O8cur5sQdh+I2VXocSA="/>
+        <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="BROADCAST_CONNECTION" value="null"/>
+        <env name="CACHE_STORE" value="array"/>
+        <!-- PostgreSQL for Testing - SQLite is NOT allowed -->
+        <env name="DB_CONNECTION" value="pgsql"/>
+        <env name="DB_HOST" value="127.0.0.1"/>
+        <env name="DB_PORT" value="5433"/>
+        <env name="DB_DATABASE" value="iradah_pmo_test"/>
+        <env name="DB_USERNAME" value="iradah"/>
+        <env name="DB_PASSWORD" value="secret"/>
+        <env name="MAIL_MAILER" value="array"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SESSION_DRIVER" value="array"/>
+        <!-- Pin env the suite asserts against so tests are deterministic and do
+             not inherit whatever .env is present. CI copies .env.example, which
+             sets these to non-test values (a short decision-expiry window and a
+             production stateful domain), breaking CsrfProtectionTest and
+             ExpirePendingDecisionsCommandTest that pass locally. -->
+        <env name="SANCTUM_STATEFUL_DOMAINS" value="localhost" force="true"/>
+        <env name="MEETINGS_PENDING_EXPIRY_DAYS" value="30" force="true"/>
+        <env name="PULSE_ENABLED" value="false"/>
+        <env name="TELESCOPE_ENABLED" value="false"/>
+        <env name="NIGHTWATCH_ENABLED" value="false"/>
+    </php>
+</phpunit>
