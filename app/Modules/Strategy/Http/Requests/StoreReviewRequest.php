@@ -30,7 +30,10 @@ class StoreReviewRequest extends FormRequest
     {
         return [
             'title' => ['required', 'string', 'max:255'],
-            'reviewable_type' => ['required', Rule::in(['objective', 'initiative', 'project'])],
+            // Allowlist must match ReviewController::getModelClass(): 'initiative' is a
+            // legacy token from the 2026_01_16_200001_convert_initiatives_to_programs
+            // migration and would cause the controller to throw 500.
+            'reviewable_type' => ['required', Rule::in(['objective', 'program', 'project'])],
             'reviewable_id' => ['required', 'integer'],
             'type' => ['required', Rule::in(['monthly', 'quarterly', 'annual', 'adhoc'])],
             'pdca_phase' => ['required', Rule::in(['plan', 'do', 'check', 'act'])],

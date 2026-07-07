@@ -534,17 +534,14 @@ class StrategyOrganizationScopeTest extends TestCase
     // reviewable/blockable aliases must also create cleanly and round-trip.)
     // ============================================================
 
-    public function test_review_with_initiative_reviewable_type_creates_and_round_trips(): void
+    public function test_review_with_initiative_reviewable_type_is_rejected_at_validation(): void
     {
-        // FINDING (controller bug): StoreReviewRequest's `reviewable_type`
-        // validation accepts ['objective','initiative','project'], but
-        // ReviewController::getModelClass only knows
-        // ['objective','program','project'] — there is no `initiative` →
-        // Program alias on the controller side. This means posting
-        // reviewable_type=initiative passes validation and then 500s in
-        // ReviewController::store() when getModelClass throws
-        // InvalidArgumentException. Pinning the broken behaviour here so
-        // the regression is visible.
+        // Phase 7C-B / F3: StoreReviewRequest's `reviewable_type` validation
+        // now aligns with ReviewController::getModelClass(): it accepts
+        // ['objective', 'program', 'project']. The legacy `initiative` token
+        // (leftover from the 2026_01_16_200001_convert_initiatives_to_programs
+        // migration) is rejected at the validation layer with 422, NOT a 500
+        // from getModelClass() throwing InvalidArgumentException.
         $adminA = $this->makeStrategyActor($this->orgA);
         $programA = $this->makeProgram($this->orgA);
 
@@ -561,10 +558,9 @@ class StrategyOrganizationScopeTest extends TestCase
                 'overall_status' => 'on_track',
             ]);
 
-        // BUG surfaced: alias mismatch. This should be 201 once the
-        // controller's getModelClass learns the 'initiative' → Program alias
-        // (or the FormRequest is narrowed to ['project','program']).
-        $response->assertStatus(500);
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['reviewable_type']);
+        $this->assertDatabaseMissing('reviews', ['title' => 'Initiative Review']);
     }
 
     public function test_review_with_objective_reviewable_type_returns_error_when_archived(): void

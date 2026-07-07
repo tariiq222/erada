@@ -124,8 +124,16 @@ class ProgramController extends Controller
         $portfolio = Portfolio::findOrFail($validated['portfolio_id']);
         $this->assertSameOrganization($portfolio);
 
+        // Org-isolation floor: a program must inherit its portfolio's
+        // organization_id so org-scoped queries can find it. A portfolio
+        // without an organization_id is itself an orphan, so refuse the
+        // program too instead of creating a second orphan. Validation-style
+        // 422 (the user is authorized, the data is incomplete).
         if ($portfolio->organization_id === null) {
-            abort(403, 'ليس لديك صلاحية الوصول لهذا العنصر');
+            return response()->json([
+                'message' => 'لا يمكن إنشاء مبادرة مرتبطة بمحفظة غير مرتبطة بمؤسسة',
+                'errors' => ['portfolio_id' => ['المحفظة المرتبطة يجب أن تكون مرتبطة بمؤسسة']],
+            ], 422);
         }
 
         $validated['created_by'] = auth()->id();
@@ -276,7 +284,13 @@ class ProgramController extends Controller
      */
     public function unlinkProject(Program $program, Project $project): JsonResponse
     {
-        $this->authorizeStrategy('update');
+        // Target-bound authorization: mirror linkProject() so a user who holds
+        // STRATEGY_EDIT at the organization scope cannot unlink projects under
+        // programs they are not assigned to within their org.
+        $user = auth()->user();
+        if (! $user || ! AccessDecision::can($user, Capability::STRATEGY_EDIT, $program)) {
+            abort(403, 'ليس لديك صلاحية الوصول لهذا العنصر');
+        }
         $this->assertSameOrganization($program);
         $this->assertSameOrganization($project);
 
