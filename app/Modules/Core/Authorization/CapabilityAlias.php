@@ -114,7 +114,21 @@ final class CapabilityAlias
             'meetings.record_decisions' => Capability::MEETINGS_RECORD_DECISIONS,
 
             // ── Surveys ──
-            'view_survey_responses' => Capability::SURVEYS_VIEW,
+            // Phase 8-D: corrected mapping. The legacy 'view_survey_responses'
+            // Spatie permission has historically gated RESPONSE data
+            // (SurveyResponseController::index/show/flag/review and
+            // SurveyController::export — both return PII from the
+            // survey_responses table), not the survey metadata. The
+            // historical alias pointed at SURVEYS_VIEW (the survey-metadata
+            // capability) which was a Phase 1 cutover inconsistency: users
+            // granted only `view_survey_responses` would have passed the
+            // Spatie middleware but failed the engine check on the inner
+            // authorize() calls (which all use SURVEYS_REVIEW_RESPONSES).
+            // Resolving the alias to SURVEYS_REVIEW_RESPONSES matches the
+            // route semantics and the inner authorize() decision, and
+            // surfaces a single canonical capability for the
+            // `permission:view_survey_responses` route guards.
+            'view_survey_responses' => Capability::SURVEYS_REVIEW_RESPONSES,
             'review_survey_responses' => Capability::SURVEYS_REVIEW_RESPONSES,
             // Phase 8-C: review_data_imports now resolves to a canonical capability
             // (surveys.review_data_imports).
