@@ -60,6 +60,49 @@ describe('access-bridge', () => {
 			expect(permissionToCapability('view_projects')).toBe('projects.view');
 		});
 
+		it('maps legacy view_survey_responses to surveys.review_responses (Phase 8-E parity)', () => {
+			// Phase 8-E frontend fix: the backend CapabilityAlias::map()
+			// (Phase 8-D correction) resolves `view_survey_responses` to
+			// `surveys.review_responses` because the Spatie permission gates
+			// RESPONSE data, not survey metadata. Before this fix the
+			// frontend bridge returned `surveys.view`, which silently denied
+			// access for users who held only `surveys.review_responses` in
+			// `user.access`.
+			expect(permissionToCapability('view_survey_responses')).toBe(
+				'surveys.review_responses',
+			);
+			// Defensive: the wrong target must not be returned.
+			expect(permissionToCapability('view_survey_responses')).not.toBe(
+				'surveys.view',
+			);
+		});
+
+		it('maps legacy review_survey_responses to surveys.review_responses', () => {
+			expect(permissionToCapability('review_survey_responses')).toBe(
+				'surveys.review_responses',
+			);
+		});
+
+		it('maps legacy review_data_imports to surveys.review_data_imports (Phase 8-E parity)', () => {
+			// Phase 8-E: align with backend CapabilityAlias::map() —
+			// `review_data_imports` was demoted to TRANSITION_ONLY_PERMISSIONS
+			// before this fix, which made permissionToCapability() return null
+			// and silently denied route guards like
+			// `permission: 'review_data_imports'` even when the user held
+			// `surveys.review_data_imports` in `user.access`.
+			expect(permissionToCapability('review_data_imports')).toBe(
+				'surveys.review_data_imports',
+			);
+		});
+
+		it('maps legacy view_dashboard to dashboard.view (Phase 8-E parity)', () => {
+			// Phase 8-E: align with backend CapabilityAlias::map() —
+			// `view_dashboard` was demoted to TRANSITION_ONLY_PERMISSIONS
+			// before this fix. The backend has resolved it to
+			// `dashboard.view` since Phase 8-C; the bridge now mirrors that.
+			expect(permissionToCapability('view_dashboard')).toBe('dashboard.view');
+		});
+
 		it('maps legacy record-decisions (hyphenated) to recommendations.approve', () => {
 			// Direction B (2026-07-06) retired the single `meetings.record_decisions`
 			// capability in favor of nine canonical `recommendations.*` capabilities.
@@ -79,10 +122,53 @@ describe('access-bridge', () => {
 		it('returns null for unknown transition-only legacy strings', () => {
 			expect(permissionToCapability('manage_organization')).toBeNull();
 			expect(permissionToCapability('view_own_projects')).toBeNull();
+			expect(permissionToCapability('view_reports')).toBeNull();
+			expect(permissionToCapability('export_reports')).toBeNull();
 		});
 
 		it('returns null for a made-up permission that is not in the map', () => {
 			expect(permissionToCapability('not_a_real_permission')).toBeNull();
+		});
+	});
+
+	describe('Phase 8-E parity: hasPermissionCompat against backend CapabilityAlias', () => {
+		// Pins the corrected mapping end-to-end: a user whose `user.access`
+		// carries only the canonical backend capability must satisfy a legacy
+		// route guard that still references the legacy flat string. Before
+		// Phase 8-E these checks returned `false` because the bridge refused
+		// to map the legacy string to its canonical equivalent.
+
+		it('grants legacy view_survey_responses through surveys.review_responses', () => {
+			const user = makeUser({
+				access: { surveys: { review_responses: true } },
+				permissions: [],
+			});
+			expect(hasPermissionCompat(user, 'view_survey_responses')).toBe(true);
+			// users with only surveys.view (metadata) must NOT pass the
+			// view_survey_responses guard — that was the Phase 8-D bug.
+			const metadataOnly = makeUser({
+				access: { surveys: { view: true } },
+				permissions: [],
+			});
+			expect(hasPermissionCompat(metadataOnly, 'view_survey_responses')).toBe(
+				false,
+			);
+		});
+
+		it('grants legacy review_data_imports through surveys.review_data_imports', () => {
+			const user = makeUser({
+				access: { surveys: { review_data_imports: true } },
+				permissions: [],
+			});
+			expect(hasPermissionCompat(user, 'review_data_imports')).toBe(true);
+		});
+
+		it('grants legacy view_dashboard through dashboard.view', () => {
+			const user = makeUser({
+				access: { dashboard: { view: true } },
+				permissions: [],
+			});
+			expect(hasPermissionCompat(user, 'view_dashboard')).toBe(true);
 		});
 	});
 
