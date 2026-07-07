@@ -84,9 +84,27 @@ export const LEGACY_PERMISSION_TO_CAPABILITY: Record<string, string> = {
 	'recommendations.defer': 'recommendations.defer',
 	'recommendations.accept': 'recommendations.accept',
 	'recommendations.complete': 'recommendations.complete',
-	view_survey_responses: 'surveys.view',
+	// Phase 8-E: `view_survey_responses` historically pointed at
+	// `surveys.view` (the survey-metadata capability), but the backend
+	// Phase 8-D correction mapped it to `surveys.review_responses` because
+	// the Spatie permission gated RESPONSE data (PII from survey_responses)
+	// rather than survey metadata. The bridge now mirrors the backend
+	// CapabilityAlias::map() so legacy route guards with
+	// `permission: 'view_survey_responses'` resolve to the same canonical
+	// capability that the engine's `authorize()` and engine_capability
+	// middleware already enforce.
+	view_survey_responses: 'surveys.review_responses',
 	review_survey_responses: 'surveys.review_responses',
 	view_surveys: 'surveys.view',
+	// Phase 8-E: align with backend CapabilityAlias::map() — both
+	// `review_data_imports` and `view_dashboard` have canonical capability
+	// equivalents (`surveys.review_data_imports` and `dashboard.view`).
+	// They were kept in TRANSITION_ONLY_PERMISSIONS before this fix, which
+	// meant `permissionToCapability()` returned `null` for them and the
+	// bridge denied access even when the user held the correct capability
+	// in `user.access`. The frontend now mirrors the backend.
+	review_data_imports: 'surveys.review_data_imports',
+	view_dashboard: 'dashboard.view',
 	create_surveys: 'surveys.create',
 	edit_surveys: 'surveys.edit',
 	delete_surveys: 'surveys.delete',
@@ -142,12 +160,10 @@ export const TRANSITION_ONLY_PERMISSIONS: ReadonlySet<string> = new Set([
 	'create_organizations',
 	'edit_organizations',
 	'delete_organizations',
-	'view_dashboard',
 	'view_reports',
 	'export_reports',
 	'edit_any_comment',
 	'delete_any_comment',
-	'review_data_imports',
 	'view_own_projects',
 	'view_own_tasks',
 	'ovr.view_own',
