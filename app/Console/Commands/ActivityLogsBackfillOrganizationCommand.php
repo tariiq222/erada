@@ -85,12 +85,14 @@ class ActivityLogsBackfillOrganizationCommand extends Command
                                 'reason' => $trace['reason'] ?? null,
                             ];
                         }
+
                         continue;
                     }
 
                     if (! $onlyNull && $log->organization_id !== null
                         && (int) $log->organization_id === (int) $trace['organization_id']) {
                         $skipped++;
+
                         continue;
                     }
 
@@ -144,10 +146,12 @@ class ActivityLogsBackfillOrganizationCommand extends Command
 
         if ($errors > 0) {
             $this->error("{$errors} row(s) failed to update.");
+
             return self::FAILURE;
         }
 
         $this->info('Done.');
+
         return self::SUCCESS;
     }
 }

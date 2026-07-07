@@ -4,6 +4,7 @@ namespace Tests\Unit\Shared;
 
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
+use App\Modules\HR\Models\Department;
 use App\Modules\Shared\Models\ActivityLog;
 use App\Modules\Shared\Scopes\UserActivityLogScope;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -23,7 +24,7 @@ class UserActivityLogScopeTest extends TestCase
     public function test_super_admin_sees_all_including_null_org_rows(): void
     {
         $org = Organization::factory()->create();
-        $dept = \App\Modules\HR\Models\Department::factory()->create(['organization_id' => $org->id]);
+        $dept = Department::factory()->create(['organization_id' => $org->id]);
         $admin = User::factory()->create([
             'organization_id' => $org->id,
             'department_id' => $dept->id,
@@ -54,7 +55,7 @@ class UserActivityLogScopeTest extends TestCase
     {
         $orgA = Organization::factory()->create();
         $orgB = Organization::factory()->create();
-        $deptA = \App\Modules\HR\Models\Department::factory()->create(['organization_id' => $orgA->id]);
+        $deptA = Department::factory()->create(['organization_id' => $orgA->id]);
         $userA = User::factory()->create([
             'organization_id' => $orgA->id,
             'department_id' => $deptA->id,
@@ -91,7 +92,7 @@ class UserActivityLogScopeTest extends TestCase
 
     public function test_normal_user_without_org_returns_empty(): void
     {
-        $dept = \App\Modules\HR\Models\Department::factory()->create();
+        $dept = Department::factory()->create();
         $user = User::factory()->create([
             'organization_id' => null,
             'department_id' => $dept->id,

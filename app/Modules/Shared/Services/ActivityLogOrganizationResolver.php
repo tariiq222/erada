@@ -6,8 +6,15 @@ use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Contracts\ScopeAware;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
+use App\Modules\HR\Models\Department;
+use App\Modules\OVR\Models\IncidentReport;
+use App\Modules\Performance\Models\Kpi;
+use App\Modules\Projects\Models\Project;
+use App\Modules\RiskManagement\Models\Risk;
 use App\Modules\Shared\Models\ActivityLog;
-use Illuminate\Database\Eloquent\Model;
+use App\Modules\Strategy\Models\Portfolio;
+use App\Modules\Strategy\Models\Program;
+use App\Modules\Surveys\Models\Survey;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -34,14 +41,14 @@ class ActivityLogOrganizationResolver
 
     /** scope_types التي نملك لها موديل ونستطيع استخراج org عبره */
     public const RESOLVABLE_SCOPE_TYPES = [
-        'project' => \App\Modules\Projects\Models\Project::class,
-        'department' => \App\Modules\HR\Models\Department::class,
-        'program' => \App\Modules\Strategy\Models\Program::class,
-        'portfolio' => \App\Modules\Strategy\Models\Portfolio::class,
-        'risk' => \App\Modules\RiskManagement\Models\Risk::class,
-        'incident' => \App\Modules\OVR\Models\IncidentReport::class,
-        'kpi' => \App\Modules\Performance\Models\Kpi::class,
-        'survey' => \App\Modules\Surveys\Models\Survey::class,
+        'project' => Project::class,
+        'department' => Department::class,
+        'program' => Program::class,
+        'portfolio' => Portfolio::class,
+        'risk' => Risk::class,
+        'incident' => IncidentReport::class,
+        'kpi' => Kpi::class,
+        'survey' => Survey::class,
     ];
 
     /** actions cross-org متعمّدة (INFO log، لا WARNING) */

@@ -4,6 +4,7 @@ namespace Tests\Unit\Shared\Policies;
 
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
+use App\Modules\HR\Models\Department;
 use App\Modules\Shared\Models\ActivityLog;
 use App\Modules\Shared\Policies\ActivityLogPolicy;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -23,7 +24,7 @@ class ActivityLogPolicyTest extends TestCase
     public function test_view_any_delegates_to_access_decision_for_super_admin(): void
     {
         $org = Organization::factory()->create();
-        $dept = \App\Modules\HR\Models\Department::factory()->create(['organization_id' => $org->id]);
+        $dept = Department::factory()->create(['organization_id' => $org->id]);
         $admin = User::factory()->create([
             'organization_id' => $org->id,
             'department_id' => $dept->id,
@@ -47,7 +48,7 @@ class ActivityLogPolicyTest extends TestCase
     public function test_view_same_org_returns_true_for_normal_user(): void
     {
         $org = Organization::factory()->create();
-        $dept = \App\Modules\HR\Models\Department::factory()->create(['organization_id' => $org->id]);
+        $dept = Department::factory()->create(['organization_id' => $org->id]);
         $user = User::factory()->create([
             'organization_id' => $org->id,
             'department_id' => $dept->id,
@@ -63,7 +64,7 @@ class ActivityLogPolicyTest extends TestCase
     {
         $orgA = Organization::factory()->create();
         $orgB = Organization::factory()->create();
-        $dept = \App\Modules\HR\Models\Department::factory()->create(['organization_id' => $orgA->id]);
+        $dept = Department::factory()->create(['organization_id' => $orgA->id]);
         $user = User::factory()->create([
             'organization_id' => $orgA->id,
             'department_id' => $dept->id,
@@ -78,7 +79,7 @@ class ActivityLogPolicyTest extends TestCase
     public function test_view_org_null_returns_false_for_normal_user(): void
     {
         $org = Organization::factory()->create();
-        $dept = \App\Modules\HR\Models\Department::factory()->create(['organization_id' => $org->id]);
+        $dept = Department::factory()->create(['organization_id' => $org->id]);
         $user = User::factory()->create([
             'organization_id' => $org->id,
             'department_id' => $dept->id,

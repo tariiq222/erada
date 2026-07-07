@@ -3,7 +3,6 @@
 namespace Tests\Unit\Shared;
 
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
 use App\Modules\Shared\Models\ActivityLog;

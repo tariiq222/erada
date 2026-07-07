@@ -2,13 +2,17 @@
 
 namespace Tests\Feature\Core;
 
+use App\Modules\Core\Http\Controllers\RoleController;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Rules\AssignableRoleKey;
+use App\Modules\Core\Support\UserRoleAssignmentGuard;
 use App\Modules\HR\Models\Department;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Database\Seeders\ScopedDepartmentRolesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Tests\TestCase;
 
 /**
@@ -71,14 +75,14 @@ class ScopedRoleRegressionTest extends TestCase
         // The actual block lives at the UserRoleAssignmentGuard step 1: only
         // a super_admin actor may grant super_admin. Phase 3 introduced the
         // Guard — this test pins the behavior.
-        $rule = new \App\Modules\Core\Rules\AssignableRoleKey;
+        $rule = new AssignableRoleKey;
         $captured = null;
         $rule->validate('roles.*', 'super_admin', function ($msg) use (&$captured) {
             $captured = $msg;
         });
         $this->assertNull($captured, 'rule allows super_admin; Guard is what blocks it');
 
-        $guard = new \App\Modules\Core\Support\UserRoleAssignmentGuard;
+        $guard = new UserRoleAssignmentGuard;
         $actor = User::factory()->create([
             'organization_id' => $this->orgA->id,
             'department_id' => $this->deptA->id,
@@ -86,7 +90,7 @@ class ScopedRoleRegressionTest extends TestCase
         ]);
         $actor->assignRole('admin');
 
-        $this->expectException(\Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException::class);
+        $this->expectException(AccessDeniedHttpException::class);
         $this->expectExceptionMessage('super_admin');
 
         $guard->assertCanAssign($actor, $actor, ['super_admin']);
@@ -95,7 +99,7 @@ class ScopedRoleRegressionTest extends TestCase
     public function test_compat_spatie_role_still_assignable_to_self(): void
     {
         // admin can give themselves a role they already have (no escalation).
-        $guard = new \App\Modules\Core\Support\UserRoleAssignmentGuard;
+        $guard = new UserRoleAssignmentGuard;
         $actor = User::factory()->create([
             'organization_id' => $this->orgA->id,
             'department_id' => $this->deptA->id,
@@ -131,9 +135,9 @@ class ScopedRoleRegressionTest extends TestCase
         // Trying to grant super_admin at the engine layer (bypassing the
         // controller's specific block) would still fail with the dedicated
         // 'super_admin' message from the Guard.
-        $this->expectException(\Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException::class);
+        $this->expectException(AccessDeniedHttpException::class);
 
-        $guard = new \App\Modules\Core\Support\UserRoleAssignmentGuard;
+        $guard = new UserRoleAssignmentGuard;
         $guard->assertCanAssign($nonSuperActor, $target, ['super_admin']);
     }
 
@@ -148,7 +152,7 @@ class ScopedRoleRegressionTest extends TestCase
             'is_active' => true,
         ]);
 
-        \App\Modules\Core\Http\Controllers\RoleController::applyRoleAssignment(
+        RoleController::applyRoleAssignment(
             $user,
             ['admin']
         );
