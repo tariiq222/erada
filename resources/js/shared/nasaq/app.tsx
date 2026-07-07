@@ -78,6 +78,7 @@ const NASAQ_MODULE_ACCENTS: Partial<Record<string, NasaqNavAccent>> = {
   performance_kpis: "teal",
   meetings: "indigo",
   recommendations: "indigo",
+  meeting_resolutions: "indigo",
   decisions: "indigo",
   ovr: "amber",
   risks: "amber",
@@ -184,13 +185,13 @@ export const NASAQ_NAV_TREE: RawNavModule[] = [
   },
   {
     group: "meetings",
-    key: "decisions",
-    labelKey: "strategy.decisions.title",
+    key: "meeting_resolutions",
+    labelKey: "meetings.resolution.list.header",
     icon: "check",
-    path: "/strategy/decisions",
-    access: { permission: "meetings.view" },
+    path: "/strategy/meetings/resolutions",
+    access: { permission: "meeting_resolutions.view" },
     children: [
-      { key: "decisions-all", labelKey: "nav.view_all", icon: "list", path: "/strategy/decisions" },
+      { key: "resolutions-all", labelKey: "nav.view_all", icon: "list", path: "/strategy/meetings/resolutions" },
     ],
   },
   {

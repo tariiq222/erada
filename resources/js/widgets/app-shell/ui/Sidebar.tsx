@@ -151,10 +151,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 						],
 					},
 					{
-						label: t("strategy.decisions.title"),
-						href: "/strategy/decisions",
+						label: t("meetings.resolution.list.header"),
+						href: "/strategy/meetings/resolutions",
 						icon: IconClipboardCheck,
-						access: { permission: "meetings.view" },
+						access: { permission: "meeting_resolutions.view" },
 					},
 				],
 			},

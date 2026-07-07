@@ -64,17 +64,19 @@ export const LEGACY_PERMISSION_TO_CAPABILITY: Record<string, string> = {
 	delete_strategy: 'strategy.delete',
 	'view-meetings': 'meetings.view',
 	'manage-meetings': 'meetings.edit',
-	// Direction B migration (2026-07-06): the legacy `record-decisions`
-	// Spatie string used to map to `meetings.record_decisions`, but the
-	// engine never enforced that capability for recommendation lifecycle
-	// transitions. Now that the engine exposes `recommendations.{approve,
-	// reject, defer, accept, complete}` capabilities, we pivot the legacy
-	// key onto the new ruling-side approve capability so stale sessions
-	// still resolve a sensible default. Per-action gating in the UI must
-	// always go through `useCan('recommendations.<action>')` (see
-	// RecommendationCard / RecommendationView / RecommendationStatusActions).
-	'record-decisions': 'recommendations.approve',
-	'meetings.record_decisions': 'recommendations.approve',
+	// Phase 1 / Direction R (2026-07-07): the legacy `record-decisions`
+	// Spatie string and the canonical `meetings.record_decisions`
+	// capability used to alias onto `recommendations.approve`. With the
+	// new MeetingResolutions model that philosophy is gone — there is no
+	// approve / reject / adopt / deliberate lifecycle. We repoint both
+	// legacy keys at `meeting_resolutions.create` so any stale session or
+	// legacy route guard still resolves to the most permissive
+	// "you can record a meeting output" capability on the new surface.
+	// Per-action gating in the UI must always go through
+	// `useCan('meeting_resolutions.<action>')` on ResolutionCard /
+	// ResolutionsSection.
+	'record-decisions': 'meeting_resolutions.create',
+	'meetings.record_decisions': 'meeting_resolutions.create',
 	'recommendations.view': 'recommendations.view',
 	'recommendations.create': 'recommendations.create',
 	'recommendations.edit': 'recommendations.edit',

@@ -248,6 +248,32 @@ final class Capability
     const RECOMMENDATIONS_COMPLETE = 'recommendations.complete';
 
     // ========================================================
+    // Meeting Resolutions — Phase 1 / Direction R
+    // ========================================================
+    // Typed outputs of a meeting (kind = recommendation | decision). No
+    // approve / reject / adopt / deliberate lifecycle exists; status moves
+    // forward through open → in_progress → (converted_to_tasks | completed
+    // | cancelled), with a metadata-only `hold` triple.
+
+    const MEETING_RESOLUTIONS_VIEW = 'meeting_resolutions.view';
+
+    const MEETING_RESOLUTIONS_CREATE = 'meeting_resolutions.create';
+
+    const MEETING_RESOLUTIONS_UPDATE = 'meeting_resolutions.update';
+
+    const MEETING_RESOLUTIONS_DELETE = 'meeting_resolutions.delete';
+
+    const MEETING_RESOLUTIONS_HOLD = 'meeting_resolutions.hold';
+
+    const MEETING_RESOLUTIONS_RELEASE_HOLD = 'meeting_resolutions.release_hold';
+
+    const MEETING_RESOLUTIONS_CONVERT_TO_TASKS = 'meeting_resolutions.convert_to_tasks';
+
+    const MEETING_RESOLUTIONS_COMPLETE = 'meeting_resolutions.complete';
+
+    const MEETING_RESOLUTIONS_CANCEL = 'meeting_resolutions.cancel';
+
+    // ========================================================
     // Surveys
     // ========================================================
 
