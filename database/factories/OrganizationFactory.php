@@ -20,6 +20,9 @@ class OrganizationFactory extends Factory
             'address' => $this->faker->address(),
             'website' => $this->faker->url(),
             'is_active' => true,
+            'type' => Organization::TYPE_ORGANIZATION,
+            'parent_id' => null,
+            'sort_order' => 0,
         ];
     }
 
@@ -27,6 +30,41 @@ class OrganizationFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'is_active' => false,
+        ]);
+    }
+
+    public function cluster(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'type' => Organization::TYPE_CLUSTER,
+        ]);
+    }
+
+    public function hospital(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'type' => Organization::TYPE_HOSPITAL,
+        ]);
+    }
+
+    public function center(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'type' => Organization::TYPE_CENTER,
+        ]);
+    }
+
+    public function ofType(string $type): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'type' => $type,
+        ]);
+    }
+
+    public function childOf(Organization $parent): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'parent_id' => $parent->getKey(),
         ]);
     }
 }
