@@ -35,12 +35,6 @@ Schedule::command('meetings:send-reminders')
     ->withoutOverlapping()
     ->onOneServer();
 
-// Meetings: تأجيل القرارات المعلّقة بعد 30 يوماً يومياً في 02:00
-Schedule::command('decisions:expire-pending')
-    ->dailyAt('02:00')
-    ->withoutOverlapping()
-    ->onOneServer();
-
 // Meetings: تذكير بالتوصيات المتأخرة يومياً في 08:00
 Schedule::command('recommendations:check-overdue')
     ->dailyAt('08:00')
