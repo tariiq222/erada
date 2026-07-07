@@ -14,6 +14,12 @@
 /storage/*.key
 /storage/oauth-*.key
 /storage/pail
+/storage/framework/cache/
+/storage/framework/sessions/
+/storage/framework/views/
+/storage/framework/testing/
+/storage/framework/logs/
+/storage/logs/
 /bootstrap/cache/*.php
 .phpactor.json
 .phpunit.result.cache
