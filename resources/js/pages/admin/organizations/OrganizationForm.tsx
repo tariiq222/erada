@@ -1,16 +1,30 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
-import { organizationsApi, Organization } from '@entities/admin';
+import {
+  organizationsApi,
+  Organization,
+  OrganizationType,
+  ORGANIZATION_TYPES,
+} from '@entities/admin';
 import { Card } from '@shared/ui/Card';
 import { Button } from '@shared/ui/Button';
 import { Input } from '@shared/ui/Input';
 import { Textarea } from '@shared/ui/Textarea';
 import { Checkbox } from '@shared/ui/Checkbox';
+import { Select, SelectOption } from '@shared/ui/Select';
 import { PageHeader } from '@shared/ui/PageHeader';
 import { Alert } from '@shared/ui/Alert';
 import DeleteConfirmationModal from '@shared/ui/DeleteConfirmationModal';
 import {IconBuilding, IconDeviceFloppy, IconLoader, IconTrash, IconX} from '@tabler/icons-react';
+
+const TYPE_KEYS: Record<OrganizationType, string> = {
+  cluster: 'admin.organizations.types.cluster',
+  hospital: 'admin.organizations.types.hospital',
+  center: 'admin.organizations.types.center',
+  organization: 'admin.organizations.types.organization',
+  other: 'admin.organizations.types.other',
+};
 
 export const OrganizationForm: React.FC = () => {
   const { t } = useTranslation();
@@ -23,10 +37,14 @@ export const OrganizationForm: React.FC = () => {
   const [deleting, setDeleting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [allOrgs, setAllOrgs] = useState<Organization[]>([]);
 
   const [form, setForm] = useState<Partial<Organization>>({
     name: '',
     code: '',
+    type: 'organization',
+    parent_id: null,
+    sort_order: 0,
     email: '',
     phone: '',
     address: '',
@@ -34,6 +52,18 @@ export const OrganizationForm: React.FC = () => {
     description: '',
     is_active: true,
   });
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const result = await organizationsApi.list({ per_page: 100 });
+        const items = ((result as any).data || []) as Organization[];
+        setAllOrgs(items.filter((o) => isEdit ? o.id !== Number(id) : true));
+      } catch {
+        // غير حرج — لا نمنع الحفظ بسبب فشل تحميل قائمة الـ parents
+      }
+    })();
+  }, [id, isEdit]);
 
   useEffect(() => {
     if (!isEdit) return;
@@ -48,6 +78,42 @@ export const OrganizationForm: React.FC = () => {
       }
     })();
   }, [id, isEdit, t]);
+
+  const typeOptions: SelectOption[] = useMemo(
+    () => ORGANIZATION_TYPES.map((value) => ({
+      value,
+      label: t(TYPE_KEYS[value]),
+    })),
+    [t],
+  );
+
+  /**
+   * قائمة المؤسسات الصالحة كأب للمؤسسة الحالية:
+   *   - فقط التي allowed_child_types تحتوي على type الحالي
+   *   - لا نفس الـ id (لتجنّب self-reference في وضع التعديل)
+   *   - فقط الفعّالة (is_active = true)
+   */
+  const availableParents: SelectOption[] = useMemo(() => {
+    const currentType = (form.type as OrganizationType) || 'organization';
+    if (currentType === 'cluster') return [];
+
+    return allOrgs
+      .filter((o) => o.is_active)
+      .filter((o) => Array.isArray(o.allowed_child_types) && o.allowed_child_types.includes(currentType))
+      .filter((o) => !isEdit || o.id !== Number(id))
+      .map((o) => ({
+        value: String(o.id),
+        label: `${o.name} (${o.code})`,
+      }));
+  }, [allOrgs, form.type, id, isEdit]);
+
+  // عند تغيّر type إلى cluster، امسح parent_id
+  useEffect(() => {
+    if (form.type === 'cluster' && form.parent_id !== null) {
+      setForm((f) => ({ ...f, parent_id: null }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.type]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,6 +210,48 @@ export const OrganizationForm: React.FC = () => {
                 className="font-mono"
               />
             </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                {t('admin.organizations.fields.type')}
+              </label>
+              <Select
+                options={typeOptions}
+                value={(form.type as string) || 'organization'}
+                onChange={(e) => setForm({ ...form, type: e.target.value as OrganizationType })}
+                placeholder={t('admin.organizations.fields.type')}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                {t('admin.organizations.fields.sortOrder')}
+              </label>
+              <Input
+                type="number"
+                min={0}
+                value={form.sort_order ?? 0}
+                onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
+              />
+            </div>
+
+            {form.type !== 'cluster' && (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium mb-1">
+                  {t('admin.organizations.fields.parent')}
+                </label>
+                <Select
+                  options={[
+                    { value: '', label: t('admin.organizations.fields.parentPlaceholder') },
+                    ...availableParents,
+                  ]}
+                  value={form.parent_id !== null && form.parent_id !== undefined ? String(form.parent_id) : ''}
+                  onChange={(e) => setForm({ ...form, parent_id: e.target.value ? Number(e.target.value) : null })}
+                  placeholder={t('admin.organizations.fields.parent')}
+                />
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium mb-1">
                 {t('admin.organizations.fields.email')}
@@ -203,6 +311,17 @@ export const OrganizationForm: React.FC = () => {
                 label={t('admin.organizations.fields.isActive')}
               />
             </div>
+
+            {isEdit && (
+              <div className="md:col-span-2 pt-2 border-t border-[var(--border)]">
+                <div className="text-sm text-[var(--text-secondary)]">
+                  {t('admin.organizations.fields.childrenCount')}:{' '}
+                  <span className="font-semibold text-[var(--text-primary)]">
+                    {form.children_count ?? 0}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {isEdit && (

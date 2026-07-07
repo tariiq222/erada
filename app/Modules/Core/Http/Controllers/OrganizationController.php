@@ -8,6 +8,7 @@ use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Http\Requests\DestroyOrganizationRequest;
 use App\Modules\Core\Http\Requests\StoreOrganizationRequest;
 use App\Modules\Core\Http\Requests\UpdateOrganizationRequest;
+use App\Modules\Core\Http\Resources\OrganizationResource;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Shared\Models\ActivityLog;
 use Illuminate\Http\JsonResponse;
@@ -35,11 +36,15 @@ class OrganizationController extends Controller
             $query->where('is_active', $status === 'active');
         }
 
+        if ($type = $request->query('type')) {
+            $query->where('type', $type);
+        }
+
         $perPage = min((int) $request->query('per_page', 20), 100);
 
         $organizations = $query->orderBy('name')
             ->paginate($perPage)
-            ->through(fn ($org) => $this->transform($org));
+            ->through(fn ($org) => (new OrganizationResource($org))->withParent());
 
         return response()->json([
             'data' => $organizations->items(),
@@ -59,9 +64,12 @@ class OrganizationController extends Controller
         }
 
         $organization->loadCount(['users', 'projects']);
+        $organization->load('parent');
 
         return response()->json([
-            'data' => $this->transform($organization, withCounts: true),
+            'data' => (new OrganizationResource($organization))
+                ->withCounts()
+                ->withParent(),
         ]);
     }
 
@@ -71,6 +79,8 @@ class OrganizationController extends Controller
 
         $validated['created_by'] = auth()->id();
         $validated['is_active'] = $validated['is_active'] ?? true;
+        $validated['type'] = $validated['type'] ?? Organization::TYPE_ORGANIZATION;
+        $validated['sort_order'] = $validated['sort_order'] ?? 0;
 
         $org = Organization::create($validated);
 
@@ -87,7 +97,7 @@ class OrganizationController extends Controller
 
         return response()->json([
             'message' => 'تم إنشاء المؤسسة بنجاح',
-            'data' => $this->transform($org),
+            'data' => (new OrganizationResource($org))->withParent(),
         ], 201);
     }
 
@@ -110,9 +120,11 @@ class OrganizationController extends Controller
             'user_agent' => $request->userAgent(),
         ]);
 
+        $organization->load('parent');
+
         return response()->json([
             'message' => 'تم تحديث المؤسسة بنجاح',
-            'data' => $this->transform($organization),
+            'data' => (new OrganizationResource($organization))->withParent(),
         ]);
     }
 
@@ -123,6 +135,14 @@ class OrganizationController extends Controller
             return response()->json([
                 'message' => "لا يمكن حذف مؤسسة مرتبطة بـ {$usersCount} مستخدم. قم بإزالة المستخدمين أولاً.",
                 'users_count' => $usersCount,
+            ], 422);
+        }
+
+        $childrenCount = $organization->activeChildrenCount();
+        if ($childrenCount > 0) {
+            return response()->json([
+                'message' => "لا يمكن حذف المؤسسة لوجود {$childrenCount} مؤسسة/منظمات تابعة لها. احذف المؤسسات الفرعية أولاً.",
+                'children_count' => $childrenCount,
             ], 422);
         }
 
@@ -142,30 +162,5 @@ class OrganizationController extends Controller
         return response()->json([
             'message' => 'تم حذف المؤسسة بنجاح',
         ]);
-    }
-
-    private function transform(Organization $org, bool $withCounts = false): array
-    {
-        $data = [
-            'id' => $org->id,
-            'name' => $org->name,
-            'code' => $org->code,
-            'description' => $org->description,
-            'email' => $org->email,
-            'phone' => $org->phone,
-            'address' => $org->address,
-            'website' => $org->website,
-            'logo' => $org->logo,
-            'is_active' => (bool) $org->is_active,
-            'created_at' => $org->created_at?->toIso8601String(),
-            'updated_at' => $org->updated_at?->toIso8601String(),
-        ];
-
-        if ($withCounts) {
-            $data['users_count'] = $org->users_count ?? 0;
-            $data['projects_count'] = $org->projects_count ?? 0;
-        }
-
-        return $data;
     }
 }

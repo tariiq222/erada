@@ -10,6 +10,7 @@ const organizationsApiMock = {
   update: vi.fn(),
   get: vi.fn(),
   delete: vi.fn(),
+  list: vi.fn().mockResolvedValue({ data: [], meta: { current_page: 1, last_page: 1, total: 0 } }),
 };
 
 vi.mock('react-i18next', () => ({
@@ -27,6 +28,7 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('@entities/admin', () => ({
   organizationsApi: organizationsApiMock,
+  ORGANIZATION_TYPES: ['cluster', 'hospital', 'center', 'organization', 'other'],
 }));
 
 describe('OrganizationForm (create)', () => {
@@ -52,7 +54,14 @@ describe('OrganizationForm (create)', () => {
 
     await waitFor(() => expect(organizationsApiMock.create).toHaveBeenCalledTimes(1));
     expect(organizationsApiMock.create).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'هيئة الاختبار', code: 'TST', is_active: true }),
+      expect.objectContaining({
+        name: 'هيئة الاختبار',
+        code: 'TST',
+        type: 'organization',
+        parent_id: null,
+        sort_order: 0,
+        is_active: true,
+      }),
     );
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/admin/organizations'));
   });

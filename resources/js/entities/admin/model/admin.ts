@@ -3,10 +3,35 @@
  * M1 Super Admin dashboard governance types).
  */
 
+export type OrganizationType =
+  | 'cluster'
+  | 'hospital'
+  | 'center'
+  | 'organization'
+  | 'other';
+
+export const ORGANIZATION_TYPES: OrganizationType[] = [
+  'cluster',
+  'hospital',
+  'center',
+  'organization',
+  'other',
+];
+
+export interface OrganizationParent {
+  id: number;
+  name: string;
+  code: string;
+  type: OrganizationType;
+}
+
 export interface Organization {
   id: number;
   name: string;
   code: string;
+  type: OrganizationType;
+  parent_id: number | null;
+  sort_order: number;
   description: string | null;
   email: string | null;
   phone: string | null;
@@ -14,6 +39,11 @@ export interface Organization {
   website: string | null;
   logo: string | null;
   is_active: boolean;
+  is_root: boolean;
+  can_have_children: boolean;
+  allowed_child_types: OrganizationType[];
+  children_count: number;
+  parent: OrganizationParent | null;
   users_count?: number;
   projects_count?: number;
   created_at?: string;
