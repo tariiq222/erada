@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Models;
 
+use App\Modules\Core\Traits\HasOrganizationHierarchy;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
 use App\Modules\Shared\Traits\LogsActivity;
@@ -15,7 +16,63 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Organization extends Model
 {
-    use HasFactory, LogsActivity, SoftDeletes;
+    use HasFactory, HasOrganizationHierarchy, LogsActivity, SoftDeletes;
+
+    /**
+     * أنواع المؤسسات المسموحة (Phase 9-B).
+     *
+     * القاموس مغلق في CHECK constraint على مستوى DB (انظر migration
+     * add_hierarchy_to_organizations_table). إضافة قيمة جديدة هنا
+     * تتطلب ALTER للـ CHECK في migration لاحقة.
+     */
+    public const TYPE_CLUSTER = 'cluster';
+
+    public const TYPE_HOSPITAL = 'hospital';
+
+    public const TYPE_CENTER = 'center';
+
+    public const TYPE_ORGANIZATION = 'organization';
+
+    public const TYPE_OTHER = 'other';
+
+    /**
+     * كل الأنواع المسموحة — يُستخدم في validation rules و scopes.
+     *
+     * @var list<string>
+     */
+    public const TYPES = [
+        self::TYPE_CLUSTER,
+        self::TYPE_HOSPITAL,
+        self::TYPE_CENTER,
+        self::TYPE_ORGANIZATION,
+        self::TYPE_OTHER,
+    ];
+
+    /**
+     * قواعد "من يستطيع أن يكون ابن من" (Phase 9-B).
+     *
+     * مصفوفة static بدلاً من منطق في الدوال لجعل الاختبار
+     * ولوحة admin في الـ UI واضحين.
+     *
+     * - cluster: الجذر المعتاد — يقبل hospital/center/organization
+     * - hospital: في هذه المرحلة لا يقبل children (ورقة سياسات لاحقاً)
+     * - center: في هذه المرحلة لا يقبل children
+     * - organization: يمكن أن يكون standalone root أو ابن لـ cluster
+     * - other: escape hatch — لا يقبل children إلا إذا أُضيفت سياسة
+     *
+     * @var array<string, list<string>>
+     */
+    public const ALLOWED_CHILD_TYPES = [
+        self::TYPE_CLUSTER => [
+            self::TYPE_HOSPITAL,
+            self::TYPE_CENTER,
+            self::TYPE_ORGANIZATION,
+        ],
+        self::TYPE_HOSPITAL => [],
+        self::TYPE_CENTER => [],
+        self::TYPE_ORGANIZATION => [],
+        self::TYPE_OTHER => [],
+    ];
 
     protected static function newFactory()
     {
@@ -28,6 +85,8 @@ class Organization extends Model
     protected array $trackedFields = [
         'name',
         'code',
+        'type',
+        'parent_id',
         'logo',
         'description',
         'email',
@@ -35,11 +94,14 @@ class Organization extends Model
         'address',
         'website',
         'is_active',
+        'sort_order',
     ];
 
     protected $fillable = [
         'name',
         'code',
+        'type',
+        'parent_id',
         'logo',
         'description',
         'email',
@@ -48,15 +110,18 @@ class Organization extends Model
         'website',
         'settings',
         'is_active',
+        'sort_order',
         'created_by',
     ];
 
     protected $casts = [
         'settings' => 'array',
         'is_active' => 'boolean',
+        'sort_order' => 'integer',
+        'parent_id' => 'integer',
     ];
 
-    // ========== العلاقات ==========
+    // ========== العلاقات الأساسية (غير المتعلقة بالـ hierarchy) ==========
 
     /**
      * المستخدمون التابعون للمؤسسة
@@ -115,7 +180,7 @@ class Organization extends Model
         return $this->hasMany(Survey::class);
     }
 
-    // ========== Scopes ==========
+    // ========== Scopes الأساسية ==========
 
     /**
      * المؤسسات النشطة فقط
@@ -125,7 +190,7 @@ class Organization extends Model
         return $query->where('is_active', true);
     }
 
-    // ========== Helpers ==========
+    // ========== Helpers الأساسية ==========
 
     /**
      * الحصول على إعداد معين
@@ -154,4 +219,15 @@ class Organization extends Model
     {
         return $this->code === 'DEFAULT';
     }
+
+    // ========== Phase 9-B Hierarchy methods ==========
+    //
+    // الـ relations (parent, children, activeChildren) والـ scopes
+    // (scopeRoots, scopeChildrenOf, scopeOfType) والـ helpers
+    // (isCluster / isHospital / ... / canAcceptChildType) كلها موجودة في
+    // HasOrganizationHierarchy trait. الـ class هذا يحتفظ بالـ TYPE_*
+    // constants والـ ALLOWED_CHILD_TYPES map فقط.
+    //
+    // لا يزال Organization غير مطبّق ScopeAware — الـ engine لا يمشي شجرة
+    // المؤسسات. إضافة parent_id لا يمنح parent visibility لـ child records.
 }
