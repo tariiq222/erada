@@ -191,8 +191,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{request}', [DataImportController::class, 'show'])
             ->name('data-imports.show');
 
-        // العمليات المؤثّرة (مراجعة/تطبيق) تتطلب review_data_imports (super_admin يتجاوز عبر Gate::before)
-        Route::middleware('permission:review_data_imports')->group(function () {
+        // العمليات المؤثّرة (مراجعة/تطبيق) تتطلب القدرة engine-only surveys.review_data_imports
+        // (super_admin يتجاوز عبر AccessDecision::can). Phase 8-C: كانت permission:review_data_imports
+        // (Spatie) ثم نُقلت إلى engine_capability: Capability::SURVEYS_REVIEW_DATA_IMPORTS.
+        Route::middleware('engine_capability:'.Capability::SURVEYS_REVIEW_DATA_IMPORTS)->group(function () {
             Route::post('/{request}/approve', [DataImportController::class, 'approve'])
                 ->name('data-imports.approve');
             Route::post('/{request}/reject', [DataImportController::class, 'reject'])

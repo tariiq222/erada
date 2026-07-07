@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Http\Controllers\AuthController;
 use App\Modules\Core\Http\Controllers\DashboardController;
 use App\Modules\Core\Http\Controllers\GovernanceRulesController;
@@ -116,8 +117,10 @@ Route::middleware('auth:sanctum')->group(function () {
         });
     });
 
-    // لوحة التحكم - محمية بصلاحية view_dashboard
-    Route::prefix('dashboard')->middleware('can:view_dashboard')->group(function () {
+    // لوحة التحكم - محمية بـ engine_capability:Capability::DASHBOARD_VIEW
+    // Phase 8-C: كانت can:view_dashboard (Spatie) ثم نُقلت إلى engine_capability
+    // حتى تُقرأ من AccessDecision::can (single source of truth).
+    Route::prefix('dashboard')->middleware('engine_capability:'.Capability::DASHBOARD_VIEW)->group(function () {
         Route::get('/stats', [DashboardController::class, 'stats']);
         Route::get('/advanced-stats', [DashboardController::class, 'advancedStats']);
         Route::get('/recent-projects', [DashboardController::class, 'recentProjects']);
