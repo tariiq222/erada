@@ -5,6 +5,7 @@ namespace App\Modules\Strategy\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Meetings\Models\Recommendation;
 use App\Modules\Projects\Models\Project;
 use App\Modules\Shared\Traits\HasOrganizationScope;
 use App\Modules\Strategy\Http\Requests\DeleteProgramRequest;
@@ -155,7 +156,10 @@ class ProgramController extends Controller
             'department:id,name',
             'projects' => fn ($q) => $q->orderBy('created_at', 'desc'),
             'blockers' => fn ($q) => $q->whereIn('status', ['open', 'in_progress', 'escalated']),
-            'decisions' => fn ($q) => $q->latest('decision_date')->limit(10),
+            'recommendations' => fn ($q) => $q
+                ->where('kind', Recommendation::KIND_RULING)
+                ->latest('decision_date')
+                ->limit(10),
             'kpis' => fn ($q) => $q->with('owner:id,name'),
             'reviews' => fn ($q) => $q->latest('review_date')->limit(5),
         ]);
