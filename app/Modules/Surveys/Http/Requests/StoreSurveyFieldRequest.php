@@ -47,7 +47,11 @@ class StoreSurveyFieldRequest extends FormRequest
         $surveyId = $this->survey?->id;
 
         return [
-            'section_id' => ['nullable', 'exists:survey_sections,id'],
+            'section_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('survey_sections', 'id')->where('survey_id', $this->route('survey')->id),
+            ],
             'field_key' => [
                 'required',
                 'string',

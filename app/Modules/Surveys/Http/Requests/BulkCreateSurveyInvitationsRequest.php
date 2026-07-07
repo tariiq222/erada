@@ -6,6 +6,7 @@ use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
 use App\Modules\Surveys\Models\Survey;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
  * BulkCreateSurveyInvitationsRequest - engine-only authz + payload
@@ -41,8 +42,22 @@ class BulkCreateSurveyInvitationsRequest extends FormRequest
             'invitations' => ['required', 'array', 'min:1', 'max:100'],
             'invitations.*.email' => ['required', 'email'],
             'invitations.*.name' => ['nullable', 'string', 'max:255'],
-            'invitations.*.department_id' => ['nullable', 'integer', 'exists:departments,id'],
-            'invitations.*.user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'invitations.*.department_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('departments', 'id')->when(
+                    ! $this->user()?->isSuperAdmin(),
+                    fn ($rule) => $rule->where('organization_id', $this->user()?->organization_id)
+                ),
+            ],
+            'invitations.*.user_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('users', 'id')->when(
+                    ! $this->user()?->isSuperAdmin(),
+                    fn ($rule) => $rule->where('organization_id', $this->user()?->organization_id)
+                ),
+            ],
             'expires_at' => ['nullable', 'date', 'after:now'],
             'max_uses' => ['nullable', 'integer', 'min:1'],
         ];

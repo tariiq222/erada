@@ -21,7 +21,6 @@ use App\Modules\Surveys\Models\Survey;
 use App\Modules\Surveys\Services\SurveyExportService;
 use App\Modules\Surveys\Services\VersioningService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class SurveyController extends Controller
@@ -334,25 +333,6 @@ class SurveyController extends Controller
                 'message' => 'حدث خطأ أثناء التصدير',
                 'error_id' => $errorId,
             ], 500);
-        }
-    }
-
-    /**
-     * التحقق من الصلاحية
-     */
-    protected function authorizeSurvey(Request $request, Survey $survey): void
-    {
-        $user = $request->user();
-
-        // super_admin فقط يتجاوز عزل المؤسسة
-        if ($user->isSuperAdmin()) {
-            return;
-        }
-
-        if ($user->organization_id === null
-            || $survey->organization_id === null
-            || $survey->organization_id !== $user->organization_id) {
-            abort(403, 'غير مصرح لك بالوصول لهذا الاستبيان');
         }
     }
 }

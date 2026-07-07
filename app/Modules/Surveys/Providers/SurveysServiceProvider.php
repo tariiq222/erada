@@ -2,6 +2,7 @@
 
 namespace App\Modules\Surveys\Providers;
 
+use App\Modules\Surveys\Services\SurveysCapabilityProvider;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -12,7 +13,10 @@ class SurveysServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        // Tag the module's CapabilityProvider so AuthController can iterate
+        // all engined_capability_providers without referencing this module
+        // directly. See App\Modules\Core\Contracts\CapabilityProvider.
+        $this->app->tag([SurveysCapabilityProvider::class], 'engined_capability_providers');
     }
 
     public function boot(): void

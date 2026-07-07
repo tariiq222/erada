@@ -3,6 +3,8 @@
 namespace App\Modules\Surveys\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Capability;
 use App\Modules\Surveys\Enums\ResponseStatus;
 use App\Modules\Surveys\Http\Controllers\Concerns\AuthorizesSurveyAccess;
 use App\Modules\Surveys\Http\Resources\SurveyResponseResource;
@@ -18,6 +20,9 @@ class SurveyResponseController extends Controller
 
     public function index(Request $request, Survey $survey): AnonymousResourceCollection
     {
+        if (! AccessDecision::can($request->user(), Capability::SURVEYS_REVIEW_RESPONSES)) {
+            abort(403, 'لا تملك صلاحية مراجعة ردود الاستبيانات');
+        }
         $this->authorizeSurvey($request, $survey);
         $query = $survey->responses()
             ->with(['answers.field'])
@@ -42,6 +47,9 @@ class SurveyResponseController extends Controller
 
     public function show(Request $request, Survey $survey, SurveyResponse $response): SurveyResponseResource
     {
+        if (! AccessDecision::can($request->user(), Capability::SURVEYS_REVIEW_RESPONSES)) {
+            abort(403, 'لا تملك صلاحية مراجعة ردود الاستبيانات');
+        }
         $this->authorizeSurvey($request, $survey);
         if ($response->survey_id !== $survey->id) {
             abort(404, 'الإجابة غير موجودة في هذا الاستبيان');

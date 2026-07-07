@@ -49,7 +49,9 @@ use App\Modules\Strategy\Observers\PortfolioObserver;
 use App\Modules\Strategy\Observers\ProgramObserver;
 use App\Modules\Strategy\Policies\PortfolioPolicy;
 use App\Modules\Strategy\Policies\ProgramPolicy;
+use App\Modules\Surveys\Models\Survey;
 use App\Modules\Surveys\Models\SurveyResponse;
+use App\Modules\Surveys\Policies\SurveyPolicy;
 use App\Modules\Surveys\Policies\SurveyResponsePolicy;
 use App\Modules\Tasks\Models\Task;
 use App\Modules\Tasks\Observers\TaskObserver;
@@ -123,6 +125,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Risk::class, RiskPolicy::class);
         Gate::policy(RiskAction::class, RiskActionPolicy::class);
         Gate::policy(SurveyResponse::class, SurveyResponsePolicy::class);
+        Gate::policy(Survey::class, SurveyPolicy::class);
         Gate::policy(Meeting::class, MeetingPolicy::class);
         Gate::policy(Recommendation::class, RecommendationPolicy::class);
         Gate::policy(ActivityLog::class, ActivityLogPolicy::class);
