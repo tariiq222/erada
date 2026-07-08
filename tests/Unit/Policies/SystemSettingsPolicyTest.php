@@ -97,11 +97,16 @@ class SystemSettingsPolicyTest extends TestCase
 
     // ========== update() ==========
 
-    public function test_admin_can_update_system_settings(): void
+    public function test_admin_cannot_update_system_settings(): void
     {
+        // Direction B (M-01): global system settings are platform-wide
+        // (no organization_id) so only super_admin may write them. An
+        // org-scoped admin carrying SETTINGS_EDIT must NOT pass here --
+        // the pre-Direction-B policy allowed org admin to update global
+        // settings, which leaked across org boundaries.
         $admin = $this->makeUser('admin');
 
-        $this->assertTrue($this->policy->update($admin));
+        $this->assertFalse($this->policy->update($admin));
     }
 
     public function test_viewer_cannot_update_system_settings(): void
@@ -111,12 +116,14 @@ class SystemSettingsPolicyTest extends TestCase
         $this->assertFalse($this->policy->update($viewer));
     }
 
-    public function test_super_admin_allowed_via_before_not_update(): void
+    public function test_super_admin_can_update_system_settings_via_before_short_circuit(): void
     {
-        // Confirm before() short-circuits before update() is reached for super_admin.
-        // The Gate would return true for super_admin without calling update().
+        // Confirm before() short-circuits before update() is reached for
+        // super_admin. The Gate would return true for super_admin without
+        // calling update() at all -- verify both paths agree.
         $sa = $this->makeUser('super_admin');
 
         $this->assertTrue($this->policy->before($sa, 'update'));
+        $this->assertTrue($this->policy->update($sa));
     }
 }
