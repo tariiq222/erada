@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 class IncidentReport extends Model implements ScopeAware, SensitivelyScoped
 {
@@ -126,7 +127,7 @@ class IncidentReport extends Model implements ScopeAware, SensitivelyScoped
             // enumeration leak. Existing rows were backfilled by the
             // 2026_07_07_000005 migration.
             if (empty($report->tracking_token)) {
-                $report->tracking_token = \Illuminate\Support\Str::random(64);
+                $report->tracking_token = Str::random(64);
             }
         });
     }

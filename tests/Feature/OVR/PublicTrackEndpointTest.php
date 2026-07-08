@@ -11,6 +11,7 @@ use App\Modules\OVR\Models\IncidentReport;
 use App\Modules\OVR\Models\IncidentType;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class PublicTrackEndpointTest extends TestCase
@@ -75,7 +76,7 @@ class PublicTrackEndpointTest extends TestCase
             // report_number. The migration backfills existing rows; new rows
             // created via the API path also generate one, but in tests we
             // create rows directly, so the test fixture must supply it.
-            'tracking_token' => \Illuminate\Support\Str::random(64),
+            'tracking_token' => Str::random(64),
         ], $overrides));
     }
 
