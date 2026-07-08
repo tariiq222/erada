@@ -329,25 +329,6 @@ class ProjectPolicyTest extends TestCase
     /**
      * عضو سياقي لا يجوز له إدارة أعضاء المشروع.
      */
-    public function test_scoped_member_cannot_manage_members(): void
-    {
-        $user = $this->makeUser('viewer');
-        $project = $this->makeProject();
-        $user->assignProjectRole($project, ScopedRole::PROJECT_MEMBER);
-
-        $this->assertFalse(
-            (new ProjectPolicy)->manageMembers($user, $project),
-            'يجب رفض إدارة أعضاء المشروع لعضو سياقي (PROJECT_MEMBER)'
-        );
-        $this->assertTrue(
-            Gate::forUser($user)->denies('manageMembers', $project),
-            'يجب أن ترفض بوابة Gate إدارة أعضاء المشروع لعضو سياقي (PROJECT_MEMBER)'
-        );
-    }
-
-    /**
-     * عضو سياقي لا يجوز له إسناد أدوار سياقية لأعضاء آخرين في المشروع.
-     */
     public function test_scoped_member_cannot_assign_project_roles(): void
     {
         $user = $this->makeUser('viewer');
@@ -363,6 +344,18 @@ class ProjectPolicyTest extends TestCase
             'يجب أن ترفض بوابة Gate إسناد الأدوار السياقية لعضو سياقي (PROJECT_MEMBER)'
         );
     }
+
+    /**
+     * عضو سياقي لا يجوز له إسناد أدوار سياقية لأعضاء آخرين في المشروع.
+     *
+     * (مدمج مع test_scoped_member_cannot_assign_project_roles أعلاه بعد
+     * توحيد manageMembers → assignProjectRoles؛ كان الاختباران مكررين
+     * أصلاً قبل التوحيد فبقي اختبار واحد يغطي السلوك.)
+     */
+    // Removed in main-ci-recovery-direction-r: was an exact duplicate of
+    // test_scoped_member_cannot_assign_project_roles above. The single
+    // remaining test pins that a PROJECT_MEMBER cannot assign roles and
+    // is also denied by the Gate facade.
 
     // ========================================================================
     // (5-6) Scoped Viewer (PROJECT_VIEWER) — DENY
@@ -388,21 +381,21 @@ class ProjectPolicyTest extends TestCase
     }
 
     /**
-     * مشاهد سياقي لا يجوز له إدارة أعضاء المشروع.
+     * مشاهد سياقي لا يجوز له إسناد أدوار للمشروع.
      */
-    public function test_scoped_viewer_cannot_manage_members(): void
+    public function test_scoped_viewer_cannot_assign_project_roles(): void
     {
         $user = $this->makeUser('viewer');
         $project = $this->makeProject();
         $user->assignProjectRole($project, ScopedRole::PROJECT_VIEWER);
 
         $this->assertFalse(
-            (new ProjectPolicy)->manageMembers($user, $project),
-            'يجب رفض إدارة أعضاء المشروع لمشاهد سياقي (PROJECT_VIEWER)'
+            (new ProjectPolicy)->assignProjectRoles($user, $project),
+            'يجب رفض إسناد الأدوار السياقية لمشاهد سياقي (PROJECT_VIEWER)'
         );
         $this->assertTrue(
-            Gate::forUser($user)->denies('manageMembers', $project),
-            'يجب أن ترفض بوابة Gate إدارة أعضاء المشروع لمشاهد سياقي (PROJECT_VIEWER)'
+            Gate::forUser($user)->denies('assignProjectRoles', $project),
+            'يجب أن ترفض بوابة Gate إسناد الأدوار السياقية لمشاهد سياقي (PROJECT_VIEWER)'
         );
     }
 
@@ -423,21 +416,6 @@ class ProjectPolicyTest extends TestCase
         $this->assertTrue(
             (new ProjectPolicy)->update($user, $project),
             'يجب السماح بتعديل المشروع لمدير سياقي (PROJECT_MANAGER) عبر isProjectAdmin'
-        );
-    }
-
-    /**
-     * مدير المشروع يجوز له إدارة أعضاء المشروع.
-     */
-    public function test_scoped_manager_can_manage_members(): void
-    {
-        $user = $this->makeUser('viewer');
-        $project = $this->makeProject();
-        $user->assignProjectRole($project, ScopedRole::PROJECT_MANAGER);
-
-        $this->assertTrue(
-            (new ProjectPolicy)->manageMembers($user, $project),
-            'يجب السماح بإدارة أعضاء المشروع لمدير سياقي (PROJECT_MANAGER)'
         );
     }
 
