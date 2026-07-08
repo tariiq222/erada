@@ -424,9 +424,18 @@ class IncidentReportController extends Controller
     protected function createHandlerTask(IncidentReport $report, User $assignee, int $createdBy): void
     {
         try {
+            // Post Direction R: tasks.source_id is unsignedBigInteger (the
+            // schema predates UUID sources). IncidentReport.id is a UUID and
+            // cannot fit a bigint, so we do NOT stamp source_id on OVR
+            // handler tasks — only source_type + source_sensitivity. The
+            // title carries the report number and is unique per report, so
+            // we dedup by title + report_number in the title match below
+            // (the legacy "where source_id" path would either 22P02 on
+            // insert or silently miss duplicates on the exists check).
+            $taskTitle = "معالجة حادثة {$report->report_number}";
             $exists = Task::query()
                 ->where('source_type', IncidentReport::class)
-                ->where('source_id', $report->id)
+                ->where('title', $taskTitle)
                 ->whereNotIn('status', [TaskStatus::COMPLETED, TaskStatus::CANCELLED])
                 ->exists();
 
@@ -436,7 +445,7 @@ class IncidentReportController extends Controller
 
             Task::create([
                 'type' => TaskType::DEPARTMENT,
-                'title' => "معالجة حادثة {$report->report_number}",
+                'title' => $taskTitle,
                 'description' => Str::limit($report->incident_description, 500),
                 'status' => TaskStatus::TODO,
                 'priority' => $report->severity_level?->value === 'critical' ? TaskPriority::CRITICAL : TaskPriority::HIGH,
@@ -447,7 +456,10 @@ class IncidentReportController extends Controller
                 'owner_id' => $assignee->id,
                 'department_id' => $report->reporter_department_id,
                 'source_type' => IncidentReport::class,
-                'source_id' => $report->id,
+                // source_id intentionally omitted: OVR IncidentReport.id is
+                // a UUID and the column is bigint. Source-tracking for OVR
+                // handler tasks flows through source_type + title (which
+                // embeds the report_number) — see the dedup query above.
                 'source_sensitivity' => $report->is_confidential ? 'confidential' : 'normal',
             ]);
         } catch (\Throwable $e) {
