@@ -99,7 +99,12 @@ class OVRPrivacySerializationTest extends TestCase
     {
         $report = $this->makeIncidentReport(['status' => ReportStatus::New]);
 
-        $response = $this->getJson("/api/ovr/track/{$report->report_number}");
+        // Direction B (2026-07-07): the public track route keys on the
+        // per-report random tracking_token, NOT on the enumerable
+        // report_number. The model boot auto-stamps a token on every
+        // IncidentReport::create(), so any report produced by
+        // makeIncidentReport carries one.
+        $response = $this->getJson("/api/ovr/track/{$report->tracking_token}");
 
         $response->assertOk()
             ->assertJsonPath('data.report_number', $report->report_number)

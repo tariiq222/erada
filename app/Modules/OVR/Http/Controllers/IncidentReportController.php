@@ -862,15 +862,20 @@ class IncidentReportController extends Controller
 
         // عزل المؤسسة عبر الفلتر الموحّد، ثم تنسيق كل سجل عبر ActivityLogResource
         // لمنع تسريب old_values/new_values/user_agent/ip_address/metadata الخام.
-        $activityQuery = $report->activityLogs()
-            ->with('user:id,name')
-            ->orderByDesc('created_at')
-            ->limit(100);
+        // UserActivityLogScope::apply() takes an Eloquent\Builder (not a
+        // MorphMany relation) — pull the relation through to its underlying
+        // query first so the org-isolation filter can be appended. Re-apply
+        // the eager-load + order + limit on the constrained builder.
+        $activityBuilder = $report->activityLogs()->getQuery();
         $actor = $request->user();
         if ($actor instanceof User) {
-            app(UserActivityLogScope::class)->apply($activityQuery, $actor);
+            app(UserActivityLogScope::class)->apply($activityBuilder, $actor);
         }
-        $activity = $activityQuery->get();
+        $activity = $activityBuilder
+            ->with('user:id,name')
+            ->orderByDesc('created_at')
+            ->limit(100)
+            ->get();
 
         $activityFormatted = $activity->map(function ($a) {
             $payload = (new ActivityLogResource($a))->resolve(request());
