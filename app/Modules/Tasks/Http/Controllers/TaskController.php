@@ -342,15 +342,19 @@ class TaskController extends Controller
             $this->authorizeTask($task, 'view');
 
             $actor = request()->user();
-            $query = $task->activityLogs()
+            // UserActivityLogScope::apply() takes an Eloquent\Builder, not a
+            // MorphMany relation. Pull the relation through to its underlying
+            // query builder, apply the org-scope filter, then re-apply the
+            // eager-load + ordering + limit on the now-constrained builder.
+            $builder = $task->activityLogs()->getQuery();
+            if ($actor instanceof User) {
+                app(UserActivityLogScope::class)->apply($builder, $actor);
+            }
+            $logs = $builder
                 ->with('user:id,name')
                 ->orderBy('created_at', 'desc')
-                ->limit(50);
-            if ($actor instanceof User) {
-                app(UserActivityLogScope::class)->apply($query, $actor);
-            }
-
-            $logs = $query->get();
+                ->limit(50)
+                ->get();
 
             // استخدم ActivityLogResource لمنع تسريب old_values/new_values/user_agent/
             // ip_address/metadata الخام (تطبَّق redaction من isSensitiveKey()).
