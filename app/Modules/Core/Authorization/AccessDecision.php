@@ -15,6 +15,7 @@ use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\ScopedRoleDefinition;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
+use App\Modules\Tasks\Models\Task;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -792,7 +793,7 @@ class AccessDecision
      * permission table is wired). The floor is the belt; the hook is
      * the braces.
      *
-     * Three admits -- ANY ONE is enough:
+     * Two admits -- ANY ONE is enough:
      *
      *   (a) created_by / owner_id / reporter_id / assigned_to / user_id
      *       matches the user. These are the universal "this record is
@@ -806,26 +807,13 @@ class AccessDecision
      *       columns in mind.
      *
      *   (b) The user holds a scoped-role definition whose
-     *       permissions[] contains an OVR confidential capability
-     *       (Capability::OVR_CONFIDENTIAL or the legacy
-     *       OVR_VIEW_CONFIDENTIAL key some backfilled rows still carry
-     *       -- the legacy key is intentionally honored because
-     *       `scoped_role_definitions.permissions` is a JSON column that
-     *       runs the backfill migration on a worker-by-worker schedule
-     *       and the engine must not 500 between worker rolls).
+     *       permissions[] contains Capability::OVR_CONFIDENTIAL, or the
+     *       retired Capability::OVR_VIEW_CONFIDENTIAL alias while legacy
+     *       backfill tests are exercising pre-normalized rows.
      *
-     *   (c) The user holds an organization-scope role whose
-     *       definition is `is_admin_role = true`. This is the
-     *       "platform admin can see anything in their org" carve-out
-     *       for need-to-know incidents; it matches the legacy
-     *       `definitionGrantsCapability` admin shortcut path that the
-     *       sensitive gate sits on top of.
-     *
-     * The check stays narrow: a department-scoped admin role (one whose
-     * scope_type is `department`) does NOT satisfy (c) -- department
-     * admins do not need to see confidential incidents outside their
-     * own department. The org-scope restriction is what keeps the floor
-     * from widening access across the org.
+     * Admin-role status is intentionally NOT an admit here. Need-to-know
+     * records require an explicit confidential grant unless the platform
+     * super_admin bypass has already returned at the top of whyCan().
      */
     public static function sensitiveStructuralFloor(User $user, Model $target): bool
     {
@@ -868,32 +856,11 @@ class AccessDecision
                     continue;
                 }
 
-                // NEW key only: the legacy Capability::OVR_VIEW_CONFIDENTIAL
-                // ("ovr.view_confidential") was retired at the data layer
-                // by 2026_07_07_000010_strip_legacy_ovr_view_confidential.
                 // The floor mirrors the AUTHZ-DECISIONS carve-out that an
                 // admin role alone is not sufficient -- only an explicit
-                // OVR_CONFIDENTIAL row on the role grants.
-                if (in_array(Capability::OVR_CONFIDENTIAL, $permissions, true)) {
-                    return true;
-                }
-            }
-        }
-
-        // (c) org-scope admin role on this target's org
-        if ($targetOrgId !== null) {
-            foreach (static::activeScopedRolesFor($user) as $scopedRole) {
-                if ($scopedRole->scope_type !== ScopedRole::SCOPE_ORGANIZATION) {
-                    continue;
-                }
-                if ((int) $scopedRole->scope_id !== (int) $targetOrgId) {
-                    continue;
-                }
-
-                $definition = $scopedRole->roleDefinition
-                    ?? ScopedRoleDefinition::findByKey($scopedRole->scope_type, $scopedRole->role);
-
-                if ($definition !== null && (bool) $definition->is_admin_role) {
+                // confidential row on the role grants. The legacy key is an
+                // explicit row too, not an admin shortcut.
+                if (static::permissionsContainExplicitGrant($permissions, Capability::OVR_CONFIDENTIAL)) {
                     return true;
                 }
             }
@@ -960,6 +927,12 @@ class AccessDecision
         $targetType = $target->scopeTypeKey();
         $targetId = (int) $target->getKey();
 
+        if ($capability === Capability::TASKS_ASSIGN && $target instanceof Task) {
+            if (($grant = static::matchProjectScopedTaskAssignGrant($user, $target)) !== null) {
+                return $grant;
+            }
+        }
+
         // فحص قدرة الموقع الصاعدة (positional)
         foreach ($chain as ['type' => $scopeType, 'id' => $scopeId]) {
             $matchingRoles = $activeRoles->filter(
@@ -997,6 +970,44 @@ class AccessDecision
                     return $grant;
                 }
             }
+        }
+
+        return null;
+    }
+
+    /**
+     * TASKS_ASSIGN is a project-local delegation grant. Some task sources roll
+     * up through another ScopeAware parent, so check the direct project binding
+     * explicitly without widening to the whole organization or sibling projects.
+     *
+     * @return array{role: string, scope_type: string, scope_id: int, inline: bool}|null
+     */
+    protected static function matchProjectScopedTaskAssignGrant(User $user, Task $task): ?array
+    {
+        if ($task->project_id === null) {
+            return null;
+        }
+
+        $matchingRoles = static::activeScopedRolesFor($user)->filter(
+            fn ($r) => $r->scope_type === ScopedRole::SCOPE_PROJECT
+                && (int) $r->scope_id === (int) $task->project_id
+        );
+
+        foreach ($matchingRoles as $scopedRole) {
+            if (! static::roleGrantsCapability($scopedRole, Capability::TASKS_ASSIGN)) {
+                continue;
+            }
+
+            if (! static::targetWithinReach($user, $task, $scopedRole, static::roleReachForCapability($scopedRole, Capability::TASKS_ASSIGN))) {
+                continue;
+            }
+
+            return [
+                'role' => $scopedRole->role,
+                'scope_type' => $scopedRole->scope_type,
+                'scope_id' => (int) $scopedRole->scope_id,
+                'inline' => false,
+            ];
         }
 
         return null;
@@ -1329,11 +1340,37 @@ class AccessDecision
             return false;
         }
 
+        if (static::requiresExplicitGrant($capability)) {
+            return is_array($definition->permissions)
+                && static::permissionsContainExplicitGrant($definition->permissions, $capability);
+        }
+
         if ($definition->is_admin_role) {
             return true;
         }
 
         return $definition->permissions && in_array($capability, $definition->permissions, true);
+    }
+
+    protected static function requiresExplicitGrant(string $capability): bool
+    {
+        return in_array($capability, [
+            Capability::OVR_CONFIDENTIAL,
+            Capability::OVR_VIEW_CONFIDENTIAL,
+        ], true);
+    }
+
+    /**
+     * @param  array<int, string>  $permissions
+     */
+    protected static function permissionsContainExplicitGrant(array $permissions, string $capability): bool
+    {
+        if ($capability === Capability::OVR_CONFIDENTIAL) {
+            return in_array(Capability::OVR_CONFIDENTIAL, $permissions, true)
+                || in_array(Capability::OVR_VIEW_CONFIDENTIAL, $permissions, true);
+        }
+
+        return in_array($capability, $permissions, true);
     }
 
     /**
@@ -1750,7 +1787,7 @@ class AccessDecision
         // The inner sensitive gate in `adminRoleGrantsTarget` is a
         // second line of defense; this exclusion is the explicit,
         // SHADOW-comparable primary.
-        if ($capability !== Capability::OVR_CONFIDENTIAL
+        if (! static::requiresExplicitGrant($capability)
             && static::adminRoleGrantsTarget($user, $target)) {
             return true;
         }
