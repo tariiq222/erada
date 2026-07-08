@@ -7,6 +7,7 @@ use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Authorization\Contracts\ScopeAware;
 use App\Modules\Core\Authorization\Contracts\SensitivelyScoped;
 use App\Modules\Core\Models\Organization;
+use App\Modules\Core\Models\ScopedRoleDefinition;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\OVR\Enums\ReportStatus;
@@ -304,7 +305,19 @@ class IncidentReport extends Model implements ScopeAware, SensitivelyScoped
         // the reporter/assignee) unlocks confidential rows. is_admin_role alone does
         // NOT — otherwise an org admin would see confidential reports in the list while
         // the per-record policy (mayAccessSensitive) correctly denies them.
-        if (! $this->userMayViewConfidential($user)) {
+        //
+        // IMPORTANT: do NOT delegate to OvrAuthorizationService::mayViewConfidential
+        // here. That method short-circuits with `return true` for non-confidential
+        // reports by checking $report->is_confidential — but in the list-scope
+        // context $this is the unscoped query-builder model and $this->is_confidential
+        // is null/false, so the short-circuit always fires and the SQL filter is
+        // never appended. That made the list leak every confidential row to any
+        // non-OVR-confidential user who could see the org.
+        //
+        // For the list scope we only need the user's capability check; the per-row
+        // reporter/assignee floor is added in SQL and covers the "owner sees own
+        // confidential report" case the per-record gate also handles.
+        if (! $this->userHasOvrConfidentialCapability($user)) {
             $query->where(function ($c) use ($user) {
                 $c->where('is_confidential', false)
                     ->orWhere('reporter_id', $user->id)
@@ -317,16 +330,25 @@ class IncidentReport extends Model implements ScopeAware, SensitivelyScoped
 
     /**
      * Does the user hold an explicit OVR confidential grant via any active
-     * scoped role? Delegates to OvrAuthorizationService::mayViewConfidential so
-     * the LIST confidentiality gate and the per-record gate stay consistent. The
-     * list caller also ORs the reporter/assignee floor in SQL; that floor is
-     * already covered by the delegated method, but the SQL OR is kept as defense
-     * in depth.
+     * scoped role? Used by the list-scope (`scopeVisibleTo`) to decide whether
+     * the AND'd confidentiality filter needs to be appended to the SQL. We
+     * deliberately do NOT delegate to OvrAuthorizationService::mayViewConfidential
+     * here — that method short-circuits on the per-row `is_confidential` flag,
+     * which is wrong for the list scope where the model instance is empty.
      */
-    private function userMayViewConfidential(User $user): bool
+    private function userHasOvrConfidentialCapability(User $user): bool
     {
-        return app(OvrAuthorizationService::class)
-            ->mayViewConfidential($user, $this);
+        return $user->activeScopedRoles()
+            ->with('roleDefinition')
+            ->get()
+            ->contains(function ($scopedRole) {
+                $def = $scopedRole->roleDefinition
+                    ?? ScopedRoleDefinition::findByKey($scopedRole->scope_type, $scopedRole->role);
+
+                return $def
+                    && is_array($def->permissions)
+                    && in_array(Capability::OVR_CONFIDENTIAL, $def->permissions, true);
+            });
     }
 
     public function scopeByStatus($query, ReportStatus $status)
