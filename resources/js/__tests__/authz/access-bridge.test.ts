@@ -103,15 +103,18 @@ describe('access-bridge', () => {
 			expect(permissionToCapability('view_dashboard')).toBe('dashboard.view');
 		});
 
-		it('maps legacy record-decisions (hyphenated) to recommendations.approve', () => {
-			// Direction B (2026-07-06) retired the single `meetings.record_decisions`
-			// capability in favor of nine canonical `recommendations.*` capabilities.
-			// The bridge still recognizes the legacy hyphenated string but resolves
-			// it to the action-item approve gate so role seeds don't break for one
-			// release. Users whose roles need any other `recommendations.*` action
-			// must have that key granted explicitly in their scoped-role definition.
+		it('maps legacy record-decisions (hyphenated) to meeting_resolutions.create (Direction R)', () => {
+			// Direction R (2026-07-07) repointed the legacy `record-decisions` and
+			// `meetings.record_decisions` strings at the new
+			// `meeting_resolutions.create` capability. The Direction B
+			// `recommendations.approve` target is gone: there is no approve /
+			// reject / adopt / deliberate lifecycle on the new MeetingResolutions
+			// model, so the most permissive "you can record a meeting output"
+			// gate is `meeting_resolutions.create`. Per-action gating in the UI
+			// must go through `useCan('meeting_resolutions.<action>')` on
+			// ResolutionCard / ResolutionsSection.
 			expect(permissionToCapability('record-decisions')).toBe(
-				'recommendations.approve',
+				'meeting_resolutions.create',
 			);
 		});
 
@@ -178,15 +181,18 @@ describe('access-bridge', () => {
 			expect(hasPermissionCompat(user, 'view_projects')).toBe(true);
 		});
 
-		it('grants record-decisions through recommendations.approve from user.access', () => {
-			// Direction B canonical contract: a user must have the explicit
-			// `recommendations.*` key in user.access to satisfy any matching
-			// `record-decisions` permission check. The legacy `meetings.record_decisions`
-			// user.access key is no longer auto-pivoted by the bridge; if a role's
-			// backend seed still emits it, the auth controller should populate the
-			// corresponding `recommendations.*` keys in `AuthController::projectAccessMap`.
+		it('grants record-decisions through meeting_resolutions.create from user.access', () => {
+			// Direction R canonical contract: a user must hold the
+			// `meeting_resolutions.create` key in user.access to satisfy a
+			// `record-decisions` route guard. The legacy
+			// `recommendations.approve` key is no longer the bridge target —
+			// Direction R removed the approve / reject / adopt / deliberate
+			// lifecycle and folded everything under the new typed outputs
+			// model. Stale sessions that still hold `recommendations.approve`
+			// in their access map will not pass a `record-decisions` guard
+			// until the role seed is re-cut to the new key.
 			const user = makeUser({
-				access: { recommendations: { approve: true } },
+				access: { meeting_resolutions: { create: true } },
 			});
 			expect(hasPermissionCompat(user, 'record-decisions')).toBe(true);
 		});
