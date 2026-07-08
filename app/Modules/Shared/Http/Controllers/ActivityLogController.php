@@ -65,6 +65,22 @@ class ActivityLogController extends Controller
 
     public function show(ActivityLog $activityLog): JsonResponse
     {
+        $user = request()->user();
+        // H-01: do not leak the existence of activity-log rows in another
+        // organization. A super_admin can see any row; a regular user only
+        // sees rows that pass the UserActivityLogScope (same org, or
+        // fail-closed for null org / null actor). If the row falls outside
+        // that scope we 404 before authorize() — otherwise the policy's
+        // "different org" branch returns 403, which leaks existence.
+        if ($user !== null && ! $user->isSuperAdmin()) {
+            $visible = app(UserActivityLogScope::class)
+                ->apply(ActivityLog::query()->whereKey($activityLog->id), $user)
+                ->exists();
+            if (! $visible) {
+                abort(404);
+            }
+        }
+
         $this->authorize('view', $activityLog);
 
         $activityLog->load(['user:id,name']);

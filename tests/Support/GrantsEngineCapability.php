@@ -170,7 +170,13 @@ trait GrantsEngineCapability
             $out = array_merge($out, $byAction(['manage_members', 'assign_roles']));
         }
         if (! empty($definitionFlags['can_view_confidential'])) {
-            $out[] = Capability::OVR_VIEW_CONFIDENTIAL;
+            // Post Direction B (2026-07-07): the engine now reads the canonical
+            // OVR_CONFIDENTIAL key. The legacy Capability::OVR_VIEW_CONFIDENTIAL
+            // is kept only as a class-load shim for the already-applied backfill
+            // migration (LR-004). Map the test fixture flag to the new key so
+            // the resulting scoped role definition actually satisfies the
+            // engine's confidential gate.
+            $out[] = Capability::OVR_CONFIDENTIAL;
         }
 
         return $out;

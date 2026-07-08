@@ -221,7 +221,6 @@ class ProjectPolicyTopUpTest extends TestCase
         $this->assertTrue($this->policy->create($adminUser));
         $this->assertTrue($this->policy->view($adminUser, $project));
         $this->assertTrue($this->policy->update($adminUser, $project));
-        $this->assertTrue($this->policy->manageMembers($adminUser, $project));
         $this->assertTrue($this->policy->assignProjectRoles($adminUser, $project));
 
         $this->assertFalse($this->policy->view($crossOrg, $project));
@@ -266,13 +265,11 @@ class ProjectPolicyTopUpTest extends TestCase
         $this->assertTrue($this->policy->update($adminSameDepartment, $project));
         $this->assertTrue($this->policy->delete($adminSameDepartment, $project));
         $this->assertTrue($this->policy->restore($adminSameDepartment, $project));
-        $this->assertTrue($this->policy->manageMembers($adminSameDepartment, $project));
         $this->assertTrue($this->policy->assignProjectRoles($adminSameDepartment, $project));
 
         // admin is organization-wide, so a different department is no barrier.
         $this->assertTrue($this->policy->view($adminInOtherDepartment, $project));
         $this->assertTrue($this->policy->update($adminInOtherDepartment, $project));
-        $this->assertTrue($this->policy->manageMembers($adminInOtherDepartment, $project));
         $this->assertTrue($this->policy->assignProjectRoles($adminInOtherDepartment, $project));
         $this->assertTrue($this->policy->view($member, $project));
         $this->assertFalse($this->policy->update($member, $project));

@@ -3,40 +3,52 @@
 namespace Tests\Feature\Meetings;
 
 use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
-use App\Modules\Projects\Models\Project;
+use App\Modules\Meetings\Models\Meeting;
+use App\Modules\Meetings\Models\MeetingResolution;
 use Database\Seeders\Meetings\MeetingsPermissionsSeeder;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
 class PermissionMigrationTest extends TestCase
 {
+    use GrantsEngineCapability;
     use RefreshDatabase;
 
-    public function test_user_with_old_view_strategy_cannot_create_decision(): void
+    public function test_user_with_old_view_strategy_cannot_create_meeting_resolution_decision(): void
     {
         $this->seed(RolesAndPermissionsSeeder::class);
         $this->seed(MeetingsPermissionsSeeder::class);
-        $department = Department::factory()->create();
-        $user = User::factory()->create(['department_id' => $department->id, 'is_active' => true]);
+        $organization = Organization::factory()->create();
+        $department = Department::factory()->create(['organization_id' => $organization->id]);
+        $user = User::factory()->create([
+            'department_id' => $department->id,
+            'organization_id' => $organization->id,
+            'is_active' => true,
+        ]);
         $user->givePermissionTo('view_strategy'); // legacy permission only.
-        $project = Project::factory()->create(['department_id' => $department->id]);
+        $meeting = Meeting::factory()->create([
+            'department_id' => $department->id,
+            'organization_id' => $organization->id,
+            'organizer_id' => $user->id,
+        ]);
 
-        $response = $this->actingAs($user, 'sanctum')->postJson('/api/decisions', [
+        $response = $this->actingAs($user, 'sanctum')->postJson("/api/meetings/{$meeting->id}/resolutions", [
+            'meeting_id' => $meeting->id,
+            'kind' => MeetingResolution::KIND_DECISION,
             'title' => 'اختبار',
-            'decidable_type' => 'project',
-            'decidable_id' => $project->id,
-            'type' => 'approval',
-            'decision_date' => now()->toDateString(),
+            'owner_id' => $user->id,
         ]);
 
         $response->assertStatus(403);
     }
 
-    public function test_user_with_new_record_decisions_can_create_decision(): void
+    public function test_user_with_meeting_resolution_create_grant_can_create_decision_output(): void
     {
         $this->seed(RolesAndPermissionsSeeder::class);
         $this->seed(MeetingsPermissionsSeeder::class);
@@ -49,24 +61,27 @@ class PermissionMigrationTest extends TestCase
             'organization_id' => $organization->id,
             'is_active' => true,
         ]);
-        // Post-engine-cutover: flat Spatie permissions are NOT bridged by AccessDecision::can().
-        // Grant via the 'admin' Spatie role — the engine maps 'admin' to the org-scoped
-        // ScopedRoleDefinition with is_admin_role=true, which covers MEETINGS_CREATE.
-        $user->assignRole('admin');
+        $this->grantEngineCapability(
+            $user,
+            Capability::MEETING_RESOLUTIONS_CREATE,
+            scopeId: $organization->id,
+            roleKey: 'meeting_resolution_creator',
+        );
         AccessDecision::flushUserCache($user->id);
-        $project = Project::factory()->create([
+        $meeting = Meeting::factory()->create([
             'department_id' => $department->id,
             'organization_id' => $organization->id,
+            'organizer_id' => $user->id,
         ]);
 
-        $response = $this->actingAs($user, 'sanctum')->postJson('/api/decisions', [
+        $response = $this->actingAs($user, 'sanctum')->postJson("/api/meetings/{$meeting->id}/resolutions", [
+            'meeting_id' => $meeting->id,
+            'kind' => MeetingResolution::KIND_DECISION,
             'title' => 'اختبار',
-            'decidable_type' => 'project',
-            'decidable_id' => $project->id,
-            'type' => 'approval',
-            'decision_date' => now()->toDateString(),
+            'owner_id' => $user->id,
         ]);
 
-        $response->assertStatus(201);
+        $response->assertStatus(201)
+            ->assertJsonPath('resolution.kind', MeetingResolution::KIND_DECISION);
     }
 }

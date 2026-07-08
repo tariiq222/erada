@@ -365,7 +365,7 @@ class IncidentReportController extends Controller
 
         $wasAssigned = isset($updates['assigned_to']) && $updates['assigned_to'] !== $report->assigned_to;
 
-        DB::transaction(function () use ($report, $updates, $oldStatus, $newStatus, $actor, $wasAssigned, $request) {
+        DB::transaction(function () use ($report, $updates, $oldStatus, $newStatus, $actor, $request) {
             // Race defense (P0 #5): re-load under SELECT FOR UPDATE so the
             // transition decision + recordStatusChange observe the source-of-
             // truth status, not the route-bound snapshot.
@@ -388,21 +388,20 @@ class IncidentReportController extends Controller
             $locked->recordStatusChange($oldStatus, $newStatus, $actor->id, $request->input('reason'));
 
             // Sync the in-memory $report with the locked row so the response and
-            // the notifications inside this transaction read the just-updated state.
+            // the post-commit side effects read the just-updated state.
             $report->setRawAttributes($locked->getAttributes(), true);
-
-            // Notify the reporter of the status change (inside the lock so the
-            // notification carries the new status, not a torn read).
-            if ($report->reporter && $report->reporter_id !== $actor->id) {
-                $report->reporter->notify(new StatusChangedNotification($report, $oldStatus, $newStatus));
-            }
-
-            // Notify the newly assigned handler and create a follow-up task.
-            if ($wasAssigned && $newAssignee = User::find($report->assigned_to)) {
-                $newAssignee->notify(new ReportAssignedNotification($report));
-                $this->createHandlerTask($report, $newAssignee, $actor->id);
-            }
         });
+
+        // Notify the reporter of the status change.
+        if ($report->reporter && $report->reporter_id !== $actor->id) {
+            $report->reporter->notify(new StatusChangedNotification($report, $oldStatus, $newStatus));
+        }
+
+        // Notify the newly assigned handler and create a follow-up task.
+        if ($wasAssigned && $newAssignee = User::find($report->assigned_to)) {
+            $newAssignee->notify(new ReportAssignedNotification($report));
+            $this->createHandlerTask($report, $newAssignee, $actor->id);
+        }
 
         return response()->json([
             'message' => __('ovr.api.status_changed_to', ['status' => $newStatus->label()]),
@@ -424,9 +423,18 @@ class IncidentReportController extends Controller
     protected function createHandlerTask(IncidentReport $report, User $assignee, int $createdBy): void
     {
         try {
+            // Post Direction R: tasks.source_id is unsignedBigInteger (the
+            // schema predates UUID sources). IncidentReport.id is a UUID and
+            // cannot fit a bigint, so we do NOT stamp source_id on OVR
+            // handler tasks — only source_type + source_sensitivity. The
+            // title carries the report number and is unique per report, so
+            // we dedup by title + report_number in the title match below
+            // (the legacy "where source_id" path would either 22P02 on
+            // insert or silently miss duplicates on the exists check).
+            $taskTitle = "معالجة حادثة {$report->report_number}";
             $exists = Task::query()
                 ->where('source_type', IncidentReport::class)
-                ->where('source_id', $report->id)
+                ->where('title', $taskTitle)
                 ->whereNotIn('status', [TaskStatus::COMPLETED, TaskStatus::CANCELLED])
                 ->exists();
 
@@ -436,7 +444,7 @@ class IncidentReportController extends Controller
 
             Task::create([
                 'type' => TaskType::DEPARTMENT,
-                'title' => "معالجة حادثة {$report->report_number}",
+                'title' => $taskTitle,
                 'description' => Str::limit($report->incident_description, 500),
                 'status' => TaskStatus::TODO,
                 'priority' => $report->severity_level?->value === 'critical' ? TaskPriority::CRITICAL : TaskPriority::HIGH,
@@ -447,7 +455,10 @@ class IncidentReportController extends Controller
                 'owner_id' => $assignee->id,
                 'department_id' => $report->reporter_department_id,
                 'source_type' => IncidentReport::class,
-                'source_id' => $report->id,
+                // source_id intentionally omitted: OVR IncidentReport.id is
+                // a UUID and the column is bigint. Source-tracking for OVR
+                // handler tasks flows through source_type + title (which
+                // embeds the report_number) — see the dedup query above.
                 'source_sensitivity' => $report->is_confidential ? 'confidential' : 'normal',
             ]);
         } catch (\Throwable $e) {
@@ -862,15 +873,20 @@ class IncidentReportController extends Controller
 
         // عزل المؤسسة عبر الفلتر الموحّد، ثم تنسيق كل سجل عبر ActivityLogResource
         // لمنع تسريب old_values/new_values/user_agent/ip_address/metadata الخام.
-        $activityQuery = $report->activityLogs()
-            ->with('user:id,name')
-            ->orderByDesc('created_at')
-            ->limit(100);
+        // UserActivityLogScope::apply() takes an Eloquent\Builder (not a
+        // MorphMany relation) — pull the relation through to its underlying
+        // query first so the org-isolation filter can be appended. Re-apply
+        // the eager-load + order + limit on the constrained builder.
+        $activityBuilder = $report->activityLogs()->getQuery();
         $actor = $request->user();
         if ($actor instanceof User) {
-            app(UserActivityLogScope::class)->apply($activityQuery, $actor);
+            app(UserActivityLogScope::class)->apply($activityBuilder, $actor);
         }
-        $activity = $activityQuery->get();
+        $activity = $activityBuilder
+            ->with('user:id,name')
+            ->orderByDesc('created_at')
+            ->limit(100)
+            ->get();
 
         $activityFormatted = $activity->map(function ($a) {
             $payload = (new ActivityLogResource($a))->resolve(request());

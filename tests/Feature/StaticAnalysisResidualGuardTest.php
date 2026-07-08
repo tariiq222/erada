@@ -232,7 +232,7 @@ class StaticAnalysisResidualGuardTest extends TestCase
 
         $response->assertOk()
             ->assertJsonPath('data.0.report_number', $report->report_number)
-            ->assertJsonPath('data.0.incident_description', 'Summary item may describe the incident without patient identifiers.')
+            ->assertJsonMissingPath('data.0.incident_description')
             ->assertJsonMissingPath('data.0.patient_name')
             ->assertJsonMissingPath('data.0.patient_file_number')
             ->assertJsonMissingPath('data.0.patient_gender')

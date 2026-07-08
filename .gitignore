@@ -19,6 +19,7 @@
 /storage/framework/views/
 /storage/framework/testing/
 /storage/framework/logs/
+/storage/fonts/
 /storage/logs/
 /storage/app/private/comments/
 /bootstrap/cache/*.php

@@ -196,7 +196,7 @@ class ProjectCrudServiceTest extends TestCase
             ],
         ], $this->user);
 
-        $this->assertDatabaseMissing('project_risks', [
+        $this->assertSoftDeleted('project_risks', [
             'project_id' => $project->id,
             'risk' => 'Risk 1',
         ]);

@@ -498,6 +498,9 @@ const mockProjects = [
     progress: 45,
     department: { id: 1, name: 'تقنية المعلومات' },
     manager: { id: 1, name: 'أحمد محمد' },
+    // Per-row ability map; ProjectsTable's row-level delete gate is
+    // `canDeleteProject && project.abilities?.delete`.
+    abilities: { delete: true, edit: true, view: true },
   },
   {
     id: 2,
@@ -508,6 +511,7 @@ const mockProjects = [
     progress: 100,
     department: { id: 2, name: 'الموارد البشرية' },
     manager: { id: 2, name: 'سارة أحمد' },
+    abilities: { delete: true, edit: true, view: true },
   },
   {
     id: 3,
@@ -518,6 +522,7 @@ const mockProjects = [
     progress: 30,
     department: null,
     manager: null,
+    abilities: { delete: true, edit: true, view: true },
   },
   {
     id: 4,
@@ -528,6 +533,7 @@ const mockProjects = [
     progress: 0,
     department: { id: 3, name: 'التدريب' },
     manager: { id: 3, name: 'فاطمة علي' },
+    abilities: { delete: true, edit: true, view: true },
   },
 ];
 
@@ -606,7 +612,11 @@ describe('Projects Table', () => {
     projects: mockProjects,
     loading: false,
     pagination: { currentPage: 1, lastPage: 3, total: 30 },
-    isSuperAdmin: true,
+    // Phase 9.3 freeze cleanup (2026-07-06): the row-level delete gate is
+    // `canDeleteProject` (a per-record capability check), not the legacy
+    // super_admin shortcut. The page-level ProjectsList computes it from
+    // `useCan('projects.delete')` + per-row `project.abilities?.delete`.
+    canDeleteProject: true,
     onPageChange: vi.fn(),
     onDelete: vi.fn(),
   };
@@ -698,15 +708,15 @@ describe('Projects Table', () => {
     });
   });
 
-  it('renders delete buttons when super admin', () => {
-    render(<ProjectsTable {...defaultProps} isSuperAdmin={true} />);
+  it('renders delete buttons when canDeleteProject is true', () => {
+    render(<ProjectsTable {...defaultProps} canDeleteProject={true} />);
 
     // RowAction exposes aria-label="حذف" (Arabic 'common.delete')
     expect(screen.getAllByRole('button', { name: /حذف/i }).length).toBeGreaterThan(0);
   });
 
-  it('hides delete button when not super admin', () => {
-    render(<ProjectsTable {...defaultProps} isSuperAdmin={false} />);
+  it('hides delete button when canDeleteProject is false', () => {
+    render(<ProjectsTable {...defaultProps} canDeleteProject={false} />);
 
     expect(screen.queryAllByRole('button', { name: /حذف/i }).length).toBe(0);
   });

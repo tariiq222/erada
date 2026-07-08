@@ -162,7 +162,7 @@ class TaskSourceSensitivityLeakTest extends TestCase
         ]);
         $this->grantEngineCapability(
             $this->ovrAuditor,
-            ['tasks.view', Capability::OVR_VIEW_CONFIDENTIAL],
+            ['tasks.view', Capability::OVR_CONFIDENTIAL],
             'organization',
             $this->org->id,
             roleKey: 'ovr_auditor_confidential'

@@ -122,7 +122,7 @@ class ProjectRiskCoexistenceTest extends TestCase
         $delete->assertStatus(200)
             ->assertJsonFragment(['message' => 'تم حذف الخطر بنجاح']);
 
-        $this->assertDatabaseMissing('project_risks', ['id' => $riskId]);
+        $this->assertSoftDeleted('project_risks', ['id' => $riskId]);
     }
 
     /**

@@ -132,8 +132,9 @@ class ProjectAbilitiesTest extends TestCase
             ->assertJsonPath('abilities.view', true)
             ->assertJsonPath('abilities.edit', true)
             ->assertJsonPath('abilities.delete', true)
-            ->assertJsonPath('abilities.manage_members', true)
-            ->assertJsonPath('abilities.change_status', true)
-            ->assertJsonPath('abilities.close', true);
+            ->assertJsonPath('abilities.assign_roles', true)
+            ->assertJsonMissingPath('abilities.manage_members')
+            ->assertJsonMissingPath('abilities.change_status')
+            ->assertJsonMissingPath('abilities.close');
     }
 }

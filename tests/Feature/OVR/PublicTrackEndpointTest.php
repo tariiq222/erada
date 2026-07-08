@@ -11,6 +11,7 @@ use App\Modules\OVR\Models\IncidentReport;
 use App\Modules\OVR\Models\IncidentType;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class PublicTrackEndpointTest extends TestCase
@@ -70,6 +71,12 @@ class PublicTrackEndpointTest extends TestCase
             'severity_level' => SeverityLevel::High,
             'is_confidential' => false,
             'status' => ReportStatus::UnderReview,
+            // Direction B (2026-07-07): the public track route keys on a
+            // per-report random tracking_token, not on the enumerable
+            // report_number. The migration backfills existing rows; new rows
+            // created via the API path also generate one, but in tests we
+            // create rows directly, so the test fixture must supply it.
+            'tracking_token' => Str::random(64),
         ], $overrides));
     }
 
@@ -88,7 +95,9 @@ class PublicTrackEndpointTest extends TestCase
             'status' => ReportStatus::UnderReview,
         ]);
 
-        $response = $this->getJson("/api/ovr/track/{$report->report_number}");
+        // Direction B: the public track route keys on tracking_token
+        // (per-report 64-char random), NOT on the enumerable report_number.
+        $response = $this->getJson("/api/ovr/track/{$report->tracking_token}");
 
         $response->assertOk()
             ->assertJsonPath('data.report_number', $report->report_number)
@@ -107,7 +116,7 @@ class PublicTrackEndpointTest extends TestCase
             'assigned_to' => $this->user->id,
         ]);
 
-        $response = $this->getJson("/api/ovr/track/{$report->report_number}");
+        $response = $this->getJson("/api/ovr/track/{$report->tracking_token}");
 
         $response->assertOk()
             ->assertJsonMissingPath('data.patient_name')

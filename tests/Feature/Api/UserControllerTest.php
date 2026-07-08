@@ -294,7 +294,7 @@ class UserControllerTest extends TestCase
                 'password' => 'password123',
                 'password_confirmation' => 'password123',
                 'department_id' => $this->department->id,
-                'roles' => ['employee'],
+                'roles' => ['viewer'],
             ]);
 
         $response->assertStatus(201);

@@ -4,6 +4,7 @@ namespace Tests\Feature\Authorization;
 
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Contracts\CapabilityProvider;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
@@ -286,10 +287,10 @@ class CutoverValidationTest extends TestCase
     }
 
     /**
-     * /api/user يصدّر قدرات المحرّك على مستوى المؤسسة ضمن capabilities[]
-     * (vocabulary موحّد module.action). بعد قطع Phase 9.3 تمّ إزالة الـ
-     * permissions[] الـ flat Spatie القديم — الـ canonical capabilities هي
-     * المصدر الوحيد الآن.
+     * /api/user يصدّر قدرات المحرّك على مستوى المؤسسة ضمن capabilities[].
+     * بعد قطع Phase 9.3 تمّ إزالة permissions[] القديم؛ capabilities[] الآن
+     * يحتوي Capability::all() canonical keys مع wire flags صادرة من providers
+     * للتوافق مع الواجهة أثناء الانتقال.
      */
     public function test_me_endpoint_exposes_engine_capabilities(): void
     {
@@ -315,19 +316,34 @@ class CutoverValidationTest extends TestCase
             'permissions[] الـ flat القديم يجب أن يكون محذوفاً من الـ payload',
         );
 
-        // كل العناصر في capabilities[] بجب أن تكون بصيغة module.action.
-        foreach ($capabilities as $cap) {
-            $this->assertMatchesRegularExpression(
-                '/^[a-z_]+\.[a-z_]+$/',
-                $cap,
-                "capability '{$cap}' ليس بصيغة module.action موحّدة",
-            );
-        }
+        $this->assertEveryCapabilityIsKnownAuthMeWireKey($capabilities, $user);
     }
 
     // ====================================================
     // Helpers
     // ====================================================
+
+    /**
+     * @param  array<int, string>  $capabilities
+     */
+    private function assertEveryCapabilityIsKnownAuthMeWireKey(array $capabilities, User $user): void
+    {
+        $known = array_fill_keys(Capability::all(), true);
+
+        foreach (app()->tagged('engined_capability_providers') as $provider) {
+            if (! $provider instanceof CapabilityProvider) {
+                continue;
+            }
+
+            foreach (array_keys($provider->userCapabilities($user)) as $wireKey) {
+                $known[$wireKey] = true;
+            }
+        }
+
+        foreach ($capabilities as $cap) {
+            $this->assertArrayHasKey($cap, $known, "capability '{$cap}' ليس مفتاح auth/me معروف");
+        }
+    }
 
     /**
      * Expand the retired granular boolean flags into permissions[] entries,

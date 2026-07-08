@@ -111,7 +111,7 @@ class MeetingController extends Controller
             // Previously organization_id was defaulted from auth()->user()
             // and could end up as null, creating a tenant-less meeting.
             abort_if(
-                auth()->user()->organization_id === null,
+                ! auth()->user()->isSuperAdmin() && auth()->user()->organization_id === null,
                 403,
                 self::NULL_ORG_MESSAGE
             );

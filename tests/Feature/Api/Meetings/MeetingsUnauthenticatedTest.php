@@ -35,18 +35,10 @@ class MeetingsUnauthenticatedTest extends TestCase
             ['POST', '/api/notifications/1/read'],
             ['POST', '/api/notifications/read-all'],
 
-            // Decisions (phase F: routes moved from /api/strategy/decisions to /api/decisions)
-            ['GET', '/api/decisions'],
-            ['POST', '/api/decisions'],
-            ['GET', '/api/decisions/1'],
-            ['PUT', '/api/decisions/1'],
-            ['PATCH', '/api/decisions/1'],
-            ['DELETE', '/api/decisions/1'],
-            ['POST', '/api/decisions/1/approve'],
-            ['POST', '/api/decisions/1/reject'],
-            ['POST', '/api/decisions/1/defer'],
-
-            // Recommendations
+            // Recommendations (Direction B, 2026-07-06: legacy /api/decisions/*
+            // routes were retired and folded into /api/recommendations/*; the
+            // legacy surface is gone and these tests must enumerate the
+            // canonical route family only — do not re-add /api/decisions/...).
             ['GET', '/api/recommendations'],
             ['GET', '/api/recommendations/list'],
             ['POST', '/api/recommendations'],
@@ -58,14 +50,17 @@ class MeetingsUnauthenticatedTest extends TestCase
             ['POST', '/api/recommendations/1/reject'],
             ['POST', '/api/recommendations/1/defer'],
             ['POST', '/api/recommendations/1/complete'],
+            ['POST', '/api/recommendations/1/approve'],
 
-            // Agenda items (top-level + nested under meetings).
-            // NOTE: there is no GET /api/agenda-items/{id} — agenda items are listed
-            // via the nested /api/meetings/{meeting}/agenda-items route below.
-            ['PUT', '/api/agenda-items/1'],
-            ['DELETE', '/api/agenda-items/1'],
-            ['POST', '/api/agenda-items/1/approve'],
-            ['POST', '/api/agenda-items/1/reject'],
+            // Agenda items — P0 IDOR fix: the standalone /api/agenda-items/{id}
+            // route family was retired and replaced with the nested
+            // /api/meetings/{meeting}/agenda-items/{agendaItem}/* family. The
+            // auth guard still fires before route model binding, so the
+            // unauthenticated sweep must enumerate the nested paths.
+            ['PUT', '/api/meetings/1/agenda-items/1'],
+            ['DELETE', '/api/meetings/1/agenda-items/1'],
+            ['POST', '/api/meetings/1/agenda-items/1/approve'],
+            ['POST', '/api/meetings/1/agenda-items/1/reject'],
 
             // Meeting settings
             ['GET', '/api/meeting-settings'],

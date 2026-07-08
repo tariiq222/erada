@@ -115,7 +115,7 @@ class CoreCapabilityEnforcementTest extends TestCase
             ->assertStatus(403);
     }
 
-    // ========== audit.view — REACHABLE on /api/activity-logs ==========
+    // ========== audit.view — REACHABLE on /api/activity-logs index ==========
 
     public function test_audit_view_denies_viewer_without_capability(): void
     {
@@ -137,7 +137,7 @@ class CoreCapabilityEnforcementTest extends TestCase
             ->assertJsonStructure(['data', 'meta' => ['current_page', 'last_page', 'per_page', 'total']]);
     }
 
-    public function test_audit_view_grants_access_to_single_activity_log_show(): void
+    public function test_activity_log_show_allows_same_org_user_with_audit_view_capability(): void
     {
         $admin = $this->makeUser('admin');
         $this->grantEngineCapability($admin, Capability::AUDIT_VIEW);
@@ -148,6 +148,7 @@ class CoreCapabilityEnforcementTest extends TestCase
             'description' => 'wave1 fixture',
             'loggable_type' => User::class,
             'loggable_id' => $admin->id,
+            'organization_id' => $admin->organization_id,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -157,7 +158,7 @@ class CoreCapabilityEnforcementTest extends TestCase
             ->assertStatus(200);
     }
 
-    public function test_audit_view_blocks_activity_log_show_without_capability(): void
+    public function test_activity_log_show_allows_same_org_user_without_audit_view_capability(): void
     {
         $viewer = $this->makeUser('viewer');
 
@@ -167,13 +168,14 @@ class CoreCapabilityEnforcementTest extends TestCase
             'description' => 'wave1 fixture',
             'loggable_type' => User::class,
             'loggable_id' => $viewer->id,
+            'organization_id' => $viewer->organization_id,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
         $this->actingAs($viewer, 'sanctum')
             ->getJson("/api/activity-logs/{$log}")
-            ->assertStatus(403);
+            ->assertStatus(200);
     }
 
     // ========== audit.export — REACHABLE on /api/activity-logs/export ==========

@@ -77,7 +77,12 @@ class OVRNewFeaturesTest extends TestCase
     {
         $report = $this->makeReport(['status' => ReportStatus::UnderReview]);
 
-        $response = $this->getJson("/api/ovr/track/{$report->report_number}");
+        // Direction B (2026-07-07): the public track route keys on the
+        // per-report random tracking_token, NOT on the enumerable
+        // report_number. The model boot auto-stamps a token on every
+        // IncidentReport::create(), so any report produced by makeReport
+        // carries one.
+        $response = $this->getJson("/api/ovr/track/{$report->tracking_token}");
 
         $response->assertStatus(200)
             ->assertJsonPath('data.report_number', $report->report_number)
@@ -88,7 +93,7 @@ class OVRNewFeaturesTest extends TestCase
     {
         $report = $this->makeReport(['status' => ReportStatus::UnderReview]);
 
-        $content = $this->getJson("/api/ovr/track/{$report->report_number}")->getContent();
+        $content = $this->getJson("/api/ovr/track/{$report->tracking_token}")->getContent();
 
         $this->assertStringNotContainsString('Secret Patient', $content);
         $this->assertStringNotContainsString('PF-SECRET', $content);
@@ -99,7 +104,7 @@ class OVRNewFeaturesTest extends TestCase
     {
         $report = $this->makeReport(['status' => ReportStatus::Draft]);
 
-        $this->getJson("/api/ovr/track/{$report->report_number}")
+        $this->getJson("/api/ovr/track/{$report->tracking_token}")
             ->assertStatus(404);
     }
 

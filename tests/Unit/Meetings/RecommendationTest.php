@@ -9,8 +9,13 @@ class RecommendationTest extends TestCase
 {
     public function test_status_values_lists_all_supported(): void
     {
+        // Direction B (merged on main @ 3435e05) extended Recommendation with
+        // ruling-side statuses (`pending` -> approved/rejected/deferred) in
+        // addition to the action-item side. The model exposes both shapes
+        // (one Recommendation can be either a `ruling` or an `action_item`),
+        // so the canonical statusValues() list is the union of both lifecycles.
         $this->assertSame(
-            ['proposed', 'accepted', 'rejected', 'deferred', 'completed'],
+            ['proposed', 'accepted', 'pending', 'approved', 'rejected', 'deferred', 'completed'],
             Recommendation::statusValues()
         );
     }
@@ -25,7 +30,13 @@ class RecommendationTest extends TestCase
 
     public function test_can_transition_from_proposed(): void
     {
-        $r = new Recommendation(['status' => Recommendation::STATUS_PROPOSED]);
+        // Action-item lifecycle: proposed -> {accepted, rejected, deferred}.
+        // The model branches on `kind` (ruling vs action_item), so the test
+        // must set the kind explicitly to exercise the action-item branch.
+        $r = new Recommendation([
+            'kind' => Recommendation::KIND_ACTION_ITEM,
+            'status' => Recommendation::STATUS_PROPOSED,
+        ]);
         $this->assertTrue($r->canTransitionTo(Recommendation::STATUS_ACCEPTED));
         $this->assertTrue($r->canTransitionTo(Recommendation::STATUS_REJECTED));
         $this->assertTrue($r->canTransitionTo(Recommendation::STATUS_DEFERRED));
@@ -34,7 +45,10 @@ class RecommendationTest extends TestCase
 
     public function test_can_transition_from_accepted(): void
     {
-        $r = new Recommendation(['status' => Recommendation::STATUS_ACCEPTED]);
+        $r = new Recommendation([
+            'kind' => Recommendation::KIND_ACTION_ITEM,
+            'status' => Recommendation::STATUS_ACCEPTED,
+        ]);
         $this->assertTrue($r->canTransitionTo(Recommendation::STATUS_COMPLETED));
         $this->assertTrue($r->canTransitionTo(Recommendation::STATUS_DEFERRED));
         $this->assertFalse($r->canTransitionTo(Recommendation::STATUS_REJECTED));

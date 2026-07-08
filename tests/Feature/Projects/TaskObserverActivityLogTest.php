@@ -32,7 +32,10 @@ class TaskObserverActivityLogTest extends TestCase
     {
         $this->actingAs($this->user);
 
-        $project = Project::factory()->create(['progress' => 0]);
+        $project = Project::factory()->create([
+            'status' => 'in_progress',
+            'progress' => 0,
+        ]);
         $task = Task::factory()->create([
             'project_id' => $project->id,
             'progress' => 50,
@@ -59,7 +62,10 @@ class TaskObserverActivityLogTest extends TestCase
     {
         $this->actingAs($this->user);
 
-        $project = Project::factory()->create(['progress' => 0]);
+        $project = Project::factory()->create([
+            'status' => 'in_progress',
+            'progress' => 0,
+        ]);
         $task = Task::factory()->create([
             'project_id' => $project->id,
             'progress' => 50,
@@ -96,7 +102,10 @@ class TaskObserverActivityLogTest extends TestCase
     {
         $this->actingAs($this->user);
 
-        $project = Project::factory()->create(['progress' => 0]);
+        $project = Project::factory()->create([
+            'status' => 'in_progress',
+            'progress' => 0,
+        ]);
         $task = Task::factory()->create([
             'project_id' => $project->id,
             'progress' => 60,

@@ -229,30 +229,33 @@ class UserSecurityAuthzTest extends TestCase
         $targetA = $this->makeUser($this->orgA);
         $targetB = $this->makeUser($this->orgB);
 
-        // Seed an audit log entry targeting each user
-        DB::table('activity_logs')->insert([
-            [
-                'user_id' => $adminA->id, 'action' => 'role_assigned',
-                'loggable_type' => 'role', 'loggable_id' => 1,
-                'target_user_id' => $targetA->id, 'scope_type' => 'organization',
-                'scope_id' => $this->orgA->id,
-                'created_at' => now(), 'updated_at' => now(),
-            ],
-            [
-                'user_id' => $adminA->id, 'action' => 'role_assigned',
-                'loggable_type' => 'role', 'loggable_id' => 2,
-                'target_user_id' => $targetB->id, 'scope_type' => 'organization',
-                'scope_id' => $this->orgB->id,
-                'created_at' => now(), 'updated_at' => now(),
-            ],
+        // Seed an audit log entry targeting each user. The API now returns the
+        // redacted ActivityLogResource shape, so target_user_id is not exposed;
+        // assert scoping through visible row ids instead.
+        $logA = DB::table('activity_logs')->insertGetId([
+            'user_id' => $adminA->id, 'action' => 'role_assigned',
+            'loggable_type' => 'role', 'loggable_id' => 1,
+            'target_user_id' => $targetA->id, 'scope_type' => 'organization',
+            'scope_id' => $this->orgA->id,
+            'organization_id' => $this->orgA->id,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $logB = DB::table('activity_logs')->insertGetId([
+            'user_id' => $adminA->id, 'action' => 'role_assigned',
+            'loggable_type' => 'role', 'loggable_id' => 2,
+            'target_user_id' => $targetB->id, 'scope_type' => 'organization',
+            'scope_id' => $this->orgB->id,
+            'organization_id' => $this->orgB->id,
+            'created_at' => now(), 'updated_at' => now(),
         ]);
 
         $response = $this->actingAs($adminA, 'sanctum')
             ->getJson('/api/scoped-roles/audit-logs')
             ->assertStatus(200);
 
-        $ids = collect($response->json('data'))->pluck('target_user_id')->all();
-        $this->assertContains($targetA->id, $ids);
-        $this->assertNotContains($targetB->id, $ids, 'orgA admin must not see orgB audit entries');
+        $ids = collect($response->json('data'))->pluck('id')->all();
+        $this->assertContains($logA, $ids);
+        $this->assertNotContains($logB, $ids, 'orgA admin must not see orgB audit entries');
+        $response->assertJsonMissingPath('data.0.target_user_id');
     }
 }

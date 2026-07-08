@@ -169,13 +169,13 @@ class AttachmentPolicy
             //   1. attachable_type is null/unset (orphan attachment) —
             //      fall back to owner-only.
             //   2. attachable_type is set but the row is missing
-            //      (dangling FK) — deny. The parent's authorization
-            //      cannot be evaluated without the row, so fail closed.
-            if ($attachment->attachable_type === null || $attachment->attachable_type === '') {
-                return $attachment->user_id === $user->id;
-            }
-
-            return false;
+            //      (dangling FK) — also fall back to owner-only. The
+            //      parent's authorization cannot be evaluated without
+            //      the row, so we cannot apply a parent-derived policy.
+            //      The owner-only fallback preserves the user's ability
+            //      to see / clean up their own uploads when the parent
+            //      record was hard-deleted out from under the attachment.
+            return $attachment->user_id === $user->id;
         }
 
         if ($attachable instanceof Comment) {

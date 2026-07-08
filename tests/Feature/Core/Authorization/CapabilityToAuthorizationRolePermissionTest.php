@@ -149,6 +149,7 @@ class CapabilityToAuthorizationRolePermissionTest extends TestCase
             'departments.edit' => 'App\\Modules\\HR\\Models\\Department',
             'users.view' => 'App\\Modules\\Core\\Models\\User',
             'meetings.create' => 'App\\Modules\\Meetings\\Models\\Meeting',
+            'meeting_resolutions.view' => 'App\\Modules\\Meetings\\Models\\MeetingResolution',
             'surveys.view' => 'App\\Modules\\Surveys\\Models\\Survey',
             'ovr.create' => 'App\\Modules\\OVR\\Models\\IncidentReport',
             'risks.create' => 'App\\Modules\\RiskManagement\\Models\\Risk',
@@ -156,6 +157,7 @@ class CapabilityToAuthorizationRolePermissionTest extends TestCase
             'recommendations.create' => 'App\\Modules\\Meetings\\Models\\Recommendation',
             'settings.edit' => 'App\\Modules\\Core\\Models\\SystemSettings',
             'audit.view' => 'App\\Modules\\Shared\\Models\\ActivityLog',
+            'core.cluster_tree.view' => 'App\\Modules\\Core\\Models\\Organization',
         ];
 
         foreach ($cases as $capability => $expectedResource) {

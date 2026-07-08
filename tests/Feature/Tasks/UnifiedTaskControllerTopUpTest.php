@@ -84,6 +84,7 @@ class UnifiedTaskControllerTopUpTest extends TestCase
             'description' => 'Task created for controller top-up',
             'old_values' => [],
             'new_values' => ['title' => $task->title],
+            'organization_id' => $this->department->organization_id,
         ]);
 
         $this->actingAs($this->admin, 'sanctum')
@@ -101,8 +102,10 @@ class UnifiedTaskControllerTopUpTest extends TestCase
         $this->actingAs($this->admin, 'sanctum')
             ->getJson("/api/unified-tasks/{$task->id}/activity-log")
             ->assertOk()
-            ->assertJsonStructure(['*' => ['id', 'action', 'description', 'user']])
-            ->assertJsonPath('0.action', 'created');
+            // ActivityLogResource collection is wrapped in {data: [...]} for
+            // envelope consistency with the rest of the API (Direction B).
+            ->assertJsonStructure(['data' => ['*' => ['id', 'action', 'description', 'user']]])
+            ->assertJsonPath('data.0.action', 'created');
 
         $this->actingAs($this->admin, 'sanctum')
             ->patchJson("/api/unified-tasks/{$task->id}/assign", ['assigned_to' => $assignee->id])

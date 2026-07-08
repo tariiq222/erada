@@ -9,6 +9,7 @@ use App\Modules\Core\Models\SystemSettings;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Meetings\Models\Meeting;
+use App\Modules\Meetings\Models\MeetingResolution;
 use App\Modules\Meetings\Models\Recommendation;
 use App\Modules\OVR\Models\IncidentReport;
 use App\Modules\Performance\Models\Kpi;
@@ -65,6 +66,7 @@ final class CapabilityToAuthorizationRolePermission
         'tasks' => Task::class,
         'departments' => Department::class,
         'meetings' => Meeting::class,
+        'meeting_resolutions' => MeetingResolution::class,
         'recommendations' => Recommendation::class,
         'ovr' => IncidentReport::class,
         'risks' => Risk::class,
@@ -74,6 +76,7 @@ final class CapabilityToAuthorizationRolePermission
         'settings' => SystemSettings::class,
         'audit' => ActivityLog::class,
         'core' => Organization::class,
+        'core.cluster_tree' => Organization::class,
         'roles' => AuthorizationRole::class,
         // Phase 8-C: dashboards are organization-scoped; map to the
         // Organization resource (the closest existing FQCN — the

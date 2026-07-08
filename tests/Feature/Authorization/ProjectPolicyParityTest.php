@@ -27,8 +27,8 @@ use Tests\TestCase;
  *  SA  — super_admin: يجب TRUE على كل عملية في كلا الوضعين (عبر before())
  *  D01 — عزل المؤسسة: cross-org يجب FALSE في كلا الوضعين
  *  D02 — عزل null-org: يجب FALSE في كلا الوضعين
- *  E01 — project_manager (scoped): update/manageMembers/assignProjectRoles يجب TRUE
- *  E02 — project_member (scoped): update/manageMembers يجب FALSE
+ *  E01 — project_manager (scoped): update/assignProjectRoles يجب TRUE
+ *  E02 — project_member (scoped): update/assignProjectRoles يجب FALSE
  *  E03 — مستخدم بلا علاقة بالمشروع: view يجب FALSE
  *
  * ملاحظة فجوة parity متوقعة:
@@ -295,7 +295,7 @@ class ProjectPolicyParityTest extends TestCase
         $policy = new ProjectPolicy;
         $gaps = [];
 
-        foreach (['view', 'update', 'delete', 'manageMembers', 'assignProjectRoles'] as $ability) {
+        foreach (['view', 'update', 'delete', 'assignProjectRoles'] as $ability) {
             // super_admin يمر عبر before() في السياسة — لا يصل للدوال الفرعية
             // لكن AccessDecision::can() يفحص isSuperAdmin() أيضاً
             // نختبر النتيجة النهائية عبر Gate لتفعيل before()
@@ -378,7 +378,7 @@ class ProjectPolicyParityTest extends TestCase
     // =========================================================
 
     /**
-     * مدير المشروع (PROJECT_MANAGER scoped role) → update/manageMembers/assignProjectRoles.
+     * مدير المشروع (PROJECT_MANAGER scoped role) → update/assignProjectRoles.
      *
      * المنطق القديم: يسمح عبر isProjectAdmin() / isProjectLeader().
      * المحرّك: يسمح عبر is_admin_role=true في تعريف project_manager.
@@ -393,7 +393,7 @@ class ProjectPolicyParityTest extends TestCase
         $policy = new ProjectPolicy;
         $gaps = [];
 
-        foreach (['update', 'manageMembers', 'assignProjectRoles'] as $ability) {
+        foreach (['update', 'assignProjectRoles'] as $ability) {
             $this->assertParity(
                 $ability,
                 fn () => $policy->{$ability}($manager, $project),
@@ -413,7 +413,7 @@ class ProjectPolicyParityTest extends TestCase
     // =========================================================
 
     /**
-     * عضو المشروع (PROJECT_MEMBER) لا يجوز له التعديل أو إدارة الأعضاء.
+     * عضو المشروع (PROJECT_MEMBER) لا يجوز له التعديل أو تعيين أدوار المشروع.
      * يجب DENY في كلا الوضعين.
      */
     public function test_project_member_scoped_denied_parity(): void
@@ -425,7 +425,7 @@ class ProjectPolicyParityTest extends TestCase
         $policy = new ProjectPolicy;
         $gaps = [];
 
-        foreach (['update', 'manageMembers'] as $ability) {
+        foreach (['update', 'assignProjectRoles'] as $ability) {
             $this->assertParity(
                 $ability,
                 fn () => $policy->{$ability}($member, $project),
