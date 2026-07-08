@@ -93,7 +93,6 @@ class ProjectPolicyOracleTest extends TestCase
         $aDelete = 'delete';
         $aRestore = 'restore';
         $aForceDelete = 'forceDelete';
-        $aManageMembers = 'manageMembers';
         $aAssignProjectRoles = 'assignProjectRoles';
 
         return [
@@ -105,7 +104,6 @@ class ProjectPolicyOracleTest extends TestCase
             'super_admin:update:allow' => ['super_admin', $aUpdate, 'allow'],
             'super_admin:delete:allow' => ['super_admin', $aDelete, 'allow'],
             'super_admin:restore:allow' => ['super_admin', $aRestore, 'allow'],
-            'super_admin:manageMembers:allow' => ['super_admin', $aManageMembers, 'allow'],
             'super_admin:assignProjectRoles:allow' => ['super_admin', $aAssignProjectRoles, 'allow'],
             // Rule: forceDelete is intentionally hard-closed to everyone in the
             // engine (ProjectPolicy::forceDelete returns false regardless). The
@@ -124,7 +122,6 @@ class ProjectPolicyOracleTest extends TestCase
             'admin:update:allow' => ['admin', $aUpdate, 'allow'],
             'admin:delete:allow' => ['admin', $aDelete, 'allow'],
             'admin:restore:allow' => ['admin', $aRestore, 'allow'],
-            'admin:manageMembers:allow' => ['admin', $aManageMembers, 'allow'],
             'admin:assignProjectRoles:allow' => ['admin', $aAssignProjectRoles, 'allow'],
             'admin:forceDelete:deny' => ['admin', $aForceDelete, 'deny'],
 
@@ -138,7 +135,6 @@ class ProjectPolicyOracleTest extends TestCase
             'viewer:update:deny' => ['viewer', $aUpdate, 'deny'],
             'viewer:delete:deny' => ['viewer', $aDelete, 'deny'],
             'viewer:restore:deny' => ['viewer', $aRestore, 'deny'],
-            'viewer:manageMembers:deny' => ['viewer', $aManageMembers, 'deny'],
             'viewer:assignProjectRoles:deny' => ['viewer', $aAssignProjectRoles, 'deny'],
 
             // ---- project manager (scoped: project, role=manager) ----
@@ -154,7 +150,6 @@ class ProjectPolicyOracleTest extends TestCase
             'pm:update:allow' => ['project_manager', $aUpdate, 'allow'],
             'pm:delete:deny' => ['project_manager', $aDelete, 'deny'],
             'pm:restore:deny' => ['project_manager', $aRestore, 'deny'],
-            'pm:manageMembers:allow' => ['project_manager', $aManageMembers, 'allow'],
             'pm:assignProjectRoles:allow' => ['project_manager', $aAssignProjectRoles, 'allow'],
             'pm:forceDelete:deny' => ['project_manager', $aForceDelete, 'deny'],
 
@@ -167,7 +162,6 @@ class ProjectPolicyOracleTest extends TestCase
             'pmember:update:deny' => ['project_member', $aUpdate, 'deny'],
             'pmember:delete:deny' => ['project_member', $aDelete, 'deny'],
             'pmember:restore:deny' => ['project_member', $aRestore, 'deny'],
-            'pmember:manageMembers:deny' => ['project_member', $aManageMembers, 'deny'],
             'pmember:assignProjectRoles:deny' => ['project_member', $aAssignProjectRoles, 'deny'],
 
             // ---- project viewer (scoped: project, role=viewer) ----
@@ -179,7 +173,6 @@ class ProjectPolicyOracleTest extends TestCase
             'pviewer:update:deny' => ['project_viewer', $aUpdate, 'deny'],
             'pviewer:delete:deny' => ['project_viewer', $aDelete, 'deny'],
             'pviewer:restore:deny' => ['project_viewer', $aRestore, 'deny'],
-            'pviewer:manageMembers:deny' => ['project_viewer', $aManageMembers, 'deny'],
             'pviewer:assignProjectRoles:deny' => ['project_viewer', $aAssignProjectRoles, 'deny'],
 
             // ---- unrelated viewer (no scoped role on project; project in same
@@ -196,7 +189,6 @@ class ProjectPolicyOracleTest extends TestCase
             'unrelated_viewer:create:deny' => ['unrelated_viewer', $aCreate, 'deny'],
             'unrelated_viewer:update:deny' => ['unrelated_viewer', $aUpdate, 'deny'],
             'unrelated_viewer:delete:deny' => ['unrelated_viewer', $aDelete, 'deny'],
-            'unrelated_viewer:manageMembers:deny' => ['unrelated_viewer', $aManageMembers, 'deny'],
             'unrelated_viewer:assignProjectRoles:deny' => ['unrelated_viewer', $aAssignProjectRoles, 'deny'],
 
             // ---- creator (created_by == user.id, not yet completed) ----
@@ -208,7 +200,6 @@ class ProjectPolicyOracleTest extends TestCase
             'creator:update:allow' => ['creator', $aUpdate, 'allow'],
             // Owner floor NEVER grants delete/manage/assign — by design.
             'creator:delete:deny' => ['creator', $aDelete, 'deny'],
-            'creator:manageMembers:deny' => ['creator', $aManageMembers, 'deny'],
             'creator:assignProjectRoles:deny' => ['creator', $aAssignProjectRoles, 'deny'],
 
             // ---- cross-org admin (org-B admin attempting org-A project) ----
@@ -217,7 +208,6 @@ class ProjectPolicyOracleTest extends TestCase
             'cross_org_admin:view:deny' => ['cross_org_admin', $aView, 'deny'],
             'cross_org_admin:update:deny' => ['cross_org_admin', $aUpdate, 'deny'],
             'cross_org_admin:delete:deny' => ['cross_org_admin', $aDelete, 'deny'],
-            'cross_org_admin:manageMembers:deny' => ['cross_org_admin', $aManageMembers, 'deny'],
             // viewAny is null-target so the org-isolation gate is bypassed; the
             // engine reads the org-level functional role bridge. Spec: allow.
             'cross_org_admin:viewAny:allow' => ['cross_org_admin', $aViewAny, 'allow'],
@@ -455,7 +445,6 @@ class ProjectPolicyOracleTest extends TestCase
             'delete' => Capability::PROJECTS_DELETE,
             'restore' => Capability::PROJECTS_DELETE, // restore() reuses delete()
             'forceDelete' => Capability::PROJECTS_DELETE, // forceDelete() returns false hard
-            'manageMembers' => Capability::PROJECTS_MANAGE_MEMBERS,
             'assignProjectRoles' => Capability::PROJECTS_ASSIGN_ROLES,
             default => throw new \InvalidArgumentException("Unknown ability: {$ability}"),
         };
@@ -479,7 +468,6 @@ class ProjectPolicyOracleTest extends TestCase
             'update' => 'update',
             'delete' => 'delete',
             'restore' => 'restore',
-            'manageMembers' => 'manageMembers',
             'assignProjectRoles' => 'assignProjectRoles',
             default => null,
         };
