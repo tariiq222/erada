@@ -26,10 +26,12 @@ class ApiNotSwallowedBySpaTest extends TestCase
 
     public function test_get_to_api_post_route_returns_405_not_spa_html(): void
     {
-        // /api/decisions/{id}/approve is a real POST-only route (Phase F moved it
-        // here from the removed /api/strategy/decisions/* alias). GET on it must
-        // hit the API matcher (405), not be swallowed by the SPA catch-all.
-        $response = $this->get('/api/decisions/123/approve');
+        // /api/recommendations/{id}/approve is a real POST-only route
+        // (Direction B, 2026-07-06: the legacy /api/strategy/decisions/* and
+        // /api/decisions/* aliases were retired; approve moved under
+        // /api/recommendations/{id}/approve). GET on it must hit the API
+        // matcher (405), not be swallowed by the SPA catch-all.
+        $response = $this->get('/api/recommendations/123/approve');
 
         $response->assertStatus(405);
         $this->assertStringNotContainsString(
