@@ -20,6 +20,7 @@ use App\Modules\Meetings\Models\MeetingAgendaItem;
 use App\Modules\Meetings\Models\MeetingAttendee;
 use App\Modules\Meetings\Models\MeetingCategory;
 use App\Modules\Meetings\Models\MeetingSettings;
+use App\Modules\Meetings\Models\ResolutionLink;
 use App\Modules\OVR\Models\IncidentParticipant;
 use App\Modules\OVR\Models\IncidentType;
 use App\Modules\OVR\Models\OvrSetting;
@@ -105,6 +106,7 @@ class ScopeAwareCoverageTest extends TestCase
 
         // ---- Pivots / join rows ----
         MeetingAttendee::class,   // reason: meeting<->user pivot (composite key)
+        ResolutionLink::class,    // reason: meeting-resolution<->project|risk pivot; governed through MeetingResolution (link is informational, not authoritative for visibility — see MeetingResolution::scopeVisibleTo docblock)
 
         // ---- Audit / history / notification logs ----
         ActivityLog::class,         // reason: audit log
