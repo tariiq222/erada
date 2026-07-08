@@ -365,7 +365,7 @@ class IncidentReportController extends Controller
 
         $wasAssigned = isset($updates['assigned_to']) && $updates['assigned_to'] !== $report->assigned_to;
 
-        DB::transaction(function () use ($report, $updates, $oldStatus, $newStatus, $actor, $wasAssigned, $request) {
+        DB::transaction(function () use ($report, $updates, $oldStatus, $newStatus, $actor, $request) {
             // Race defense (P0 #5): re-load under SELECT FOR UPDATE so the
             // transition decision + recordStatusChange observe the source-of-
             // truth status, not the route-bound snapshot.
@@ -388,21 +388,20 @@ class IncidentReportController extends Controller
             $locked->recordStatusChange($oldStatus, $newStatus, $actor->id, $request->input('reason'));
 
             // Sync the in-memory $report with the locked row so the response and
-            // the notifications inside this transaction read the just-updated state.
+            // the post-commit side effects read the just-updated state.
             $report->setRawAttributes($locked->getAttributes(), true);
-
-            // Notify the reporter of the status change (inside the lock so the
-            // notification carries the new status, not a torn read).
-            if ($report->reporter && $report->reporter_id !== $actor->id) {
-                $report->reporter->notify(new StatusChangedNotification($report, $oldStatus, $newStatus));
-            }
-
-            // Notify the newly assigned handler and create a follow-up task.
-            if ($wasAssigned && $newAssignee = User::find($report->assigned_to)) {
-                $newAssignee->notify(new ReportAssignedNotification($report));
-                $this->createHandlerTask($report, $newAssignee, $actor->id);
-            }
         });
+
+        // Notify the reporter of the status change.
+        if ($report->reporter && $report->reporter_id !== $actor->id) {
+            $report->reporter->notify(new StatusChangedNotification($report, $oldStatus, $newStatus));
+        }
+
+        // Notify the newly assigned handler and create a follow-up task.
+        if ($wasAssigned && $newAssignee = User::find($report->assigned_to)) {
+            $newAssignee->notify(new ReportAssignedNotification($report));
+            $this->createHandlerTask($report, $newAssignee, $actor->id);
+        }
 
         return response()->json([
             'message' => __('ovr.api.status_changed_to', ['status' => $newStatus->label()]),
