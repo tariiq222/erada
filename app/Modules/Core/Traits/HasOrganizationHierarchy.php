@@ -268,22 +268,23 @@ trait HasOrganizationHierarchy
 
     // ========== Phase 9-D-D1a: Read-only descendant walk ==========
     //
-    // تستخدم لتوسيع UserKpiScope (ومستقبلاً User*Scope modules الأخرى) ليشمل
-    // المؤسسات الفرعية عندما يحمل المستخدم Capability::CLUSTER_TREE_VIEW +
-    // capability الـ module view على user.organization_id. لا تمس شجرة المنظمات
-    // داخل AccessDecision — المحرك يبقى strict equality + rescue branch.
-    // لا تستخدم materialized path.
+    // Used to widen UserKpiScope (and, later, other User*Scope modules) to
+    // include descendant organizations when the user holds
+    // Capability::CLUSTER_TREE_VIEW + the module view capability on
+    // user.organization_id. This does NOT touch the organization tree inside
+    // AccessDecision — the engine stays strict equality + rescue branch.
+    // Does not use a materialized path.
 
     /**
-     * مصفوفة بأسماء الـ ids لكل المؤسسات الفرعية (children + grandchildren + …) + الـ self.
+     * Ids of every descendant organization (children + grandchildren + …) plus self.
      *
-     * القواعد:
-     *   - إذا لم توجد children: ترجع [id_self] فقط.
-     *   - تستخدم BFS على parent_id لتجنّب recursion العميقة.
-     *   - depth cap = 32 (متماثل مع ancestorIds).
-     *   - cycle guard: visited set — يقطع fail-closed عند الحلقة.
-     *   - لا تطلق query على self بعد الحل (الـ row قد يكون غير محفوظ).
-     *   - لا filter على is_active — تطابق ancestorIds semantics.
+     * Rules:
+     *   - If there are no children: returns [self_id] only.
+     *   - Uses BFS over parent_id to avoid deep recursion.
+     *   - depth cap = 32 (matches ancestorIds).
+     *   - cycle guard: visited set — breaks fail-closed on a cycle.
+     *   - Does not query self after resolution (the row may be unsaved).
+     *   - No is_active filter — matches ancestorIds semantics.
      *
      * @return list<int>
      */

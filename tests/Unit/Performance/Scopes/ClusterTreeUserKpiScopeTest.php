@@ -16,18 +16,18 @@ use Tests\TestCase;
 /**
  * ClusterTreeUserKpiScopeTest - Phase 9-D-D1a: cluster_tree read widening at the Scope layer.
  *
- * يثبت:
- *   1) cluster user مع KPIS_VIEW + CLUSTER_TREE_VIEW يرى KPIs في منظمته + descendants.
- *   2) cluster user مع KPIS_VIEW فقط لا يرى child org KPIs.
- *   3) cluster user مع CLUSTER_TREE_VIEW فقط لا يرى child org KPIs (يلزم الكلا القدرةَين).
- *   4) cluster user مع الكلا القدرةَين لا يرى sibling org KPIs.
- *   5) child user لا يرى parent cluster KPIs عبر cluster_tree (one-directional).
- *   6) null-org user لا يرى شيئاً (fail-closed).
- *   7) super_admin يرى الكل بغض النظر عن الـ grants.
- *   8) القياسات والروابط ترث توسيع الـ cluster_tree (descendants).
+ * Proves:
+ *   1) cluster user with KPIS_VIEW + CLUSTER_TREE_VIEW sees KPIs in its org + descendants.
+ *   2) cluster user with KPIS_VIEW only does not see child org KPIs.
+ *   3) cluster user with CLUSTER_TREE_VIEW only does not see child org KPIs (both capabilities required).
+ *   4) cluster user with both capabilities does not see sibling org KPIs.
+ *   5) child user does not see parent cluster KPIs via cluster_tree (one-directional).
+ *   6) null-org user sees nothing (fail-closed).
+ *   7) super_admin sees everything regardless of grants.
+ *   8) measurements and links inherit the cluster_tree widening (descendants).
  *
- * يستخدم GrantsEngineCapability::grantEngineCapability() لإضافة Capability
- * على scoped role في user.organization_id.
+ * Uses GrantsEngineCapability::grantEngineCapability() to grant a Capability
+ * on a scoped role at user.organization_id.
  */
 class ClusterTreeUserKpiScopeTest extends TestCase
 {
@@ -79,7 +79,7 @@ class ClusterTreeUserKpiScopeTest extends TestCase
         $query = Kpi::query();
         $this->scope->applyToKpis($query, $user);
 
-        // بدون CLUSTER_TREE_VIEW ⇒ strict same-org ⇒ 2 فقط (الـ cluster نفسها).
+        // Without CLUSTER_TREE_VIEW ⇒ strict same-org ⇒ only 2 (the cluster itself).
         $this->assertSame(2, (clone $query)->count());
     }
 
@@ -98,8 +98,8 @@ class ClusterTreeUserKpiScopeTest extends TestCase
         $query = Kpi::query();
         $this->scope->applyToKpis($query, $user);
 
-        // الـ Scope لا يفحص KPIS_VIEW (يفحصه الـ controller والـ Policy).
-        // بدون CLUSTER_TREE_VIEW الـ widening لن يطبَّق، فيبقى strict same-org (2).
+        // The Scope does not check KPIS_VIEW (the controller and Policy do).
+        // Without CLUSTER_TREE_VIEW the widening is not applied, so it stays strict same-org (2).
         $this->assertSame(2, (clone $query)->count());
     }
 
@@ -125,7 +125,7 @@ class ClusterTreeUserKpiScopeTest extends TestCase
         $query = Kpi::query();
         $this->scope->applyToKpis($query, $user);
 
-        // cluster A + hospital A (descendant of A) — cluster B و descendant of B كلاهما غير مرئيّين.
+        // cluster A + hospital A (descendant of A) — cluster B and B's descendant are both invisible.
         $this->assertSame(2, (clone $query)->count());
     }
 
@@ -137,7 +137,7 @@ class ClusterTreeUserKpiScopeTest extends TestCase
             'organization_id' => $hospital->id,
             'is_active' => true,
         ]);
-        // الطفل في hospital يحاول الحصول على cluster_tree grant لرؤية parent.
+        // The child in the hospital tries to obtain a cluster_tree grant to see the parent.
         $this->grantEngineCapability($childUser, [
             Capability::KPIS_VIEW,
             Capability::CLUSTER_TREE_VIEW,
@@ -149,7 +149,7 @@ class ClusterTreeUserKpiScopeTest extends TestCase
         $query = Kpi::query();
         $this->scope->applyToKpis($query, $childUser);
 
-        // الطفل لا يستطيع رؤية parent (one-directional walk من user.org نحو descendants فقط).
+        // The child cannot see the parent (one-directional walk from user.org toward descendants only).
         $this->assertSame(3, (clone $query)->count());
     }
 
@@ -215,7 +215,7 @@ class ClusterTreeUserKpiScopeTest extends TestCase
         $query = KpiMeasurement::query();
         $this->scope->applyToMeasurements($query, $user);
 
-        // يقيسان فقط: cluster + descendant hospital.
+        // Counts only: cluster + descendant hospital.
         $this->assertSame(2, (clone $query)->count());
     }
 
@@ -270,12 +270,26 @@ class ClusterTreeUserKpiScopeTest extends TestCase
         $query = Kpi::query();
         $this->scope->applyToKpis($query, $user);
 
-        // 4 مرئية: cluster + hospital1 + center1 + hospital2. الـ sibling معزول.
+        // 4 visible: cluster + hospital1 + center1 + hospital2. The sibling is isolated.
         $this->assertSame(4, (clone $query)->count());
     }
 
+    public function test_descendant_ids_is_fail_closed_on_a_cycle(): void
+    {
+        // Build a 2-node cycle: A -> B (child), then point A.parent_id at B.
+        // The DB CHECK only blocks a self-loop (parent_id <> id), so a 2-node
+        // cycle is reachable and must be walked fail-closed via the visited set.
+        $orgA = Organization::factory()->cluster()->create(['name' => 'cycle A']);
+        $orgB = Organization::factory()->hospital()->childOf($orgA)->create(['name' => 'cycle B']);
+        $orgA->forceFill(['parent_id' => $orgB->id])->save();
+
+        // BFS from A: [A] -> child B (fresh) -> child of B is A (visited, skipped).
+        // Terminates with the visited subset, no infinite loop.
+        $this->assertSame([$orgA->id, $orgB->id], $orgA->fresh()->descendantIds());
+    }
+
     /**
-     * يبني شجرة: [cluster, hospital child, unrelated sibling].
+     * Builds a tree: [cluster, hospital child, unrelated sibling].
      *
      * @return array{0: Organization, 1: Organization, 2: Organization}
      */

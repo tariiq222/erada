@@ -92,9 +92,9 @@ class KpiController extends Controller
     {
         $this->authorizePerformance('view');
 
-        // Phase 9-D-D1a: استبدلنا assertSameOrganization($kpi) (الـ strict equality)
-        // بـ KpiPolicy::view() الذي يسمح بـ cluster_tree widening (KPIS_VIEW +
-        // CLUSTER_TREE_VIEW ⇒ قراءة KPIs في descendant orgs).
+        // Phase 9-D-D1a: replaced assertSameOrganization($kpi) (strict equality)
+        // with KpiPolicy::view(), which allows cluster_tree widening (KPIS_VIEW +
+        // CLUSTER_TREE_VIEW ⇒ reading KPIs in descendant orgs).
         if (! app(KpiPolicy::class)->view(auth()->user(), $kpi)) {
             abort(403, 'ليس لديك صلاحية الوصول لهذا العنصر');
         }

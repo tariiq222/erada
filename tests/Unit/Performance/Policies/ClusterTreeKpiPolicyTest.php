@@ -14,16 +14,16 @@ use Tests\TestCase;
 /**
  * ClusterTreeKpiPolicyTest - Phase 9-D-D1a: cluster_tree read widening at the Policy layer.
  *
- * يثبت:
- *   1) cluster user مع KPIS_VIEW + CLUSTER_TREE_VIEW ⇒ view() على child-org KPI = true.
- *   2) cluster user بدون CLUSTER_TREE_VIEW ⇒ view() على child-org KPI = false.
- *   3) cluster user بدون KPIS_VIEW ⇒ view() على child-org KPI = false.
+ * Proves:
+ *   1) cluster user with KPIS_VIEW + CLUSTER_TREE_VIEW ⇒ view() on child-org KPI = true.
+ *   2) cluster user without CLUSTER_TREE_VIEW ⇒ view() on child-org KPI = false.
+ *   3) cluster user without KPIS_VIEW ⇒ view() on child-org KPI = false.
  *   4) sibling cluster ⇒ view() = false.
- *   5) child user ⇒ لا يستطيع رؤية parent cluster KPI عبر cluster_tree.
- *   6) update / delete / create تبقى org-strict (لا widening).
- *   7) super_admin يتجاوز كل شيء.
+ *   5) child user ⇒ cannot view parent cluster KPI via cluster_tree.
+ *   6) update / delete / create stay org-strict (no widening).
+ *   7) super_admin bypasses everything.
  *   8) null-org user ⇒ view() = false (fail-closed).
- *   9) sibling org خارج الـ cluster ⇒ لا يُوسّع.
+ *   9) unrelated org outside the cluster ⇒ no widening.
  *
  * Uses GrantsEngineCapability::grantEngineCapability() to grant capabilities on a scoped role.
  */
@@ -84,7 +84,7 @@ class ClusterTreeKpiPolicyTest extends TestCase
 
         $childKpi = Kpi::factory()->create(['organization_id' => $hospital->id]);
 
-        // CLUSTER_TREE_VIEW وحده لا يكفي — يلزم KPIS_VIEW أيضاً.
+        // CLUSTER_TREE_VIEW alone is not enough — KPIS_VIEW is also required.
         $this->assertFalse($this->policy->view($user, $childKpi));
     }
 
@@ -105,7 +105,7 @@ class ClusterTreeKpiPolicyTest extends TestCase
         $kpiInClusterB = Kpi::factory()->create(['organization_id' => $clusterB->id]);
         $kpiInHospitalB = Kpi::factory()->create(['organization_id' => $hospitalB->id]);
 
-        // A لا يستطيع رؤية B subtree حتى مع الكلا القدرةَين.
+        // A cannot see B's subtree even with both capabilities.
         $this->assertFalse($this->policy->view($userA, $kpiInClusterB));
         $this->assertFalse($this->policy->view($userA, $kpiInHospitalB));
     }
@@ -126,9 +126,9 @@ class ClusterTreeKpiPolicyTest extends TestCase
         $parentKpi = Kpi::factory()->create(['organization_id' => $cluster->id]);
         $ownKpi = Kpi::factory()->create(['organization_id' => $hospital->id]);
 
-        // الطفل لا يستطيع رؤية parent (one-directional).
+        // The child cannot view the parent (one-directional).
         $this->assertFalse($this->policy->view($childUser, $parentKpi));
-        // لكنّه يرى KPI في منظمته (same-org).
+        // But it does see a KPI in its own organization (same-org).
         $this->assertTrue($this->policy->view($childUser, $ownKpi));
     }
 
@@ -148,7 +148,7 @@ class ClusterTreeKpiPolicyTest extends TestCase
 
         $childKpi = Kpi::factory()->create(['organization_id' => $hospital->id]);
 
-        // view مُتوسَّع، لكن update يبقى org-strict.
+        // view is widened, but update stays org-strict.
         $this->assertTrue($this->policy->view($user, $childKpi));
         $this->assertFalse($this->policy->update($user, $childKpi));
     }
@@ -187,10 +187,10 @@ class ClusterTreeKpiPolicyTest extends TestCase
             Capability::KPIS_MANAGE,
         ]);
 
-        // create() يعتمد على KPIS_MANAGE فقط، لا يتأثّر بـ cluster_tree.
+        // create() relies on KPIS_MANAGE only, unaffected by cluster_tree.
         $this->assertTrue($this->policy->create($user));
 
-        // مستخدم في cluster بدون KPIS_MANAGE لا يستطيع إنشاء KPI حتى مع cluster_tree.
+        // A user in the cluster without KPIS_MANAGE cannot create a KPI even with cluster_tree.
         $readOnlyUser = User::factory()->create([
             'organization_id' => $cluster->id,
             'is_active' => true,
@@ -214,7 +214,7 @@ class ClusterTreeKpiPolicyTest extends TestCase
 
         $childKpi = Kpi::factory()->create(['organization_id' => $hospital->id]);
 
-        // super_admin يتجاوز دون المرور بـ cluster_tree rescue.
+        // super_admin bypasses without going through the cluster_tree rescue.
         $this->assertTrue($this->policy->view($super, $childKpi));
     }
 

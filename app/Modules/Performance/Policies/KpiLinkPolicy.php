@@ -12,18 +12,18 @@ use App\Modules\Performance\Support\KpiOrgGuard;
 /**
  * KpiLinkPolicy - Phase 4: per-record org-isolation for KpiLink.
  *
- * عمليات link تستخدم KPIS_MANAGE (تعديل على الـ KPI):
- *  - view عبر /kpis/{kpi}/links (route-bound kpi) ⇒ KPIS_VIEW.
- *  - create/update عبر /kpis/{kpi}/links ⇒ KPIS_MANAGE.
+ * Link operations use KPIS_MANAGE (a change on the KPI):
+ *  - view via /kpis/{kpi}/links (route-bound kpi) ⇒ KPIS_VIEW.
+ *  - create/update via /kpis/{kpi}/links ⇒ KPIS_MANAGE.
  *  - destroy ⇒ KPIS_MANAGE.
  *
- * الـ same-org gate يتحقّق من link.organization_id مباشرةً
- * (العمود موجود في kpi_links).
+ * The same-org gate checks link.organization_id directly
+ * (the column exists on kpi_links).
  *
  * Phase 9-D-D1a — Cluster tree widening applies to view() only:
- *   - link inherits org من kpi الأب (denormalized at write time).
- *   - view() يستخدم نفس نمط الـ engine rescue: KPIS_VIEW || CLUSTER_TREE_VIEW.
- *   - create / update / delete تبقى strict same-org عبر precheck.
+ *   - link inherits its org from the parent kpi (denormalized at write time).
+ *   - view() uses the same engine rescue pattern: KPIS_VIEW || CLUSTER_TREE_VIEW.
+ *   - create / update / delete stay strict same-org via precheck.
  */
 class KpiLinkPolicy
 {
@@ -48,15 +48,15 @@ class KpiLinkPolicy
     /**
      * Phase 9-D-D1a — Cluster tree widening applies to view() only.
      *
-     * مسارات القرار (نفس نمط KpiPolicy::view):
-     *  1) KPIS_VIEW على link (نفس المنظمة): engine's same-org + role check.
-     *  2) CLUSTER_TREE_VIEW على link: engine's rescue branch يتحقّق من
-     *     ancestor walk عبر link.organization_id (المطابق لـ kpi الأب).
+     * Decision paths (same pattern as KpiPolicy::view):
+     *  1) KPIS_VIEW on link (same org): engine's same-org + role check.
+     *  2) CLUSTER_TREE_VIEW on link: engine's rescue branch verifies the
+     *     ancestor walk via link.organization_id (matching the parent kpi).
      */
     public function view(User $user, KpiLink $link): bool
     {
-        // super_admin يُعالَج في الـ engine (short-circuit في whyCan::step 1).
-        // null-org actor يُعالَج في الـ engine (org_isolation_denied في step 2).
+        // super_admin is handled in the engine (short-circuit in whyCan::step 1).
+        // null-org actor is handled in the engine (org_isolation_denied in step 2).
 
         // Path 1: same-org KPIS_VIEW via engine.
         if (AccessDecision::can($user, Capability::KPIS_VIEW, $link)) {
@@ -80,7 +80,7 @@ class KpiLinkPolicy
             return false;
         }
 
-        // إذا تم تمرير kpi، نتحقق من same-org (المسار create عبر /kpis/{kpi}/links).
+        // If a kpi is passed, verify same-org (the create path via /kpis/{kpi}/links).
         if ($kpi !== null && ! app(KpiOrgGuard::class)->sameOrganizationForKpi($user, $kpi)) {
             return false;
         }
@@ -107,9 +107,9 @@ class KpiLinkPolicy
     }
 
     /**
-     * precheck: actor/org gate + same-org عبر KpiOrgGuard.
+     * precheck: actor/org gate + same-org via KpiOrgGuard.
      *
-     * يُستخدم في الكتابة فقط (update / delete) — لا يُطبَّق على view().
+     * Used for writes only (update / delete) — not applied to view().
      */
     protected function precheck(User $user, KpiLink $link): bool
     {
