@@ -265,4 +265,62 @@ trait HasOrganizationHierarchy
 
         return $result;
     }
+
+    // ========== Phase 9-D-D1a: Read-only descendant walk ==========
+    //
+    // تستخدم لتوسيع UserKpiScope (ومستقبلاً User*Scope modules الأخرى) ليشمل
+    // المؤسسات الفرعية عندما يحمل المستخدم Capability::CLUSTER_TREE_VIEW +
+    // capability الـ module view على user.organization_id. لا تمس شجرة المنظمات
+    // داخل AccessDecision — المحرك يبقى strict equality + rescue branch.
+    // لا تستخدم materialized path.
+
+    /**
+     * مصفوفة بأسماء الـ ids لكل المؤسسات الفرعية (children + grandchildren + …) + الـ self.
+     *
+     * القواعد:
+     *   - إذا لم توجد children: ترجع [id_self] فقط.
+     *   - تستخدم BFS على parent_id لتجنّب recursion العميقة.
+     *   - depth cap = 32 (متماثل مع ancestorIds).
+     *   - cycle guard: visited set — يقطع fail-closed عند الحلقة.
+     *   - لا تطلق query على self بعد الحل (الـ row قد يكون غير محفوظ).
+     *   - لا filter على is_active — تطابق ancestorIds semantics.
+     *
+     * @return list<int>
+     */
+    public function descendantIds(): array
+    {
+        if (! $this->exists) {
+            return [];
+        }
+
+        $result = [(int) $this->getKey()];
+        $visited = [(int) $this->getKey() => true];
+        $currentIds = [(int) $this->getKey()];
+
+        for ($depth = 0; $depth < 32; $depth++) {
+            $childRows = static::query()
+                ->whereIn('parent_id', $currentIds)
+                ->get(['id']);
+
+            $nextIds = [];
+            foreach ($childRows as $child) {
+                $childId = (int) $child->id;
+                if (isset($visited[$childId])) {
+                    // cycle — fail-closed (do not include in result)
+                    continue;
+                }
+                $visited[$childId] = true;
+                $result[] = $childId;
+                $nextIds[] = $childId;
+            }
+
+            if ($nextIds === []) {
+                break;
+            }
+
+            $currentIds = $nextIds;
+        }
+
+        return $result;
+    }
 }

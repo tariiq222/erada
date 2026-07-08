@@ -2,6 +2,9 @@
 
 namespace App\Modules\Performance\Scopes;
 
+use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -18,9 +21,15 @@ use Illuminate\Database\Eloquent\Builder;
  *   - actor بلا organization_id: whereRaw('false') — fail-closed (لا يرى شيئاً).
  *   - actor عادي: فلتر organization_id مباشرة على عمود الجدول.
  *
+ * Phase 9-D-D1a — Cluster tree widening (read-only):
+ *   - actor يحمل Capability::KPIS_VIEW + Capability::CLUSTER_TREE_VIEW على
+ *     actor.organization_id ⇒ الفلتر يتوسّع ليشمل المؤسسات الفرعية (descendants).
+ *   - شروط الـ widening: لا wildcard، لا is_admin_role shortcut، read-only.
+ *   - لا يُوسّع لـ siblings (one-directional: user.org ⇒ descendants).
+ *
  * لا تعتمد على السلسلة الهرمية للأقسام؛ الـ AccessDecision engine يتولّى
  * التفصيل الهرمي عبر scope-chain. هذا الـ Scope مسؤول فقط عن القطع
- * الأفقي لمؤسسة المستخدم (org isolation floor).
+ * الأفقي لمؤسسة المستخدم (org isolation floor) مع توسيع cluster_tree.
  *
  * Phase 4 — Performance Org-Isolation: تم إنشاؤه لتقوية العزل الأفقي
  * لموديول Performance بعد أن تبيّن أن scopeToCurrentOrganization كان
@@ -42,7 +51,7 @@ class UserKpiScope
             return $query->whereRaw('false');
         }
 
-        return $query->where('kpis.organization_id', $actor->organization_id);
+        return $query->whereIn('kpis.organization_id', $this->clusterVisibleOrgIds($actor));
     }
 
     /**
@@ -60,9 +69,11 @@ class UserKpiScope
             return $query->whereRaw('false');
         }
 
+        $visibleOrgIds = $this->clusterVisibleOrgIds($actor);
+
         return $query->whereHas(
             'kpi',
-            fn (Builder $k) => $k->where('kpis.organization_id', $actor->organization_id)
+            fn (Builder $k) => $k->whereIn('kpis.organization_id', $visibleOrgIds)
         );
     }
 
@@ -79,9 +90,51 @@ class UserKpiScope
             return $query->whereRaw('false');
         }
 
+        $visibleOrgIds = $this->clusterVisibleOrgIds($actor);
+
         return $query->whereHas(
             'kpi',
-            fn (Builder $k) => $k->where('kpis.organization_id', $actor->organization_id)
+            fn (Builder $k) => $k->whereIn('kpis.organization_id', $visibleOrgIds)
         );
+    }
+
+    /**
+     * قائمة بمعرفات المنظمات المرئية للمستخدم حسب سياسات الـ cluster_tree.
+     *
+     * - الافتراضي: [actor.organization_id] فقط (strict same-org). يحافظ على
+     *   سلوك UserKpiScope ما قبل 9-D-D1a (المستخدم بلا capability grants يرى
+     *   منظمته فقط) لتفادي كسر الـ regression tests القائمة.
+     *
+     * - التوسّع (read-only): إذا وفقط إذا كان actor يحمل
+     *   Capability::KPIS_VIEW + Capability::CLUSTER_TREE_VIEW على actor.organization_id،
+     *   تُضاف المؤسسات الفرعية (descendants عبر parent_id) إلى القائمة.
+     *
+     * شروط الـ widening:
+     *   - KPIS_VIEW + CLUSTER_TREE_VIEW: كلاهما مطلوب (CLUSTER_TREE_VIEW وحده
+     *     لا يكفي — يلزم الـ engine capability لضمان أن actor يحق له أصلاً
+     *     رؤية KPIs).
+     *   - لا يعتمد على is_admin_role. لا يُوسّع لـ siblings.
+     *   - لا يعتمد على materialized path — يستخدم parent_id + visited set + depth cap 32.
+     *
+     * @return list<int>
+     */
+    protected function clusterVisibleOrgIds(User $actor): array
+    {
+        $orgId = (int) $actor->organization_id;
+        $visible = [$orgId];
+
+        // كلا القدرةَين مطلوبتين لتوسيع cluster_tree. غياب أيّ منهما ⇒ strict same-org.
+        $hasKpisView = AccessDecision::can($actor, Capability::KPIS_VIEW);
+        $hasClusterTreeView = AccessDecision::can($actor, Capability::CLUSTER_TREE_VIEW);
+        if (! $hasKpisView || ! $hasClusterTreeView) {
+            return $visible;
+        }
+
+        $org = Organization::query()->find($orgId);
+        if (! $org instanceof Organization) {
+            return $visible;
+        }
+
+        return array_values(array_unique(array_merge($visible, $org->descendantIds())));
     }
 }

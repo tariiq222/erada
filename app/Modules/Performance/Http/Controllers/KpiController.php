@@ -12,6 +12,7 @@ use App\Modules\Performance\Http\Requests\StoreKpiRequest;
 use App\Modules\Performance\Http\Requests\UpdateKpiRequest;
 use App\Modules\Performance\Models\Kpi;
 use App\Modules\Performance\Models\KpiLink;
+use App\Modules\Performance\Policies\KpiPolicy;
 use App\Modules\Performance\Scopes\UserKpiScope;
 use App\Modules\Performance\Services\KpiImportExportService;
 use App\Modules\Shared\Traits\HasOrganizationScope;
@@ -90,7 +91,13 @@ class KpiController extends Controller
     public function show(Kpi $kpi): JsonResponse
     {
         $this->authorizePerformance('view');
-        $this->assertSameOrganization($kpi);
+
+        // Phase 9-D-D1a: استبدلنا assertSameOrganization($kpi) (الـ strict equality)
+        // بـ KpiPolicy::view() الذي يسمح بـ cluster_tree widening (KPIS_VIEW +
+        // CLUSTER_TREE_VIEW ⇒ قراءة KPIs في descendant orgs).
+        if (! app(KpiPolicy::class)->view(auth()->user(), $kpi)) {
+            abort(403, 'ليس لديك صلاحية الوصول لهذا العنصر');
+        }
 
         $kpi->load([
             'owner:id,name',

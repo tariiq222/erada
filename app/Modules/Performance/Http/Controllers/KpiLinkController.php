@@ -10,6 +10,7 @@ use App\Modules\Performance\Http\Requests\DestroyKpiLinkRequest;
 use App\Modules\Performance\Http\Requests\StoreKpiLinkRequest;
 use App\Modules\Performance\Models\Kpi;
 use App\Modules\Performance\Models\KpiLink;
+use App\Modules\Performance\Policies\KpiPolicy;
 use App\Modules\Performance\Scopes\UserKpiScope;
 use App\Modules\Projects\Models\Project;
 use App\Modules\Shared\Traits\HasOrganizationScope;
@@ -27,7 +28,12 @@ class KpiLinkController extends Controller
     public function index(Request $request, Kpi $kpi): JsonResponse
     {
         $this->authorizePerformance('view');
-        $this->assertSameOrganization($kpi);
+
+        // Phase 9-D-D1a: cluster_tree-aware per-target check on the parent KPI.
+        // Replaces the previous strict HasOrganizationScope::assertSameOrganization($kpi).
+        if (! app(KpiPolicy::class)->view(auth()->user(), $kpi)) {
+            abort(403, 'ليس لديك صلاحية الوصول لهذا العنصر');
+        }
 
         $links = $kpi->links()
             ->with(['creator:id,name', 'linkable'])
