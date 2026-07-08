@@ -122,7 +122,7 @@ class ApiResponseEnvelopeContractTest extends TestCase
             ->assertJsonPath('data.privacy_mode', 'detail')
             ->assertJsonPath('data.patient_name', 'Sensitive Patient');
 
-        $this->getJson("/api/ovr/track/{$report->report_number}")
+        $this->getJson("/api/ovr/track/{$report->tracking_token}")
             ->assertOk()
             ->assertJsonPath('success', true)
             ->assertJsonPath('data.report_number', $report->report_number)

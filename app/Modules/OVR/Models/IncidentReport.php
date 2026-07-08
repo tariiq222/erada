@@ -64,6 +64,13 @@ class IncidentReport extends Model implements ScopeAware, SensitivelyScoped
         'reopened_by',
         'reopen_reason',
         'is_confidential',
+        // Direction B (2026-07-07): the public /api/ovr/track endpoint keys
+        // on a per-report random tracking_token (NOT the enumerable
+        // report_number). The column was added by migration
+        // 2026_07_07_000005_add_tracking_token_to_incident_reports but
+        // mass-assignment was not wired up — controllers and tests
+        // silently dropped the field, leaving the row untrackable.
+        'tracking_token',
     ];
 
     protected $casts = [
@@ -111,6 +118,14 @@ class IncidentReport extends Model implements ScopeAware, SensitivelyScoped
             }
             if (empty($report->status)) {
                 $report->status = ReportStatus::Draft;
+            }
+            // Direction B: auto-stamp a tracking_token for any new report
+            // that does not provide one. Public /api/ovr/track keys on this
+            // token (not on the enumerable report_number) to remove the
+            // enumeration leak. Existing rows were backfilled by the
+            // 2026_07_07_000005 migration.
+            if (empty($report->tracking_token)) {
+                $report->tracking_token = \Illuminate\Support\Str::random(64);
             }
         });
     }
