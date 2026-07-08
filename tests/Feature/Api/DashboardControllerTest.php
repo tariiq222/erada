@@ -3,7 +3,6 @@
 namespace Tests\Feature\Api;
 
 use App\Modules\Core\Authorization\Capability;
-use App\Modules\Core\Enums\Permission;
 use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
@@ -81,10 +80,12 @@ class DashboardControllerTest extends TestCase
         // Engine cutover: do NOT assignRole('admin') — its org-scoped definition
         // has is_admin_role=true and grants projects.view org-wide. We want to
         // exercise the per-department scope branch of UserProjectScope, so the
-        // user has ONLY the engine grant below at department scope. Grant the
-        // dashboard route permission directly (the route uses Spatie
-        // `view_dashboard`).
-        $admin->givePermissionTo(Permission::VIEW_DASHBOARD->value);
+        // user has only the dashboard engine grant at org scope plus
+        // projects.view at department scope.
+        $this->grantEngineCapability(
+            $admin,
+            Capability::DASHBOARD_VIEW,
+        );
         $this->grantEngineCapability(
             $admin,
             Capability::PROJECTS_VIEW,
@@ -296,7 +297,10 @@ class DashboardControllerTest extends TestCase
         // user the dashboard route permission directly (the route uses Spatie
         // `view_dashboard`) and rely solely on the per-project scoped role for
         // visibility — exactly what production grants on a plain member would do.
-        $user->givePermissionTo(Permission::VIEW_DASHBOARD->value);
+        $this->grantEngineCapability(
+            $user,
+            Capability::DASHBOARD_VIEW,
+        );
 
         // مشروع المستخدم (دور سياقي manager بدل عمود manager_id)
         $ownProject = Project::factory()->create([

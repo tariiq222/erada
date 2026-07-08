@@ -35,7 +35,7 @@ use Tests\TestCase;
  * when the new tables are seeded to mirror the legacy grant.
  *
  * Mirrors the subset covered by ProjectPolicyOracleTest's decision matrix
- * (viewer/member/manager × view/update/delete/manageMembers/assignRoles +
+ * (viewer/member/manager × view/update/delete/assignProjectRoles +
  * cross-org deny + unsupported-scope narrowing) but expressed against the
  * SHADOW branch, not against the engine itself. If the engine drifts, both
  * this suite AND ProjectPolicyOracleTest will surface the regression; if
@@ -126,7 +126,7 @@ class AuthzPilotParityTest extends TestCase
 
     // =====================================================================
     // 1. PARITY: project_viewer legacy grant mirrored to new path
-    //    Expected: view=true, update/delete/manageMembers/assignRoles=false
+    //    Expected: view=true, update/delete/assignProjectRoles=false
     //    Legacy grant via ScopedRole(project, viewer) on the project.
     //    New-path mirror: role + view permission + 'all' assignment +
     //    authorization_record_rules.eq(id=project.id) for view.
@@ -159,7 +159,7 @@ class AuthzPilotParityTest extends TestCase
             'project_viewer must be allowed to view the scoped project.'
         );
 
-        // update, delete, manageMembers, assignRoles — both deny (no permission
+        // update, delete, assignProjectRoles — both deny (no permission
         // row for these actions on the mirror role). No exception expected.
         $this->assertFalse(
             AccessDecision::can($user, Capability::PROJECTS_EDIT, $project),
@@ -579,9 +579,9 @@ class AuthzPilotParityTest extends TestCase
             'Viewer delete parity.'
         );
         $this->assertSame(
-            (new ProjectPolicy)->manageMembers($viewer, $project),
-            AccessDecision::can($viewer, Capability::PROJECTS_MANAGE_MEMBERS, $project),
-            'Viewer manageMembers parity.'
+            (new ProjectPolicy)->assignProjectRoles($viewer, $project),
+            AccessDecision::can($viewer, Capability::PROJECTS_ASSIGN_ROLES, $project),
+            'Viewer assignProjectRoles parity.'
         );
 
         // ---- project_manager on the project ----
@@ -601,8 +601,8 @@ class AuthzPilotParityTest extends TestCase
         );
         $this->mirrorProjectScopedGrant(
             user: $manager,
-            roleKey: 'pilot_subset_manager_manage_members',
-            action: 'manage_members',
+            roleKey: 'pilot_subset_manager_assign_roles',
+            action: 'assign_roles',
             projectId: (int) $project->id,
         );
 
@@ -617,9 +617,9 @@ class AuthzPilotParityTest extends TestCase
             'Manager update parity.'
         );
         $this->assertSame(
-            (new ProjectPolicy)->manageMembers($manager, $project),
-            AccessDecision::can($manager, Capability::PROJECTS_MANAGE_MEMBERS, $project),
-            'Manager manageMembers parity.'
+            (new ProjectPolicy)->assignProjectRoles($manager, $project),
+            AccessDecision::can($manager, Capability::PROJECTS_ASSIGN_ROLES, $project),
+            'Manager assignProjectRoles parity.'
         );
         $this->assertSame(
             (new ProjectPolicy)->delete($manager, $project),

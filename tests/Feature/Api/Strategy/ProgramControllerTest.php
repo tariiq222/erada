@@ -666,11 +666,13 @@ class ProgramControllerTest extends TestCase
             'organization_id' => $orgA->id,
             'department_id' => $deptA->id,
             'program_id' => null,
+            'status' => 'in_progress',
         ]);
         $projectB = Project::factory()->create([
             'organization_id' => $orgB->id,
             'department_id' => $deptB->id,
             'program_id' => null,
+            'status' => 'in_progress',
         ]);
 
         return compact('actor', 'programA', 'projectA', 'programB', 'projectB');

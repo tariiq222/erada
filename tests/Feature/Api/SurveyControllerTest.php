@@ -31,6 +31,7 @@ class SurveyControllerTest extends TestCase
 
         $this->user = User::factory()->create([
             'department_id' => $this->department->id,
+            'organization_id' => $this->department->organization_id,
             'is_active' => true,
         ]);
         $this->user->assignRole('super_admin');
