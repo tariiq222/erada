@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Contracts\CapabilityProvider;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
@@ -15,9 +16,9 @@ use Tests\TestCase;
  * AuthMeCapabilitiesTest — Phase 2 of ADR-UNIFIED-ROLE-ACCESS, advanced through
  * Phase 9.3 (2026-07-05).
  *
- * The /api/user (auth/me) payload exposes canonical, engine-derived keys:
- *   - `capabilities`: the canonical module.action list the user effectively
- *     holds (engine-derived, single form, one source of truth).
+ * The /api/user (auth/me) payload exposes engine-derived keys:
+ *   - `capabilities`: the canonical Capability::all() list the user effectively
+ *     holds, plus module-owned provider wire flags kept for compatibility.
  *   - `access`: a structured `{module: {action: true}}` projection derived
  *     only from canonical capabilities — the read-side object consumed by the
  *     SPA `useCan` / `useAccess` hooks.
@@ -40,7 +41,7 @@ class AuthMeCapabilitiesTest extends TestCase
         $this->seed(RolesAndPermissionsSeeder::class);
     }
 
-    public function test_auth_me_returns_canonical_capabilities_key(): void
+    public function test_auth_me_returns_engine_capabilities_key(): void
     {
         $user = User::factory()->create(['is_active' => true]);
         $user->assignRole('super_admin');
@@ -55,10 +56,7 @@ class AuthMeCapabilitiesTest extends TestCase
         // Canonical module.action form present.
         $this->assertContains(Capability::PROJECTS_VIEW, $capabilities);
         $this->assertContains(Capability::TASKS_VIEW, $capabilities);
-        // Every entry is a canonical module.action string (no legacy flat names).
-        foreach ($capabilities as $cap) {
-            $this->assertMatchesRegularExpression('/^[a-z_]+\.[a-z_]+$/', $cap, "capability '{$cap}' is not module.action form");
-        }
+        $this->assertEveryCapabilityIsKnownAuthMeWireKey($capabilities, $user);
     }
 
     public function test_capabilities_is_coherent_with_access_map(): void
@@ -254,5 +252,35 @@ class AuthMeCapabilitiesTest extends TestCase
         $this->assertArrayHasKey('access', $payload);
         $this->assertIsArray($payload['access']);
         $this->assertSame([], $payload['access']);
+    }
+
+    /**
+     * @param  array<int, string>  $capabilities
+     */
+    private function assertEveryCapabilityIsKnownAuthMeWireKey(array $capabilities, User $user): void
+    {
+        $known = array_fill_keys(Capability::all(), true);
+
+        foreach (app()->tagged('engined_capability_providers') as $provider) {
+            if (! $provider instanceof CapabilityProvider) {
+                continue;
+            }
+
+            foreach (array_keys($provider->userCapabilities($user)) as $wireKey) {
+                $known[$wireKey] = true;
+            }
+        }
+
+        foreach ($capabilities as $cap) {
+            $this->assertArrayHasKey($cap, $known, "capability '{$cap}' is not a known auth/me wire key");
+
+            if (str_contains($cap, '.')) {
+                $this->assertMatchesRegularExpression('/^[a-z_]+(?:\.[a-z_]+)+$/', $cap, "capability '{$cap}' is not dotted form");
+
+                continue;
+            }
+
+            $this->assertMatchesRegularExpression('/^[a-z_]+(?:_[a-z_]+)+$/', $cap, "capability '{$cap}' is not legacy flat form");
+        }
     }
 }

@@ -75,6 +75,7 @@ class ActivityLogPrivacyTest extends TestCase
             'scope_id' => $organization->id,
             'role' => 'admin',
             'reason' => 'Privacy test',
+            'organization_id' => $organization->id,
         ]);
     }
 
@@ -163,10 +164,10 @@ class ActivityLogPrivacyTest extends TestCase
     }
 
     // ============================================================
-    // T-E + T-B side-effect: GET /api/activity-logs* requires audit.view;
+    // T-E + T-B side-effect: GET /api/activity-logs requires audit.view;
     // a plain viewer (no capability) must get 403, unauthenticated must get
-    // 401. CSV export (the default format) must redact the same sensitive
-    // fields as JSON.
+    // 401. Single-row show is same-org scoped and still redacted. CSV export
+    // (the default format) must redact the same sensitive fields as JSON.
     // ============================================================
 
     public function test_activity_log_index_denies_user_without_audit_view_capability(): void
@@ -192,16 +193,23 @@ class ActivityLogPrivacyTest extends TestCase
         $this->getJson('/api/activity-logs')->assertStatus(401);
     }
 
-    public function test_activity_log_show_denies_user_without_audit_view_capability(): void
+    public function test_activity_log_show_allows_same_org_user_without_audit_view_capability_using_redacted_resource(): void
     {
         $unprivileged = User::factory()->create([
             'organization_id' => $this->user->organization_id,
             'is_active' => true,
         ]);
 
-        $this->actingAs($unprivileged, 'sanctum')
-            ->getJson("/api/activity-logs/{$this->activityLog->id}")
-            ->assertStatus(403);
+        $response = $this->actingAs($unprivileged, 'sanctum')
+            ->getJson("/api/activity-logs/{$this->activityLog->id}");
+
+        $response->assertOk()
+            ->assertJsonPath('data.old_values.token', '[REDACTED]')
+            ->assertJsonPath('data.new_values.patient_file_number', '[REDACTED]')
+            ->assertJsonMissingPath('data.ip_address')
+            ->assertJsonMissingPath('data.user.email');
+
+        $this->assertSafeActivityLogPayload($response->getContent());
     }
 
     public function test_activity_log_csv_export_uses_redacted_resource_columns(): void

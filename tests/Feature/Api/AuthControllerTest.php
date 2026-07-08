@@ -46,9 +46,12 @@ class AuthControllerTest extends TestCase
                     'name',
                     'email',
                     'roles',
-                    'permissions',
+                    'capabilities',
+                    'access',
+                    'scoped_roles',
                 ],
             ])
+            ->assertJsonMissingPath('user.permissions')
             ->assertJsonMissingPath('token')
             ->assertCookie('auth_token');
     }

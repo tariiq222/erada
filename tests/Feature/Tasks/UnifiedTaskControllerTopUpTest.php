@@ -84,6 +84,7 @@ class UnifiedTaskControllerTopUpTest extends TestCase
             'description' => 'Task created for controller top-up',
             'old_values' => [],
             'new_values' => ['title' => $task->title],
+            'organization_id' => $this->department->organization_id,
         ]);
 
         $this->actingAs($this->admin, 'sanctum')

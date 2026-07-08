@@ -232,7 +232,7 @@ class SensitiveDenyOverrideTest extends TestCase
             $permissions = array_merge($permissions, $byAction(['manage_members', 'assign_roles']));
         }
         if (! empty($flags['can_view_confidential'])) {
-            $permissions[] = Capability::OVR_VIEW_CONFIDENTIAL;
+            $permissions[] = Capability::OVR_CONFIDENTIAL;
         }
 
         return array_values(array_unique($permissions));

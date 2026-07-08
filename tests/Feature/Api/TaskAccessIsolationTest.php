@@ -111,7 +111,7 @@ class TaskAccessIsolationTest extends TestCase
                 'level' => 0,
                 'permissions' => json_encode($this->expandFlags([
                     'projects.view', 'projects.edit', 'projects.manage_members', 'projects.assign_roles',
-                    'tasks.view', 'tasks.create', 'tasks.edit', 'tasks.delete', 'tasks.complete',
+                    'tasks.view', 'tasks.create', 'tasks.edit', 'tasks.delete', 'tasks.complete', Capability::TASKS_ASSIGN,
                 ], ['can_manage_members' => true, 'can_edit' => true, 'can_delete' => false, 'can_view_all' => true])),
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -159,6 +159,18 @@ class TaskAccessIsolationTest extends TestCase
                 ->where('scope_type_id', $scopeType->id)
                 ->where('role_key', $role['role_key'])
                 ->exists();
+
+            if ($exists) {
+                DB::table('scoped_role_definitions')
+                    ->where('scope_type_id', $scopeType->id)
+                    ->where('role_key', $role['role_key'])
+                    ->update([
+                        'permissions' => $role['permissions'],
+                        'updated_at' => $now,
+                    ]);
+
+                continue;
+            }
 
             if (! $exists) {
                 DB::table('scoped_role_definitions')->insert($role);
@@ -351,6 +363,38 @@ class TaskAccessIsolationTest extends TestCase
         $this->assertDatabaseHas('tasks', [
             'id' => $taskA->id,
             'assigned_to' => $sameOrgOutsider->id,
+        ]);
+    }
+
+    public function test_project_manager_of_sibling_project_cannot_assign_task(): void
+    {
+        $deptA = Department::factory()->create(['organization_id' => $this->orgA->id]);
+        $projectA = Project::factory()->create([
+            'organization_id' => $this->orgA->id,
+            'department_id' => $deptA->id,
+        ]);
+        $siblingProject = Project::factory()->create([
+            'organization_id' => $this->orgA->id,
+            'department_id' => $deptA->id,
+        ]);
+        $taskA = Task::factory()->create([
+            'type' => 'project',
+            'project_id' => $projectA->id,
+            'department_id' => $deptA->id,
+        ]);
+        $siblingManager = $this->makeUser($this->orgA, $deptA, 'viewer');
+        $siblingManager->assignProjectRole($siblingProject, ScopedRole::PROJECT_MANAGER, $siblingManager->id);
+        $assignee = $this->makeUser($this->orgA, $deptA, 'viewer');
+
+        $this->actingAs($siblingManager, 'sanctum')
+            ->patchJson("/api/unified-tasks/{$taskA->id}/assign", [
+                'assigned_to' => $assignee->id,
+            ])
+            ->assertStatus(403);
+
+        $this->assertDatabaseMissing('tasks', [
+            'id' => $taskA->id,
+            'assigned_to' => $assignee->id,
         ]);
     }
 

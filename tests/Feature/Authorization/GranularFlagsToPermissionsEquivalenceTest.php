@@ -22,10 +22,12 @@ use Tests\TestCase;
  * retired can_* flag path — for a representative matrix of definitions × capabilities.
  *
  * The "reference oracle" (referenceFlagGrant) is a standalone reimplementation of the
- * OLD engine logic (is_admin_role ⇒ all; permissions[] contains it; can_* flag matches
- * the capability's action). We build the definition via the SAME expansion the migration
- * uses (flag → permissions[]) and assert the new engine grants exactly what the oracle
- * says the old flag path granted. Any divergence means Phase 3 changed a user's grants.
+ * OLD engine logic, updated for the Pass 6 owner-approved confidential exception
+ * (is_admin_role ⇒ all except OVR confidential explicit-grant capabilities;
+ * permissions[] contains it; can_* flag matches the capability's action). We build
+ * the definition via the SAME expansion the migration uses (flag → permissions[]) and
+ * assert the new engine grants exactly what the oracle says the flag path granted.
+ * Any divergence means Phase 3 changed a user's grants outside that exception.
  *
  * Includes the critical LR-005 case: a definition that had ONLY flags set (no
  * permissions[]) — e.g. the legacy member/project_manager viewer role — proving the
@@ -185,9 +187,10 @@ class GranularFlagsToPermissionsEquivalenceTest extends TestCase
     // =========================================================
 
     /**
-     * Standalone reimplementation of the pre-Phase-3 AccessDecision grant logic:
-     *   1. is_admin_role ⇒ all
-     *   2. exact match in explicit permissions[]
+     * Standalone reimplementation of the pre-Phase-3 AccessDecision grant logic,
+     * with the Pass 6 confidential exception:
+     *   1. exact match in explicit permissions[]
+     *   2. is_admin_role ⇒ all except OVR confidential explicit-grant capabilities
      *   3. can_* flag matches the capability's action suffix
      *      (can_view_confidential ⇒ only ovr.view_confidential)
      *
@@ -196,12 +199,15 @@ class GranularFlagsToPermissionsEquivalenceTest extends TestCase
      */
     private function referenceFlagGrant(array $flags, array $permissions, string $capability): bool
     {
-        if (! empty($flags['is_admin_role'])) {
+        if (in_array($capability, $permissions, true)) {
             return true;
         }
 
-        if (in_array($capability, $permissions, true)) {
-            return true;
+        if (! empty($flags['is_admin_role'])) {
+            return ! in_array($capability, [
+                Capability::OVR_CONFIDENTIAL,
+                Capability::OVR_VIEW_CONFIDENTIAL,
+            ], true);
         }
 
         if ($capability === Capability::OVR_VIEW_CONFIDENTIAL) {

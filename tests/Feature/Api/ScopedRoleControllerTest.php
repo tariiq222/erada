@@ -251,6 +251,6 @@ class ScopedRoleControllerTest extends TestCase
             ->getJson('/api/scoped-roles/audit-logs');
 
         $response->assertStatus(200)
-            ->assertJsonStructure(['data', 'current_page', 'total']);
+            ->assertJsonStructure(['data', 'meta' => ['current_page', 'total']]);
     }
 }

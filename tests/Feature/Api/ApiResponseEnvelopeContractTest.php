@@ -376,6 +376,7 @@ class ApiResponseEnvelopeContractTest extends TestCase
             'scope_id' => $organization->id,
             'role' => 'admin',
             'reason' => 'Privacy test',
+            'organization_id' => $organization->id,
         ]);
 
         return [$user, $activityLog];
