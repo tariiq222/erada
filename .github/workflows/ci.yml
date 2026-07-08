@@ -109,11 +109,20 @@ jobs:
         # which returns `false` on a fresh checkout. Pre-creating these dirs
         # makes `realpath()` return a valid path so the directive registration
         # does not abort the install.
+        #
+        # Pass 5 (Pass 4 follow-up): also pre-create storage/fonts so dompdf
+        # can write its per-machine font cache without a one-shot local
+        # mkdir. The dir is .gitignored (per-machine absolute paths) but
+        # the dompdf writer expects to create .ufm and .ttf copies inside
+        # it on first render. OVR PDF export (test_export_returns_pdf)
+        # would otherwise throw "fopen(.../storage/fonts/ibm_plex_*_*.ufm):
+        # No such file or directory".
         run: |
           mkdir -p storage/framework/views
           mkdir -p storage/framework/cache
           mkdir -p storage/framework/sessions
           mkdir -p storage/logs
+          mkdir -p storage/fonts
           mkdir -p bootstrap/cache
 
       - name: Install dependencies
@@ -257,11 +266,14 @@ jobs:
       - name: Prepare Laravel runtime dirs
         # CI-1: see the matching step in the `test` job — the same package:discover
         # boot path requires these dirs to exist before `composer install` runs.
+        # Pass 5 follow-up: also pre-create storage/fonts for dompdf (see the
+        # `test` job step comment for the rationale).
         run: |
           mkdir -p storage/framework/views
           mkdir -p storage/framework/cache
           mkdir -p storage/framework/sessions
           mkdir -p storage/logs
+          mkdir -p storage/fonts
           mkdir -p bootstrap/cache
 
       - name: Install dependencies

@@ -173,7 +173,11 @@ class RiskServiceTest extends TestCase
         $result = $this->service->deleteRisk($risk);
 
         $this->assertTrue($result);
-        $this->assertDatabaseMissing('project_risks', ['id' => $risk->id]);
+        // ProjectRisk uses SoftDeletes — `delete()` sets deleted_at, not
+        // a hard row drop. assertSoftDeleted matches the contract;
+        // assertDatabaseMissing would always fail because the row
+        // remains in the table with deleted_at populated.
+        $this->assertSoftDeleted('project_risks', ['id' => $risk->id]);
     }
 
     public function test_can_replace_risks(): void
@@ -186,8 +190,11 @@ class RiskServiceTest extends TestCase
             ['description' => 'خطر جديد 2', 'probability' => 'medium', 'impact' => 'medium'],
         ]);
 
+        // Eloquent's relation query applies the SoftDeletes scope by
+        // default, so the count excludes the soft-deleted "خطر قديم"
+        // row and matches the 2 newly-inserted risks.
         $this->assertEquals(2, $project->risks()->count());
-        $this->assertDatabaseMissing('project_risks', ['risk' => 'خطر قديم']);
+        $this->assertSoftDeleted('project_risks', ['risk' => 'خطر قديم']);
         $this->assertDatabaseHas('project_risks', ['risk' => 'خطر جديد 1']);
     }
 

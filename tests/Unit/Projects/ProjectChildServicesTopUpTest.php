@@ -134,7 +134,11 @@ class ProjectChildServicesTopUpTest extends TestCase
         $this->assertSame(['Replacement'], $this->project->risks()->pluck('risk')->all());
 
         $this->project->risks()->first()->delete();
-        $this->assertDatabaseMissing('project_risks', ['risk' => 'Replacement']);
+        // ProjectRisk uses SoftDeletes — `delete()` sets deleted_at, not
+        // a hard row drop. assertSoftDeleted matches the contract;
+        // assertDatabaseMissing would always fail because the row
+        // remains in the table with deleted_at populated.
+        $this->assertSoftDeleted('project_risks', ['risk' => 'Replacement']);
     }
 
     public function test_team_and_stakeholder_services_manage_members_and_stakeholders(): void
