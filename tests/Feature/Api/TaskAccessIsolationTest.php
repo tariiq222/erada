@@ -573,7 +573,11 @@ class TaskAccessIsolationTest extends TestCase
             $permissions = array_merge($permissions, $byAction(['manage_members', 'assign_roles']));
         }
         if (! empty($flags['can_view_confidential'])) {
-            $permissions[] = Capability::OVR_VIEW_CONFIDENTIAL;
+            // Post Direction B: engine reads Capability::OVR_CONFIDENTIAL
+            // (the new key). The legacy OVR_VIEW_CONFIDENTIAL is kept only
+            // as a class-load shim for the already-applied backfill
+            // migration (LR-004). Map the test fixture flag to the new key.
+            $permissions[] = Capability::OVR_CONFIDENTIAL;
         }
 
         return array_values(array_unique($permissions));
