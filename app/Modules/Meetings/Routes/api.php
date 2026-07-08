@@ -4,6 +4,7 @@ use App\Modules\Meetings\Http\Controllers\AgendaItemController;
 use App\Modules\Meetings\Http\Controllers\MeetingAttendeeController;
 use App\Modules\Meetings\Http\Controllers\MeetingCategoryController;
 use App\Modules\Meetings\Http\Controllers\MeetingController;
+use App\Modules\Meetings\Http\Controllers\MeetingResolutionController;
 use App\Modules\Meetings\Http\Controllers\MeetingSettingsController;
 use App\Modules\Meetings\Http\Controllers\NotificationController;
 use App\Modules\Meetings\Http\Controllers\RecommendationController;
@@ -47,6 +48,26 @@ Route::middleware('auth:sanctum')->prefix('recommendations')->group(function () 
 Route::middleware('auth:sanctum')->prefix('meeting-settings')->group(function () {
     Route::get('/', [MeetingSettingsController::class, 'show']);
     Route::put('/', [MeetingSettingsController::class, 'update']);
+});
+
+// Phase 1 / Direction R — typed meeting outputs (recommendation | decision).
+// No approve / reject / adopt / deliberate endpoints by design.
+Route::middleware(['auth:sanctum', 'throttle:sensitive'])->prefix('meetings/{meeting}/resolutions')->group(function () {
+    Route::get('/', [MeetingResolutionController::class, 'indexForMeeting']);
+    Route::post('/', [MeetingResolutionController::class, 'storeForMeeting']);
+});
+
+Route::middleware(['auth:sanctum', 'throttle:sensitive'])->prefix('meeting-resolutions')->group(function () {
+    Route::get('/', [MeetingResolutionController::class, 'index']);
+    Route::get('/{resolution}', [MeetingResolutionController::class, 'show']);
+    Route::patch('/{resolution}', [MeetingResolutionController::class, 'update']);
+    Route::delete('/{resolution}', [MeetingResolutionController::class, 'destroy']);
+    Route::post('/{resolution}/start', [MeetingResolutionController::class, 'start']);
+    Route::post('/{resolution}/hold', [MeetingResolutionController::class, 'hold']);
+    Route::post('/{resolution}/release-hold', [MeetingResolutionController::class, 'releaseHold']);
+    Route::post('/{resolution}/convert-to-tasks', [MeetingResolutionController::class, 'convertToTasks']);
+    Route::post('/{resolution}/complete', [MeetingResolutionController::class, 'complete']);
+    Route::post('/{resolution}/cancel', [MeetingResolutionController::class, 'cancel']);
 });
 
 Route::middleware('auth:sanctum')->prefix('meeting-categories')->group(function () {

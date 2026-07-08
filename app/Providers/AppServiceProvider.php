@@ -19,8 +19,10 @@ use App\Modules\HR\Policies\EmployeeCertificatePolicy;
 use App\Modules\HR\Policies\EmployeePersonalInfoPolicy;
 use App\Modules\HR\Policies\EmployeeProfilePolicy;
 use App\Modules\Meetings\Models\Meeting;
+use App\Modules\Meetings\Models\MeetingResolution;
 use App\Modules\Meetings\Models\Recommendation;
 use App\Modules\Meetings\Policies\MeetingPolicy;
+use App\Modules\Meetings\Policies\MeetingResolutionPolicy;
 use App\Modules\Meetings\Policies\RecommendationPolicy;
 use App\Modules\OVR\Models\IncidentReport;
 use App\Modules\OVR\Policies\IncidentReportPolicy;
@@ -128,6 +130,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Survey::class, SurveyPolicy::class);
         Gate::policy(Meeting::class, MeetingPolicy::class);
         Gate::policy(Recommendation::class, RecommendationPolicy::class);
+        Gate::policy(MeetingResolution::class, MeetingResolutionPolicy::class);
         Gate::policy(ActivityLog::class, ActivityLogPolicy::class);
 
         // Super Admin يتجاوز جميع الصلاحيات

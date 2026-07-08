@@ -22,20 +22,31 @@ use App\Modules\Core\Models\User;
  * Record-scoped checks happen at the FormRequest authorize() / Policy layer.
  *
  * Wire keys (canonical after Phase 5.A):
- *   - meetings.view             <-> Capability::MEETINGS_VIEW
- *   - meetings.create           <-> Capability::MEETINGS_CREATE
- *   - meetings.edit             <-> Capability::MEETINGS_EDIT
- *   - meetings.delete           <-> Capability::MEETINGS_DELETE
- *   - meetings.record_decisions <-> Capability::MEETINGS_RECORD_DECISIONS
- *   - recommendations.view      <-> Capability::RECOMMENDATIONS_VIEW
- *   - recommendations.create    <-> Capability::RECOMMENDATIONS_CREATE
- *   - recommendations.edit      <-> Capability::RECOMMENDATIONS_EDIT
- *   - recommendations.delete    <-> Capability::RECOMMENDATIONS_DELETE
- *   - recommendations.approve   <-> Capability::RECOMMENDATIONS_APPROVE
- *   - recommendations.reject    <-> Capability::RECOMMENDATIONS_REJECT
- *   - recommendations.defer     <-> Capability::RECOMMENDATIONS_DEFER
- *   - recommendations.accept    <-> Capability::RECOMMENDATIONS_ACCEPT
- *   - recommendations.complete  <-> Capability::RECOMMENDATIONS_COMPLETE
+ *   - meetings.view                          <-> Capability::MEETINGS_VIEW
+ *   - meetings.create                        <-> Capability::MEETINGS_CREATE
+ *   - meetings.edit                          <-> Capability::MEETINGS_EDIT
+ *   - meetings.delete                        <-> Capability::MEETINGS_DELETE
+ *   - meetings.record_decisions              <-> Capability::MEETINGS_RECORD_DECISIONS
+ *   - recommendations.view                   <-> Capability::RECOMMENDATIONS_VIEW
+ *   - recommendations.create                 <-> Capability::RECOMMENDATIONS_CREATE
+ *   - recommendations.edit                   <-> Capability::RECOMMENDATIONS_EDIT
+ *   - recommendations.delete                 <-> Capability::RECOMMENDATIONS_DELETE
+ *   - recommendations.approve                <-> Capability::RECOMMENDATIONS_APPROVE
+ *   - recommendations.reject                 <-> Capability::RECOMMENDATIONS_REJECT
+ *   - recommendations.defer                  <-> Capability::RECOMMENDATIONS_DEFER
+ *   - recommendations.accept                 <-> Capability::RECOMMENDATIONS_ACCEPT
+ *   - recommendations.complete               <-> Capability::RECOMMENDATIONS_COMPLETE
+ *
+ * Phase 1 / Direction R additions (Meeting Resolutions Foundation):
+ *   - meeting_resolutions.view               <-> Capability::MEETING_RESOLUTIONS_VIEW
+ *   - meeting_resolutions.create             <-> Capability::MEETING_RESOLUTIONS_CREATE
+ *   - meeting_resolutions.update             <-> Capability::MEETING_RESOLUTIONS_UPDATE
+ *   - meeting_resolutions.delete             <-> Capability::MEETING_RESOLUTIONS_DELETE
+ *   - meeting_resolutions.hold               <-> Capability::MEETING_RESOLUTIONS_HOLD
+ *   - meeting_resolutions.release_hold       <-> Capability::MEETING_RESOLUTIONS_RELEASE_HOLD
+ *   - meeting_resolutions.convert_to_tasks   <-> Capability::MEETING_RESOLUTIONS_CONVERT_TO_TASKS
+ *   - meeting_resolutions.complete           <-> Capability::MEETING_RESOLUTIONS_COMPLETE
+ *   - meeting_resolutions.cancel             <-> Capability::MEETING_RESOLUTIONS_CANCEL
  */
 class MeetingsCapabilityProvider implements CapabilityProvider
 {
@@ -56,6 +67,15 @@ class MeetingsCapabilityProvider implements CapabilityProvider
             Capability::RECOMMENDATIONS_DEFER => AccessDecision::can($user, Capability::RECOMMENDATIONS_DEFER),
             Capability::RECOMMENDATIONS_ACCEPT => AccessDecision::can($user, Capability::RECOMMENDATIONS_ACCEPT),
             Capability::RECOMMENDATIONS_COMPLETE => AccessDecision::can($user, Capability::RECOMMENDATIONS_COMPLETE),
+            Capability::MEETING_RESOLUTIONS_VIEW => AccessDecision::can($user, Capability::MEETING_RESOLUTIONS_VIEW),
+            Capability::MEETING_RESOLUTIONS_CREATE => AccessDecision::can($user, Capability::MEETING_RESOLUTIONS_CREATE),
+            Capability::MEETING_RESOLUTIONS_UPDATE => AccessDecision::can($user, Capability::MEETING_RESOLUTIONS_UPDATE),
+            Capability::MEETING_RESOLUTIONS_DELETE => AccessDecision::can($user, Capability::MEETING_RESOLUTIONS_DELETE),
+            Capability::MEETING_RESOLUTIONS_HOLD => AccessDecision::can($user, Capability::MEETING_RESOLUTIONS_HOLD),
+            Capability::MEETING_RESOLUTIONS_RELEASE_HOLD => AccessDecision::can($user, Capability::MEETING_RESOLUTIONS_RELEASE_HOLD),
+            Capability::MEETING_RESOLUTIONS_CONVERT_TO_TASKS => AccessDecision::can($user, Capability::MEETING_RESOLUTIONS_CONVERT_TO_TASKS),
+            Capability::MEETING_RESOLUTIONS_COMPLETE => AccessDecision::can($user, Capability::MEETING_RESOLUTIONS_COMPLETE),
+            Capability::MEETING_RESOLUTIONS_CANCEL => AccessDecision::can($user, Capability::MEETING_RESOLUTIONS_CANCEL),
         ];
     }
 }

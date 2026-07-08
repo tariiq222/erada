@@ -13,7 +13,7 @@ import {
   useMeetingView, MeetingOverview, MeetingAttendees,
   MeetingStatusActions, MeetingAgenda,
 } from './view';
-import ResolutionsSection from '@features/meetings/components/ResolutionsSection';
+import ResolutionsSection from '@features/meetings/resolutions/ResolutionsSection';
 
 const MeetingViewSkeleton: React.FC = () => (
   <div className="space-y-4">
@@ -37,6 +37,19 @@ const MeetingView: React.FC = () => {
 
   const canEdit = useCan('meetings.edit');
   const canDelete = useCan('meetings.delete');
+  // Phase 1 / Direction R: the new ResolutionsSection consumes a wider
+  // permission shape than the legacy Recommendation-backed section did.
+  // We grant everything via the engine — `useCan` falls back to
+  // super_admin: true so no extra wiring is needed.
+  const canResView = useCan('meeting_resolutions.view');
+  const canResCreate = useCan('meeting_resolutions.create');
+  const canResUpdate = useCan('meeting_resolutions.update');
+  const canResDelete = useCan('meeting_resolutions.delete');
+  const canResHold = useCan('meeting_resolutions.hold');
+  const canResReleaseHold = useCan('meeting_resolutions.release_hold');
+  const canResConvertToTasks = useCan('meeting_resolutions.convert_to_tasks');
+  const canResComplete = useCan('meeting_resolutions.complete');
+  const canResCancel = useCan('meeting_resolutions.cancel');
 
   if (loading || !meeting) return <MeetingViewSkeleton />;
 
@@ -90,8 +103,16 @@ const MeetingView: React.FC = () => {
       <ResolutionsSection
         meetingId={meeting.id}
         permissions={{
-          canView: true,
-          canCreate: canEdit,
+          canView: canResView,
+          canCreate: canResCreate,
+          canUpdate: canResUpdate,
+          canDelete: canResDelete,
+          canStart: canResUpdate,
+          canHold: canResHold,
+          canReleaseHold: canResReleaseHold,
+          canConvertToTasks: canResConvertToTasks,
+          canComplete: canResComplete,
+          canCancel: canResCancel,
         }}
       />
 

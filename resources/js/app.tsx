@@ -114,6 +114,9 @@ const RecommendationForm = lazy(
 const NotificationsList = lazy(
 	() => import("./pages/strategy/meetings/notifications/NotificationsList"),
 );
+const ResolutionsPage = lazy(
+	() => import("./pages/strategy/meetings/resolutions/ResolutionsPage"),
+);
 const PerformanceKPIsList = lazy(
 	() => import("./pages/performance/KPIsList"),
 );
@@ -984,6 +987,18 @@ const App: React.FC = () => {
 																}}
 															>
 																<NotificationsList />
+															</RequirePermission>
+														}
+													/>
+													<Route
+														path="/strategy/meetings/resolutions"
+														element={
+															<RequirePermission
+																config={{
+																	permission: "meeting_resolutions.view",
+																}}
+															>
+																<ResolutionsPage />
 															</RequirePermission>
 														}
 													/>
