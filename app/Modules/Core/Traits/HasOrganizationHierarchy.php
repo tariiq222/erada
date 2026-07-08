@@ -207,4 +207,62 @@ trait HasOrganizationHierarchy
 
         return $this->activeChildren()->count();
     }
+
+    // ========== Phase 9-D-B: Read-only ancestor walk ==========
+    //
+    // هذه الدالة للقراءة فقط. تُستخدم في AccessDecision::crossOrgClusterTreeAdmitted()
+    // لتحديد ما إذا كانت مؤسسة المستخدم (parent org) تَستطيع رؤية target في
+    // مؤسسة تابعة. لا تمس شجرة المنظمات داخل المحرك — يبقى المحرك strict equality.
+    // لا تستخدم materialized path.
+
+    /**
+     * مصفوفة بأسماء الـ ids لكل الأسلاف (parents حتى الجذر) + الـ self.
+     *
+     * القواعد:
+     *   - إذا parent_id = null: ترجع [id_self] فقط.
+     *   - إذا parent_id يشير لمؤسسة موجودة: تصعد حتى parent_id = null.
+     *   - depth cap = 32 (متماثل مع buildScopeChain).
+     *   - cycle guard: visited set — يقطع fail-closed عند الحلقة.
+     *   - لا تطلق query جديد على self بعد الحل (الـ row قد يكون غير محفوظ).
+     *
+     * @return list<int>
+     */
+    public function ancestorIds(): array
+    {
+        if (! $this->exists) {
+            return [];
+        }
+
+        $result = [(int) $this->getKey()];
+        $visited = [(int) $this->getKey() => true];
+        $current = $this;
+
+        // استخدم parent_id column مباشرة (لا تعتمد على relation::$parent()
+        // لتجنّب تحميل lazy غير ضروري).
+        for ($depth = 0; $depth < 32; $depth++) {
+            $parentId = $current->getAttribute('parent_id');
+            if ($parentId === null) {
+                break;
+            }
+
+            $parentId = (int) $parentId;
+            if (isset($visited[$parentId])) {
+                // cycle — fail-closed
+                break;
+            }
+            $visited[$parentId] = true;
+
+            $parent = static::query()->find($parentId);
+            if ($parent === null) {
+                // parent_id يشير لسجل محذوف (FK CASCADE / SET NULL لم يحدث)
+                // fail-closed: نكسر الحل هنا.
+                break;
+            }
+
+            $result[] = $parentId;
+            $current = $parent;
+        }
+
+        return $result;
+    }
 }

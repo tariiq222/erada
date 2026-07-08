@@ -600,4 +600,57 @@ class OrganizationHierarchyTest extends TestCase
         $org = new Organization;
         $this->assertSame(0, $org->activeChildrenCount());
     }
+
+    // ===========================================================
+    // 10. Phase 9-D-B — ancestorIds() helper (read-only walk)
+    // ===========================================================
+
+    public function test_ancestor_ids_returns_self_for_root(): void
+    {
+        $root = Organization::factory()->create();
+
+        $ancestors = $root->ancestorIds();
+
+        $this->assertSame([$root->id], $ancestors);
+    }
+
+    public function test_ancestor_ids_walks_up_parent_chain(): void
+    {
+        $root = Organization::factory()->create();
+        $middle = Organization::factory()->childOf($root)->create();
+        $leaf = Organization::factory()->childOf($middle)->create();
+
+        $ancestors = $leaf->ancestorIds();
+
+        $this->assertSame([$leaf->id, $middle->id, $root->id], $ancestors);
+    }
+
+    public function test_ancestor_ids_fails_closed_on_cycle(): void
+    {
+        // محاكاة cycle عن طريق تحديث parent_id مباشرة في DB (يتجاوز الـ CHECK)
+        $a = Organization::factory()->create();
+        $b = Organization::factory()->create();
+
+        // CHECK constraint في Phase 9-B يمنع parent_id = id، لكن لا يمنع
+        // a → b → a cycle. ننشئه يدوياً عن طريق DB::table.
+        DB::table('organizations')->where('id', $a->id)->update(['parent_id' => $b->id]);
+        DB::table('organizations')->where('id', $b->id)->update(['parent_id' => $a->id]);
+
+        // ancestorIds على a: يضيف a، يصعد إلى b، يصعد إلى a (cycle detected)
+        // → fail-closed: يتوقف عند b، يعيد [a.id, b.id]
+        $ancestors = $a->fresh()->ancestorIds();
+        $this->assertContains($a->id, $ancestors);
+        $this->assertContains($b->id, $ancestors);
+        // لا يجب أن يدخل حلقة لا نهائية
+        $this->assertLessThan(10, count($ancestors));
+    }
+
+    public function test_ancestor_ids_returns_empty_for_unsaved_instance(): void
+    {
+        $org = new Organization;
+
+        $ancestors = $org->ancestorIds();
+
+        $this->assertSame([], $ancestors);
+    }
 }

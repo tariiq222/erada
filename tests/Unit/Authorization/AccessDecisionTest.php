@@ -4,6 +4,7 @@ namespace Tests\Unit\Authorization;
 
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Contracts\SensitivelyScoped;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\ScopedRoleDefinition;
@@ -607,5 +608,246 @@ class AccessDecisionTest extends TestCase
         );
 
         return [$user, $roleDefinition];
+    }
+
+    // =========================================================
+    // Phase 9-D-B — Minimal cluster_tree engine primitive
+    // =========================================================
+    //
+    // NOTE: هذه الاختبارات تستخدم Capability::CLUSTER_TREE_VIEW فقط.
+    // لا تختبر users.view / projects.view / meetings.view — لأن Phase 9-D-B
+    // لا يُفعّل رؤية بيانات الموديولات. الـ primitive يثبت فقط أن rescue branch
+    // يسمح لـ user في parent cluster (مع grant صريح) باجتياز org_isolation_denied
+    // عند استخدام CLUSTER_TREE_VIEW على target في child org.
+
+    /**
+     * Helper: إنشاء ScopedRoleDefinition مع permissions مخصّصة، ثم منحها
+     * للمستخدم على organization. السبب: assignScopedRole لا يقبل permissions
+     * ولا يضبط role_definition_id — فلو استعملناه، الـ engine لا يجد الـ
+     * definition عبر الـ relation ولا عبر findByKey (في بيئة الاختبار).
+     */
+    private function grantClusterTreeRole(User $user, Organization $org): ScopedRoleDefinition
+    {
+        $roleKey = 'cluster_tree_viewer';
+
+        $scopeType = ScopeType::firstOrCreate(
+            ['key' => 'organization'],
+            [
+                'label_ar' => 'organization',
+                'label_en' => 'organization',
+                'model_class' => Organization::class,
+                'supports_hierarchy' => true,
+                'is_active' => true,
+                'sort_order' => 0,
+            ],
+        );
+
+        $defId = DB::table('scoped_role_definitions')->insertGetId([
+            'name' => $roleKey,
+            'scope_type' => 'organization',
+            'scope_type_id' => $scopeType->id,
+            'display_name' => $roleKey,
+            'description' => 'Phase 9-D-B test role: grants only CLUSTER_TREE_VIEW',
+            'role_key' => $roleKey,
+            'permissions' => json_encode([Capability::CLUSTER_TREE_VIEW]),
+            'reach' => json_encode(['core' => 'all']),
+            'is_admin_role' => false,
+            'is_active' => true,
+            'sort_order' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // أنشئ ScopedRole مباشرة في DB (نمرّ عبر fillable لتجنّب role_definition_id
+        // غير الموجود في model_has_scoped_roles). هذا يضمن أن الـ engine
+        // يستعمل findByKey() في الـ fallback path.
+        DB::table('model_has_scoped_roles')->insert([
+            'user_id' => $user->id,
+            'role' => $roleKey,
+            'scope_type' => ScopedRole::SCOPE_ORGANIZATION,
+            'scope_id' => $org->id,
+            'inherit_to_children' => true,
+            'granted_by' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // امسح الـ cache — findByKey() يقرأ من cache tags
+        Cache::flush();
+
+        return ScopedRoleDefinition::findOrFail($defId);
+    }
+
+    #[Test]
+    public function cluster_user_with_grant_can_see_child_org_target(): void
+    {
+        $cluster = Organization::factory()->cluster()->create();
+        $child = Organization::factory()->hospital()->childOf($cluster)->create();
+        $childProject = Project::factory()->create([
+            'organization_id' => $child->id,
+            'department_id' => Department::factory()->create(['organization_id' => $child->id])->id,
+        ]);
+
+        $user = User::factory()->create(['organization_id' => $cluster->id]);
+        $this->grantClusterTreeRole($user, $cluster);
+
+        $this->assertTrue(
+            AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW, $childProject),
+            'cluster user with CLUSTER_TREE_VIEW grant should see child org target'
+        );
+    }
+
+    #[Test]
+    public function cluster_user_without_grant_cannot_see_child_org_target(): void
+    {
+        $cluster = Organization::factory()->cluster()->create();
+        $child = Organization::factory()->hospital()->childOf($cluster)->create();
+        $childProject = Project::factory()->create([
+            'organization_id' => $child->id,
+            'department_id' => Department::factory()->create(['organization_id' => $child->id])->id,
+        ]);
+
+        $user = User::factory()->create(['organization_id' => $cluster->id]);
+        // بدون grant — لا role على cluster
+
+        $this->assertFalse(
+            AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW, $childProject),
+            'cluster user without grant must NOT see child org target via cluster_tree'
+        );
+
+        $this->assertFalse(
+            AccessDecision::can($user, Capability::PROJECTS_VIEW, $childProject),
+            'cross-org access without grant must remain denied'
+        );
+    }
+
+    #[Test]
+    public function cluster_user_cannot_see_sibling_cluster_target(): void
+    {
+        $clusterA = Organization::factory()->cluster()->create();
+        $clusterB = Organization::factory()->cluster()->create();
+        $childB = Organization::factory()->hospital()->childOf($clusterB)->create();
+        $childBProject = Project::factory()->create([
+            'organization_id' => $childB->id,
+            'department_id' => Department::factory()->create(['organization_id' => $childB->id])->id,
+        ]);
+
+        $userA = User::factory()->create(['organization_id' => $clusterA->id]);
+        $this->grantClusterTreeRole($userA, $clusterA);
+
+        $this->assertFalse(
+            AccessDecision::can($userA, Capability::CLUSTER_TREE_VIEW, $childBProject),
+            'cluster_tree is one-directional: clusterA cannot see clusterB subtree'
+        );
+    }
+
+    #[Test]
+    public function child_user_cannot_see_parent_cluster_data_via_cluster_tree(): void
+    {
+        $cluster = Organization::factory()->cluster()->create();
+        $child = Organization::factory()->hospital()->childOf($cluster)->create();
+        $clusterProject = Project::factory()->create([
+            'organization_id' => $cluster->id,
+            'department_id' => Department::factory()->create(['organization_id' => $cluster->id])->id,
+        ]);
+
+        $childUser = User::factory()->create(['organization_id' => $child->id]);
+        $this->grantClusterTreeRole($childUser, $child);
+
+        $this->assertFalse(
+            AccessDecision::can($childUser, Capability::CLUSTER_TREE_VIEW, $clusterProject),
+            'child user must NOT see parent cluster data via cluster_tree (no reverse visibility)'
+        );
+    }
+
+    #[Test]
+    public function cluster_tree_rescue_only_fires_when_strict_equality_would_deny(): void
+    {
+        $org = Organization::factory()->create();
+        $project = Project::factory()->create([
+            'organization_id' => $org->id,
+            'department_id' => Department::factory()->create(['organization_id' => $org->id])->id,
+        ]);
+
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $this->grantClusterTreeRole($user, $org);
+
+        // target في نفس org — rescue branch لا يجب أن يطلق (same-org handled by strict eq)
+        $trace = AccessDecision::whyCan($user, Capability::CLUSTER_TREE_VIEW, $project);
+        $this->assertTrue($trace['granted']);
+        $this->assertNotSame(
+            'cluster_tree_rescue',
+            $trace['layer'],
+            'cluster_tree_rescue must not fire for same-org target (strict eq handles it)'
+        );
+    }
+
+    #[Test]
+    public function cluster_tree_rescue_does_not_bypass_sensitive_floor_for_ovr(): void
+    {
+        $cluster = Organization::factory()->cluster()->create();
+        $child = Organization::factory()->hospital()->childOf($cluster)->create();
+
+        $user = User::factory()->create(['organization_id' => $cluster->id]);
+        $this->grantClusterTreeRole($user, $cluster);
+
+        // نموذج stub يطبّق SensitivelyScoped لتجنّب أعمدة OVR NOT NULL العديدة.
+        // المهم: هو Model + SensitivelyScoped + organization_id.
+        $sensitiveTarget = new Phase9DbSensitiveStubTarget;
+        $sensitiveTarget->organization_id = $child->id;
+        $sensitiveTarget->exists = true;
+
+        $trace = AccessDecision::whyCan($user, Capability::CLUSTER_TREE_VIEW, $sensitiveTarget);
+        $this->assertFalse(
+            $trace['granted'],
+            'CRITICAL: cluster_tree must NOT rescue sensitive (SensitivelyScoped) targets'
+        );
+        $this->assertNotSame('cluster_tree_rescue', $trace['layer']);
+    }
+
+    #[Test]
+    public function cluster_tree_grant_is_auditable_in_why_can_layer(): void
+    {
+        $cluster = Organization::factory()->cluster()->create();
+        $child = Organization::factory()->hospital()->childOf($cluster)->create();
+        $childProject = Project::factory()->create([
+            'organization_id' => $child->id,
+            'department_id' => Department::factory()->create(['organization_id' => $child->id])->id,
+        ]);
+
+        $user = User::factory()->create(['organization_id' => $cluster->id]);
+        $this->grantClusterTreeRole($user, $cluster);
+
+        $trace = AccessDecision::whyCan($user, Capability::CLUSTER_TREE_VIEW, $childProject);
+        $this->assertTrue($trace['granted']);
+        $this->assertSame('cluster_tree_rescue', $trace['layer']);
+        $this->assertStringContainsString('cluster', $trace['reason']);
+    }
+}
+
+/**
+ * Phase9DbSensitiveStubTarget — stub model لـ Sensitive test فقط.
+ * ينفّذ SensitivelyScoped ويعيد true من isSensitive() لإثبات أن rescue branch
+ * لا يتجاوز sensitive floor. organization_id property تكفي لـ extractOrganizationId.
+ *
+ * السبب: استخدام IncidentReport يتطلب أعمدة NOT NULL كثيرة (reporter_id,
+ * reporter_name, incident_datetime) — هذا stub يتجنّب ذلك.
+ */
+class Phase9DbSensitiveStubTarget extends Model implements SensitivelyScoped
+{
+    protected $table = 'projects';
+
+    protected $guarded = [];
+
+    public $timestamps = false;
+
+    public function isSensitive(): bool
+    {
+        return true;
+    }
+
+    public function mayAccessSensitive(User $user): bool
+    {
+        return false;
     }
 }
