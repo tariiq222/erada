@@ -20,8 +20,15 @@ use Illuminate\Auth\Access\HandlesAuthorization;
  *   - view() allows AccessDecision::can(CLUSTER_TREE_VIEW, $blocker) as a
  *     second path if and only if the actor holds Capability::STRATEGY_VIEW
  *     + CLUSTER_TREE_VIEW on actor.organization_id.
- *   - create / update / delete / resolve / escalate stay strict same-org
- *     (precheck guard).
+ *
+ * Phase CFA-03 — Cluster tree governance-action widening:
+ *   - resolve / escalate allow AccessDecision::can(CLUSTER_TREE_MANAGE,
+ *     $blocker) as a second path if and only if the actor holds
+ *     Capability::STRATEGY_EDIT + CLUSTER_TREE_MANAGE on
+ *     actor.organization_id. Two explicit checks before the rescue —
+ *     neither primitive implies the other.
+ *   - create / update / delete stay strict same-org (CRUD is OUT of CFA-03
+ *     per CFA-00 owner decision).
  *   - Does not widen to gain write access in any other module.
  */
 class BlockerPolicy
@@ -64,8 +71,10 @@ class BlockerPolicy
      *     grant. Only fires if the actor holds Capability::STRATEGY_VIEW +
      *     CLUSTER_TREE_VIEW on actor.organization_id.
      *
-     * Missing either capability ⇒ deny. Writes are unaffected (they go
-     * through update / delete / create / resolve / escalate).
+     * Missing either capability ⇒ deny. Phase CFA-03 widens the governance
+     * actions (resolve / escalate) via CLUSTER_TREE_MANAGE; CRUD
+     * (update / delete / create) stays strict same-org per CFA-00 owner
+     * decision.
      */
     public function view(User $user, Blocker $blocker): bool
     {
@@ -112,18 +121,54 @@ class BlockerPolicy
     }
 
     /**
-     * Resolve a blocker — strict same-org.
+     * Resolve a blocker.
+     *
+     * Phase CFA-03 — Cluster tree widening (governance actions):
+     *   - same-org: STRATEGY_EDIT on blocker
+     *   - cross-org: STRATEGY_EDIT + CLUSTER_TREE_MANAGE on actor.org
      */
     public function resolve(User $user, Blocker $blocker): bool
     {
-        return AccessDecision::can($user, Capability::STRATEGY_EDIT, $blocker);
+        return $this->clusterManagedAbility($user, $blocker, Capability::STRATEGY_EDIT);
     }
 
     /**
-     * Escalate a blocker — strict same-org.
+     * Escalate a blocker.
+     *
+     * Phase CFA-03 — Cluster tree widening (governance actions):
+     *   - same-org: STRATEGY_EDIT on blocker
+     *   - cross-org: STRATEGY_EDIT + CLUSTER_TREE_MANAGE on actor.org
      */
     public function escalate(User $user, Blocker $blocker): bool
     {
-        return AccessDecision::can($user, Capability::STRATEGY_EDIT, $blocker);
+        return $this->clusterManagedAbility($user, $blocker, Capability::STRATEGY_EDIT);
+    }
+
+    /**
+     * Phase CFA-03 — Two-path cluster_tree.manage rescue for governance
+     * actions on blockers (resolve / escalate).
+     *
+     * Mirrors the CFA-00 view() pattern: same-org via engine strict equality
+     * + scoped-role check; cross-org via the engine's cluster_tree rescue
+     * branch which verifies ancestor walk + non-sensitive target. Both
+     * grants are required IN ADDITION TO the actor's authority on the
+     * module write capability — neither primitive implies the other.
+     */
+    protected function clusterManagedAbility(User $user, Blocker $blocker, string $moduleCapability): bool
+    {
+        // Path 1: same-org via engine.
+        if (AccessDecision::can($user, $moduleCapability, $blocker)) {
+            return true;
+        }
+
+        // Path 2: cross-org rescue — both grants required on actor.org.
+        if (! AccessDecision::can($user, $moduleCapability)) {
+            return false;
+        }
+        if (! AccessDecision::can($user, Capability::CLUSTER_TREE_MANAGE)) {
+            return false;
+        }
+
+        return AccessDecision::can($user, Capability::CLUSTER_TREE_MANAGE, $blocker);
     }
 }
