@@ -265,4 +265,63 @@ trait HasOrganizationHierarchy
 
         return $result;
     }
+
+    // ========== Phase 9-D-D1a: Read-only descendant walk ==========
+    //
+    // Used to widen UserKpiScope (and, later, other User*Scope modules) to
+    // include descendant organizations when the user holds
+    // Capability::CLUSTER_TREE_VIEW + the module view capability on
+    // user.organization_id. This does NOT touch the organization tree inside
+    // AccessDecision — the engine stays strict equality + rescue branch.
+    // Does not use a materialized path.
+
+    /**
+     * Ids of every descendant organization (children + grandchildren + …) plus self.
+     *
+     * Rules:
+     *   - If there are no children: returns [self_id] only.
+     *   - Uses BFS over parent_id to avoid deep recursion.
+     *   - depth cap = 32 (matches ancestorIds).
+     *   - cycle guard: visited set — breaks fail-closed on a cycle.
+     *   - Does not query self after resolution (the row may be unsaved).
+     *   - No is_active filter — matches ancestorIds semantics.
+     *
+     * @return list<int>
+     */
+    public function descendantIds(): array
+    {
+        if (! $this->exists) {
+            return [];
+        }
+
+        $result = [(int) $this->getKey()];
+        $visited = [(int) $this->getKey() => true];
+        $currentIds = [(int) $this->getKey()];
+
+        for ($depth = 0; $depth < 32; $depth++) {
+            $childRows = static::query()
+                ->whereIn('parent_id', $currentIds)
+                ->get(['id']);
+
+            $nextIds = [];
+            foreach ($childRows as $child) {
+                $childId = (int) $child->id;
+                if (isset($visited[$childId])) {
+                    // cycle — fail-closed (do not include in result)
+                    continue;
+                }
+                $visited[$childId] = true;
+                $result[] = $childId;
+                $nextIds[] = $childId;
+            }
+
+            if ($nextIds === []) {
+                break;
+            }
+
+            $currentIds = $nextIds;
+        }
+
+        return $result;
+    }
 }
