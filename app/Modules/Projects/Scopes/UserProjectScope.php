@@ -4,6 +4,7 @@ namespace App\Modules\Projects\Scopes;
 
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\Projects\Services\ProjectAuthorizationService;
 use Illuminate\Database\Eloquent\Builder;
@@ -25,6 +26,24 @@ use Illuminate\Database\Eloquent\Builder;
  * المؤسسات أياً كان مستوى الوصول. هذه هي المرجعية الوحيدة لقرار رؤية القوائم
  * (DashboardController / ProjectController / ProjectQueryService) كي لا يختلف
  * نطاق لوحة المعلومات عن نطاق قائمة المشاريع لنفس المستخدم.
+ *
+ * Phase CFA-04 — Cluster Full Authority widening (read-only):
+ *   - When the actor holds BOTH Capability::PROJECTS_VIEW and
+ *     Capability::CLUSTER_TREE_VIEW on actor.organization_id, the strict
+ *     same-org floor widens to include descendant organizations via
+ *     Organization::descendantIds() (BFS via parent_id, depth cap 32,
+ *     fail-closed on cycle).
+ *   - Cluster widening is ADDITIVE: when both grants are held, the
+ *     actor.org floor is replaced with [actor.org] + descendants; the
+ *     remaining OR-logic (direct relations, engine grants, governed
+ *     types, flat-ladder widening) is preserved as-is.
+ *   - Per CFA-00 owner decision (2026-07-09): NO project role/member
+ *     assignment widening (CFA-04 only widens read + governance writes,
+ *     not member assignment).
+ *   - Per CFA-00 owner decision: writes (update / delete / create /
+ *     assignProjectRoles) stay strict same-org; only status / PDCA
+ *     transitions widen via PROJECTS_EDIT + CLUSTER_TREE_MANAGE (handled
+ *     in ProjectPolicy, not here).
  */
 class UserProjectScope
 {
@@ -37,9 +56,14 @@ class UserProjectScope
             return $query;
         }
 
-        // عزل المؤسسة أولاً (يمنع التسرب عبر المؤسسات).
-        if ($user->organization_id) {
-            $query->where('organization_id', $user->organization_id);
+        // Phase CFA-04 — Cluster widening floor.
+        // Default: strict same-org via actor.organization_id. When the actor
+        // holds BOTH PROJECTS_VIEW + CLUSTER_TREE_VIEW on actor.org, the floor
+        // widens to include descendant organizations (via parent_id BFS).
+        // The remainder of the OR-logic below is preserved unchanged.
+        $visibleOrgIds = $this->clusterVisibleOrgIds($user);
+        if ($visibleOrgIds !== []) {
+            $query->whereIn('organization_id', $visibleOrgIds);
         }
 
         // سقف الرؤية المسطّح هو المرجع حين توجد صلاحية مسطّحة: من يملك صلاحية على
@@ -126,5 +150,53 @@ class UserProjectScope
     public function applySimple(Builder $query, User $user): Builder
     {
         return $this->apply($query, $user);
+    }
+
+    /**
+     * Phase CFA-04 — Org floor for the cluster_tree widening (read-only).
+     *
+     * Returns the list of organization ids the actor may see under the
+     * cluster_tree policy for Projects reads.
+     *
+     *   - Default: [actor.organization_id] only (strict same-org) when
+     *     EITHER PROJECTS_VIEW or CLUSTER_TREE_VIEW is missing on actor.org.
+     *     Preserves the pre-CFA-04 same-org behavior for users who do not
+     *     hold both grants — the strict-equality gate remains in force.
+     *
+     *   - Widening (read-only): when the actor holds BOTH
+     *     Capability::PROJECTS_VIEW + Capability::CLUSTER_TREE_VIEW on
+     *     actor.organization_id, descendant organizations (via parent_id
+     *     BFS) are added to the list. CFA-04 is read-only — no widening
+     *     to write paths (CRUD stays strict same-org per CFA-00 owner
+     *     decision).
+     *
+     * Returns an empty array for null-org actors — the engine then fails
+     * closed at the strict-equality gate. super_admin is short-circuited
+     * earlier in apply() and never reaches this helper.
+     *
+     * @return list<int>
+     */
+    protected function clusterVisibleOrgIds(User $user): array
+    {
+        if ($user->organization_id === null) {
+            return [];
+        }
+
+        $orgId = (int) $user->organization_id;
+        $visible = [$orgId];
+
+        // Both grants required to widen cluster_tree. Missing either ⇒ strict same-org.
+        $hasProjectsView = AccessDecision::can($user, Capability::PROJECTS_VIEW);
+        $hasClusterTreeView = AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW);
+        if (! $hasProjectsView || ! $hasClusterTreeView) {
+            return $visible;
+        }
+
+        $org = Organization::query()->find($orgId);
+        if (! $org instanceof Organization) {
+            return $visible;
+        }
+
+        return array_values(array_unique(array_merge($visible, $org->descendantIds())));
     }
 }
