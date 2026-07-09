@@ -4,6 +4,7 @@ namespace App\Modules\Core\Policies;
 
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Support\RoleHierarchy;
 use Illuminate\Auth\Access\HandlesAuthorization;
@@ -148,6 +149,44 @@ class UserPolicy
     }
 
     /**
+     * Phase CFA-07 - Cluster limited directory read gate (HIGH PII).
+     *
+     * Decoupled from `view()` on purpose: `view()` keeps its existing
+     * same-org semantics (returns false for any descendant-org target),
+     * and `viewDirectory()` is the SOLE authz seam for cluster widening to
+     * a directory-shape response (UserDirectoryResource). Returning true
+     * here does NOT enable writes, role assignment, or UserResource - it
+     * only routes the read through the dedicated directory resource.
+     *
+     * Two-path rescue:
+     *   - Capability::USERS_VIEW on actor.organization_id (the actor
+     *     module capability - never implied by cluster_tree alone).
+     *   - Capability::CLUSTER_TREE_VIEW on actor.organization_id (the
+     *     cluster_tree primitive - read-only, no implicit widening).
+     *   - actor.organization_id MUST be an ancestor of target.organization_id
+     *     via the parent_id walk (depth cap 32, fail-closed on cycle).
+     *   - super_admin short-circuits to true (the bypass is local to
+     *     this method for call sites that skip before()).
+     *   - null-org actor => false (fail-closed, matches the engine convention).
+     *   - siblings are isolated by the ancestor walk (one-directional).
+     *
+     * This is a TWO-PATH grant: the actor must satisfy BOTH the module cap
+     * and the cluster_tree primitive. Either alone returns false. CFA-00
+     * stop conditions apply unchanged (no field leaks, no write widening).
+     */
+    public function viewDirectory(User $user, User $model): bool
+    {
+        // super_admin already short-circuited in before() - the explicit branch
+        // here is a belt-and-braces fallback for call sites that skip before()
+        // (e.g. ad-hoc `$user->can('viewDirectory', $target)` outside the engine).
+        if ($user->isSuperAdmin()) {
+            return true;
+        }
+
+        return self::directoryClusterAdmitted($user, $model);
+    }
+
+    /**
      * التحقق من انتماء المستخدم لنفس المؤسسة
      *
      * User is not ScopeAware, so the engine's organization-isolation gate cannot
@@ -162,5 +201,48 @@ class UserPolicy
         }
 
         return $user->organization_id === $model->organization_id;
+    }
+
+    /**
+     * Non-super_admin cluster directory admissibility check (Phase CFA-07).
+     *
+     * Folds every prereq into a single boolean so viewDirectory() stays
+     * readable. Per-condition reasons are documented inline at each guard.
+     */
+    private static function directoryClusterAdmitted(User $user, User $model): bool
+    {
+        // null-org on either side => fail-closed (engine convention).
+        if ($user->organization_id === null || $model->organization_id === null) {
+            return false;
+        }
+
+        // Same-org reads route through `view()` + UserResource unchanged; the
+        // directory shape is reserved for cross-org cluster reads.
+        if ((int) $user->organization_id === (int) $model->organization_id) {
+            return false;
+        }
+
+        // Both grants must hold on actor.organization_id:
+        //   - the actor module capability (USERS_VIEW), and
+        //   - the cluster_tree primitive (CLUSTER_TREE_VIEW).
+        // Either alone returns false - no implicit widening.
+        if (! AccessDecision::can($user, Capability::USERS_VIEW)) {
+            return false;
+        }
+
+        if (! AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW)) {
+            return false;
+        }
+
+        // Ancestor walk: actor.organization_id must appear in target.organization_id's
+        // ancestor chain via parent_id (depth cap 32, cycle-guarded by
+        // HasOrganizationHierarchy::ancestorIds()). Sibling orgs and unrelated
+        // orgs are isolated by the same walk.
+        $targetOrg = Organization::query()->find((int) $model->organization_id);
+        if (! $targetOrg instanceof Organization) {
+            return false;
+        }
+
+        return in_array((int) $user->organization_id, $targetOrg->ancestorIds(), true);
     }
 }

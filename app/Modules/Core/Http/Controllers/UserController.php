@@ -7,6 +7,7 @@ use App\Modules\Core\Http\Requests\DeleteUserRequest;
 use App\Modules\Core\Http\Requests\StoreUserRequest;
 use App\Modules\Core\Http\Requests\UpdateUserRequest;
 use App\Modules\Core\Http\Requests\ViewUserRequest;
+use App\Modules\Core\Http\Resources\UserDirectoryResource;
 use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Scopes\UserOrganizationScope;
@@ -219,8 +220,27 @@ class UserController extends Controller
         try {
             $user = User::with(['department', 'creator:id,name', 'updater:id,name'])->findOrFail($id);
 
-            // Authz against the user's `view` ability already enforced by
-            // ViewUserRequest.
+            // Phase CFA-07 (HIGH PII) — cluster limited directory widening.
+            //
+            // ViewUserRequest already ran the existing `view` policy which keeps
+            // its strict same-org semantics and returns 403 for cross-org targets.
+            // However, an actor holding USERS_VIEW + CLUSTER_TREE_VIEW on
+            // actor.organization_id is admitted by viewDirectory() for cross-org
+            // targets in the cluster tree. For those actors we MUST return the
+            // sanitized directory shape — never the full UserResource shape
+            // (which would leak password / tokens / 2FA / last_login_ip / etc).
+            //
+            // Same-org requests continue to receive the full shape unchanged;
+            // only cross-org requests routed through the cluster widening get
+            // the directory resource.
+            //
+            // The widening check mirrors UserPolicy::viewDirectory exactly (super_admin
+            // bypass, ancestor walk, both capabilities required) so the policy
+            // method and the controller sanitization cannot drift apart.
+            $actor = $request->user();
+            if ($actor instanceof User && $this->isCrossOrgClusterRead($actor, $user)) {
+                return UserDirectoryResource::make($user)->response();
+            }
 
             // تحويل الـ roles و permissions إلى مصفوفة أسماء
             $userData = $user->toArray();
@@ -231,6 +251,35 @@ class UserController extends Controller
         } catch (\Throwable $e) {
             return $this->handleException($e, 'show');
         }
+    }
+
+    /**
+     * Cluster widening predicate for the show endpoint.
+     *
+     * Returns true iff the actor is admitted by UserPolicy::viewDirectory() AND
+     * the target sits in a different organization than the actor (a directory
+     * widening only kicks in cross-org — same-org reads keep the full shape).
+     *
+     * Phase CFA-07 strict contract:
+     *   - super_admin: same-org shows continue through the regular path, no
+     *     cluster-widening branch needed.
+     *   - non-super_admin: identical to viewDirectory() then a same-org guard.
+     */
+    private function isCrossOrgClusterRead(User $actor, User $target): bool
+    {
+        if ($actor->isSuperAdmin()) {
+            return false;
+        }
+
+        if ($actor->organization_id === null || $target->organization_id === null) {
+            return false;
+        }
+
+        if ((int) $actor->organization_id === (int) $target->organization_id) {
+            return false;
+        }
+
+        return $actor->can('viewDirectory', $target);
     }
 
     /**
