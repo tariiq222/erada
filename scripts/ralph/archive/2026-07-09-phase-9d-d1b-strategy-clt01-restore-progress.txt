@@ -1,32 +1,8 @@
-# Ralph Progress Log — Phase CFA-02 (KPI cluster export widening)
+# Ralph Progress Log — Phase 9-D-D1b (Strategy cluster_tree read)
 
 Started: 2026-07-09
-Branch: phase-cfa-02-kpi-cluster-export-widening
+Branch: phase-9d-d1b-strategy-cluster-tree-read
 PRD: scripts/ralph/prd.json
-
-## CFA-02 — Codebase patterns (consolidated from CFA-01 + 9-D-D1a + 9-D-D1b)
-
-- **Cluster export primitive pair (CFA-01 contract)**:
-  - `Capability::CLUSTER_TREE_EXPORT = 'core.cluster_tree.export'` (CFA-01 line 414 of Capability.php) — sibling to CLUSTER_TREE_VIEW / MANAGE.
-  - Engine rescue: `AccessDecision::can($user, Capability::CLUSTER_TREE_EXPORT, $target)` fires via `clusterTreePrimitiveCapabilities()` allowlist (includes all 3 CFA-01 primitives).
-  - Cross-org primitive check: `crossOrgClusterTreeAdmitted()` walks ancestors via `Organization::ancestorIds()`, requires scoped-role grant on actor.org whose `permissions[]` contains the requested primitive.
-  - Sensitive-target floor preserved: `SensitivelyScoped + isSensitive() ⇒ cluster_tree rescue returns false`.
-  - Per CFA-00 contract: "the module's export capability MUST be held on actor.org" — this is enforced at the POLICY/SCOPE layer, NOT the engine.
-
-- **Backward-compat contract for CFA-02 export widening**:
-  - KPI's existing export endpoint gates on `Capability::KPIS_VIEW` (controller's `authorizePerformance('view')`). CFA-02 keeps this as a same-org fallback.
-  - CFA-02 introduces `Capability::KPIS_EXPORT = 'kpis.export'` as the canonical paired capability for `CLUSTER_TREE_EXPORT`.
-  - Same-org export: ANY of `KPIS_EXPORT` OR `KPIS_VIEW` (backward compat).
-  - Cross-org export: STRICTLY `KPIS_EXPORT + CLUSTER_TREE_EXPORT` per CFA-00. Users with only `KPIS_VIEW + CLUSTER_TREE_VIEW` can read descendants via index/show/list, but cannot export them.
-  - `UserKpiScope::clusterVisibleOrgIds()` extended to accept a `$purpose` parameter:
-    - `null` / `'view'` (default): widens for `KPIS_VIEW + CLUSTER_TREE_VIEW` (existing 9-D-D1a behavior — all 11 ClusterTreeUserKpiScopeTest tests + all 11 ClusterTreeKpiPolicyTest tests must stay green).
-    - `'export'`: widens for `KPIS_EXPORT + CLUSTER_TREE_EXPORT` only.
-
-- **`grantsEngineCapability` test-helper gotcha (P0 — caused 2/9 CFA-02 unit tests to fail in first run)**:
-  - The trait creates a new `ScopedRoleDefinition` per call AND assigns ONE scoped role per scope via `$user->assignScopedRole()`. Per the trait's own comment: "single-role-per-scope semantics via assignScopedRole, so a separate definition per capability would silently revoke the previous one — passing an array here puts them all in the same definition's permissions JSON and survives the engine's role resolution."
-  - **Always pass capabilities as an array** when granting multiple on the same scope:
-    `grantEngineCapability($user, [Capability::KPIS_EXPORT, Capability::CLUSTER_TREE_EXPORT])` (NOT two separate calls).
-  - This is the same pattern the existing ClusterTreeManageExportPrimitiveTest uses.
 
 ## Codebase Patterns (consolidated across iterations)
 
@@ -95,66 +71,6 @@ APPEND iterations below this line. Format:
   - ...
 ---
 -->
-## 2026-07-09 — CFA-02 (KPI cluster export widening)
-
-### What was implemented
-
-Phase CFA-02 — Wire the CFA-01 `cluster_tree.export` rescue primitive into
-the Performance (KPI) module so a cluster admin with
-`Capability::KPIS_EXPORT + Capability::CLUSTER_TREE_EXPORT` can export KPIs
-across descendant organizations. Mirrors the 9-D-D1a read widening pattern
-(PR #6), but for the EXPORT surface. Read-only by design — no widening to
-update / create / delete / import.
-
-### Files changed
-
-**Modified (3):**
-- `app/Modules/Core/Authorization/Capability.php` — added `KPIS_EXPORT = 'kpis.export'`
-  constant with CFA-02 contract docblock. No engine change. No CapabilityAlias
-  entry (no legacy flat string).
-- `app/Modules/Performance/Scopes/UserKpiScope.php` — added optional `$purpose`
-  parameter to `applyToKpis()` + `clusterVisibleOrgIds()`. Default `null` preserves
-  the 9-D-D1a read-pair widening (KPIS_VIEW + CLUSTER_TREE_VIEW). New `'export'`
-  purpose widens via the export pair (KPIS_EXPORT + CLUSTER_TREE_EXPORT).
-- `app/Modules/Performance/Http/Controllers/KpiController.php` — `authorizePerformance('export')`
-  now accepts EITHER KPIS_EXPORT OR KPIS_VIEW (backward compat). `filteredKpiQuery()`
-  accepts a `$purpose` parameter; `export()` calls it with `'export'` so the
-  export-pair scope widening applies.
-
-**Created (2):**
-- `tests/Unit/Performance/Scopes/ClusterTreeKpiExportScopeTest.php` — 9 unit tests
-  covering the scope widening for the export pair: accept path, both grants required,
-  read-pair does NOT widen exports, export-pair does NOT widen reads, sibling isolation,
-  one-directional child-cannot-see-parent, null-org fail-closed, super_admin sees all.
-- `tests/Feature/Api/Performance/KpiExportClusterTreeTest.php` — 9 feature tests
-  covering the HTTP-level export endpoint: cluster admin sees descendants, read pair
-  alone does not widen, wrong cluster primitive stays strict, wrong module cap stays
-  strict, no-export-cap user gets 403, KPIS_VIEW-only same-org works (backward compat),
-  sibling cluster isolated, child cannot see parent, super_admin sees all.
-
-### Learnings for future iterations (CFA-03+)
-
-- **`grantsEngineCapability` single-role-per-scope gotcha**: the trait has
-  single-role-per-scope semantics via `assignScopedRole`. Two separate calls
-  silently revoke the first grant. Always pass capabilities as an array:
-  `grantEngineCapability($user, [Capability::A, Capability::B])`. This caused
-  2/9 unit test failures in the first implementation attempt; switching to the
-  array pattern resolved it cleanly.
-- **Same-org vs cross-org widening pattern**: the engine rescue branch
-  (`AccessDecision::clusterTreeRescueApplies()`) requires a Model $target.
-  For list exports (no per-record target), the SCOPE layer is the widening
-  surface — pass a `$purpose` flag through the scope so each call site picks
-  the right cluster_tree primitive pair. The two pairs (read/export) are
-  independent; a user can be widened for one without being widened for the
-  other.
-- **Backward compat for existing endpoints**: when introducing a new
-  capability for an existing endpoint, keep the OLD capability check as a
-  fallback in the controller's authorize method to avoid regressing existing
-  users. The scope can be strict (new pair only) while the controller
-  accepts both — preserving same-org behavior for everyone with either grant.
-- **No CapabilityAlias entry needed**: when introducing a brand-new
-  capability constant with no legacy flat string, skip the alias map. Only
-  legacy migrations need CapabilityAlias entries.
 ## 2026-07-09 — CLT-01 (Strategy cluster_tree read)
 
 ### What was implemented
