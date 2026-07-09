@@ -23,7 +23,7 @@ class ReviewController extends Controller
     use HasOrganizationScope;
 
     /**
-     * التحقق من صلاحية الوصول للاستراتيجية
+     * Verify the actor's strategy authorization.
      */
     protected function authorizeStrategy(string $ability = 'view'): void
     {
@@ -132,7 +132,7 @@ class ReviewController extends Controller
         $validated['conducted_by'] = auth()->id();
         $validated['overall_status'] = $validated['overall_status'] ?? 'on_track';
 
-        // Capture progress snapshot (مع التحقق من النوع والحدود)
+        // Capture progress snapshot (with type and bounds validation)
         $progress = 0;
         if (method_exists($reviewable, 'calculateProgress')) {
             $progress = (float) $reviewable->calculateProgress();
@@ -208,7 +208,7 @@ class ReviewController extends Controller
             'objective' => StrategicObjective::class,
             'program' => Program::class,
             'project' => Project::class,
-            default => throw new \InvalidArgumentException('نوع العنصر غير صالح'),
+            default => throw new \InvalidArgumentException('Invalid reviewable entity type'),
         };
     }
 }

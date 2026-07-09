@@ -25,7 +25,7 @@ class BlockerController extends Controller
     use HasOrganizationScope;
 
     /**
-     * التحقق من صلاحية الوصول للاستراتيجية
+     * Verify the actor's strategy authorization.
      */
     protected function authorizeStrategy(string $ability = 'view'): void
     {
@@ -243,7 +243,7 @@ class BlockerController extends Controller
             'program' => Program::class,
             'project' => Project::class,
             'task' => Task::class,
-            default => throw new \InvalidArgumentException('نوع العنصر غير صالح'),
+            default => throw new \InvalidArgumentException('Invalid blockable entity type'),
         };
     }
 }

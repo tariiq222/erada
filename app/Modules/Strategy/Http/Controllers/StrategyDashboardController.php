@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\DB;
 class StrategyDashboardController extends Controller
 {
     /**
-     * التحقق من صلاحية الوصول للاستراتيجية
+     * Verify the actor's strategy authorization.
      */
     protected function authorizeStrategy(string $ability = 'view'): void
     {

@@ -25,7 +25,7 @@ class ProgramController extends Controller
     use HasOrganizationScope;
 
     /**
-     * التحقق من صلاحية الوصول للاستراتيجية
+     * Verify the actor's strategy authorization.
      *
      * Super-admin bypass is handled automatically by AccessDecision::can()
      * (engine short-circuit), so no manual isSuperAdmin() check is needed
@@ -74,7 +74,7 @@ class ProgramController extends Controller
 
         app(UserStrategyScope::class)->applyToPrograms($query, $user);
 
-        // Filter by portfolio (الالتزام التنفيذي)
+        // Filter by portfolio
         if ($request->has('portfolio_id') && is_numeric($request->portfolio_id)) {
             $query->where('portfolio_id', (int) $request->portfolio_id);
         }
