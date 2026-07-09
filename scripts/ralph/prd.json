@@ -1,81 +1,251 @@
 {
-  "branchName": "phase-cfa-02-kpi-cluster-export-widening",
-  "epic": "Phase CFA-02 — KPI Cluster Export Widening",
-  "story": "STORY CFA-02 — KPI cluster export widening",
-  "description": "Wire the CFA-01 cluster_tree.export rescue primitive into the Performance (KPI) module so a cluster admin with Capability::KPIS_EXPORT + Capability::CLUSTER_TREE_EXPORT can export KPIs across descendant organizations. Mirrors the 9-D-D1a read widening pattern, but for the EXPORT surface. Read-only by design — no widening to update / create / delete / import.",
+  "epic": "Phase CFA — Cluster Full Authority Rollout",
+  "owner": "Tariq (standing approval for autonomous CFA loop — 2026-07-09)",
+  "designAudit": "docs/audits/phase-cfa-00-cluster-full-authority-audit.md",
+  "enginePrimitives": [
+    "core.cluster_tree.view (Phase 9-D-B)",
+    "core.cluster_tree.manage (CFA-01)",
+    "core.cluster_tree.export (CFA-01)"
+  ],
+  "operationalMode": "AUTONOMOUS — Ralph runs CFA-N end-to-end (branch → tests → push → PR → CI → merge → CFA-N+1) without per-story approval, gated by the 10 auto-merge conditions and the 11 hard-stop conditions documented in scripts/ralph/CLAUDE.md.",
   "userStories": [
     {
-      "id": "CFA-02",
-      "title": "KPI cluster export widening (KPI list export only)",
+      "id": "CFA-01",
+      "title": "Core cluster_tree.manage + cluster_tree.export engine primitives",
       "priority": 1,
-      "passes": false,
+      "passes": true,
+      "branch": "phase-cfa-01-cluster-tree-manage-export-primitives",
+      "mergeCommit": "6f31319",
+      "pr": 10,
+      "summary": "Added two new rescue primitives (CLUSTER_TREE_MANAGE, CLUSTER_TREE_EXPORT) parallel to existing CLUSTER_TREE_VIEW. AccessDecision::clusterTreeRescueApplies now checks the list of three. Same ancestor walk + scoped-role grant + sensitive-target floor. 19 new tests + 77 regression pass.",
       "acceptanceCriteria": [
-        "Capability::KPIS_EXPORT = 'kpis.export' constant declared in Capability.php.",
-        "UserKpiScope::clusterVisibleOrgIds() widens when actor holds KPIS_EXPORT + CLUSTER_TREE_EXPORT (purpose='export') on actor.organization_id. Existing KPIS_VIEW + CLUSTER_TREE_VIEW widening (purpose=null/'view') preserved for reads.",
-        "KpiController::export() authz: 'export' ability accepts EITHER KPIS_EXPORT OR KPIS_VIEW (backward compat for same-org export). Cross-org export requires KPIS_EXPORT + CLUSTER_TREE_EXPORT (strict per CFA-00 contract via scope).",
-        "KpiController::filteredKpiQuery accepts purpose parameter; export endpoint calls with purpose='export' so the export-pair widening applies (not the view-pair widening).",
-        "Cluster admin (KPIS_EXPORT + CLUSTER_TREE_EXPORT) export endpoint includes KPIs from descendant organizations in the CSV/XLSX stream.",
-        "User without KPIS_EXPORT (only KPIS_VIEW) export endpoint stays strict same-org (no descendant KPIs in stream).",
-        "User without CLUSTER_TREE_EXPORT (only KPIS_EXPORT) export endpoint stays strict same-org.",
-        "User with KPIS_VIEW + CLUSTER_TREE_VIEW (read pair) export endpoint stays strict same-org per CFA-00 strict contract — read pair does NOT widen exports.",
-        "Sibling cluster user denied descendant KPIs in export stream.",
-        "Child user denied parent cluster KPIs in export stream (one-directional).",
-        "Null-org user fail-closed (empty export).",
-        "Super admin sees all KPIs in export regardless of cluster_tree grants.",
-        "All KPI write endpoints stay strict same-org (store / update / destroy / import / measurement / link).",
-        "No AccessDecision engine change (no modification of clusterTreeRescueApplies / crossOrgClusterTreeAdmitted / sameOrganization / extractOrganizationId / buildScopeChain / ScopeAssignmentResolver / any OrgGuard).",
-        "No migration. No CapabilityAlias entry needed (no legacy flat string for 'kpis.export').",
-        "No OVR / Surveys / HR / ActivityLog / Tasks / Projects / Risks / Meetings touches.",
-        "Direction R preserved (no legacy decisions routes restored, no manageMembers restored).",
-        "PR #6 / KPI 9-D-D1a read widening behavior not regressed (ClusterTreeKpiPolicyTest + ClusterTreeUserKpiScopeTest stay green).",
-        "CFA-01 engine primitive tests (ClusterTreeManageExportPrimitiveTest 19 tests) stay green.",
-        "All non-target regression tests stay green (UserKpiScopeTest, KpiPolicyTest, KpiMeasurementPolicyTest, KpiLinkPolicyTest, KpiOrgGuardTest, KpiControllerTest, KpiEngineAuthzTest, KpiRelationsTest, KpiValueIntegrityTest, ImprovementKpiRequiredTest)."
-      ],
-      "referenceImplementation": "CFA-01 (branch phase-cfa-01-cluster-tree-manage-export-primitives, PR #10, merge commit 7dc6e44) for the engine primitive. Phase 9-D-D1a (branch phase-9d-d1a-kpi-cluster-tree-read, PR #6, merge commit 79eb65e) for the read-widening pattern to mirror.",
-      "files": {
-        "create": [
-          "tests/Unit/Performance/Scopes/ClusterTreeKpiExportScopeTest.php",
-          "tests/Feature/Api/Performance/KpiExportClusterTreeTest.php"
-        ],
-        "modify": [
-          "app/Modules/Core/Authorization/Capability.php",
-          "app/Modules/Performance/Scopes/UserKpiScope.php",
-          "app/Modules/Performance/Http/Controllers/KpiController.php"
-        ]
-      },
-      "qualityGates": [
-        "./vendor/bin/pint --test app database tests",
-        "composer phpstan",
-        "php artisan test --filter=Performance",
-        "php artisan test --filter=ClusterTree",
-        "php artisan test --filter=AccessDecision",
-        "php artisan test --filter=OrganizationHierarchy",
-        "php artisan test --filter=CapabilityAlias"
+        "CLUSTER_TREE_MANAGE rescue wired in AccessDecision",
+        "CLUSTER_TREE_EXPORT rescue wired in AccessDecision",
+        "Both primitives require scoped role on actor.org (no is_admin_role shortcut)",
+        "SensitivelyScoped floor preserved",
+        "Neither primitive implies the other or a module capability",
+        "auth/me surfaces the three primitives via CoreCapabilityProvider"
       ]
+    },
+    {
+      "id": "CFA-02",
+      "title": "KPI cluster export widening via KPIS_EXPORT + CLUSTER_TREE_EXPORT",
+      "priority": 2,
+      "passes": true,
+      "branch": "phase-cfa-02-kpi-cluster-export-widening",
+      "mergeCommit": "389cb16",
+      "pr": 11,
+      "summary": "Added Capability::KPIS_EXPORT constant. KpiController::export rewired. UserKpiScope::clusterVisibleOrgIds gained a 'purpose' parameter (view | export) — each fires its own primitive pair. Backward-compat: same-org export still accepts KPIS_VIEW.",
+      "acceptanceCriteria": [
+        "KPIS_EXPORT constant added",
+        "KpiController::export widens via KPIS_EXPORT + CLUSTER_TREE_EXPORT",
+        "Read pair (KPIS_VIEW + CLUSTER_TREE_VIEW) does NOT widen export",
+        "Export pair does NOT widen read",
+        "Sibling / child / null-org denials preserved"
+      ]
+    },
+    {
+      "id": "CFA-03",
+      "title": "Strategy cluster_tree.manage widening for governance writes",
+      "priority": 3,
+      "passes": true,
+      "branch": "phase-cfa-03-strategy-cluster-manage-widening",
+      "mergeCommit": "b6496bf",
+      "pr": 12,
+      "summary": "PortfolioPolicy::changeStrategicStatus, forceClose, managePriority, assignOwner all get CLUSTER_TREE_MANAGE rescue paired with the matching STRATEGY_* module capability. BlockerPolicy::resolve + escalate get STRATEGY_EDIT + CLUSTER_TREE_MANAGE rescue. ProgramPolicy::linkProject stays strict same-org per CFA-00 owner decision. CRUD (update/delete/create) unchanged. 20 new tests + 57 regression pass.",
+      "acceptanceCriteria": [
+        "Portfolio governance writes cluster-widen via module cap + CLUSTER_TREE_MANAGE",
+        "Blocker resolve/escalate cluster-widens via STRATEGY_EDIT + CLUSTER_TREE_MANAGE",
+        "Portfolio/Blocker CRUD stays strict same-org",
+        "Program linkProject stays strict same-org",
+        "Sibling / child / null-org denials preserved",
+        "super_admin bypass unchanged"
+      ]
+    },
+    {
+      "id": "CFA-04",
+      "title": "Projects cluster read + status writes + sanitized show",
+      "priority": 4,
+      "passes": false,
+      "branch": "phase-cfa-04-projects-cluster-widening",
+      "summary": "UserProjectScope::clusterVisibleOrgIds widening for view. ProjectPolicy::view two-path rescue. ProjectPolicy::update rescue for status / PDCA transitions via PROJECTS_EDIT + CLUSTER_TREE_MANAGE. SANITIZE ProjectResource show (strip or per-child gate the eager-loaded members / stakeholders / tasks / milestones / expenses / kpis / risks / comments / attachments / activity_log). NO project role/member assignment widening (CFA-00 decision).",
+      "acceptanceCriteria": [
+        "Parent org user with PROJECTS_VIEW + CLUSTER_TREE_VIEW sees child org projects in index",
+        "Parent org user can show child org project with same pair",
+        "Missing PROJECTS_VIEW → denied/empty",
+        "Missing CLUSTER_TREE_VIEW → denied/empty",
+        "Sibling denied",
+        "Child-to-parent denied",
+        "Null-org fail-closed",
+        "Project status / PDCA transition widens via PROJECTS_EDIT + CLUSTER_TREE_MANAGE",
+        "Project update/delete stays strict same-org",
+        "Project member/role assignment stays strict same-org",
+        "super_admin unchanged",
+        "Sanitized ProjectResource show — no members / stakeholders / tasks / expenses / activity_log leakage"
+      ],
+      "autoMergeEligible": true
+    },
+    {
+      "id": "CFA-05",
+      "title": "Risks cluster read + reassess/status writes + export gate",
+      "priority": 5,
+      "passes": false,
+      "branch": "phase-cfa-05-risks-cluster-widening",
+      "summary": "UserRiskScope::clusterVisibleOrgIds widening. RiskPolicy::view rescue. RiskPolicy::reassess + changeStatus rescue via RISKS_REASSESS + RISKS_CHANGE_STATUS + CLUSTER_TREE_MANAGE. RiskDashboardController::export gated by RISKS_VIEW_REPORTS + CLUSTER_TREE_EXPORT.",
+      "acceptanceCriteria": [
+        "Parent org user with RISKS_VIEW + CLUSTER_TREE_VIEW sees child org risks",
+        "Reassess / changeStatus widen via module cap + CLUSTER_TREE_MANAGE",
+        "Export widens via RISKS_VIEW_REPORTS + CLUSTER_TREE_EXPORT",
+        "Sibling / child / null-org denials",
+        "RiskAction write widening stays strict same-org OR deferred",
+        "project_risks (per-project register) — same-org only"
+      ],
+      "autoMergeEligible": true
+    },
+    {
+      "id": "CFA-06",
+      "title": "Meetings cluster read + governance writes (Direction R/B integrity)",
+      "priority": 6,
+      "passes": false,
+      "branch": "phase-cfa-06-meetings-cluster-widening",
+      "summary": "UserMeetingScope::clusterVisibleOrgIds widening. MeetingPolicy::view + RecommendationPolicy::view rescue. MeetingPolicy::update rescue for start/complete/cancel via MEETINGS_EDIT + CLUSTER_TREE_MANAGE. RecommendationPolicy approve/reject/defer/accept/complete rescue. Direction R/B integrity preserved. Self-approval block preserved. Attendees + internal_comments sanitized for cluster read.",
+      "acceptanceCriteria": [
+        "Parent org user with MEETINGS_VIEW + CLUSTER_TREE_VIEW sees child org meetings",
+        "Parent org user with RECOMMENDATIONS_VIEW + CLUSTER_TREE_VIEW sees child org recommendations",
+        "Meeting start/complete/cancel widens via MEETINGS_EDIT + CLUSTER_TREE_MANAGE",
+        "Recommendation approve/reject/defer widens via RECOMMENDATIONS_* + CLUSTER_TREE_MANAGE",
+        "Direction R (meeting_resolutions lifecycle) integrity preserved",
+        "Direction B (recommendations ruling + action_item) integrity preserved",
+        "Self-approval block (requested_by != approver) preserved",
+        "Attendees with emails sanitized for cluster read",
+        "MeetingSettings, MeetingCategories same-org only",
+        "super_admin unchanged"
+      ],
+      "autoMergeEligible": true,
+      "riskLevel": "HIGH — Direction R/B integrity is critical. STOP and require Tariq review if any resolution lifecycle or recommendation approval deviates from current behavior."
+    },
+    {
+      "id": "CFA-07",
+      "title": "Users cluster limited directory (HIGH PII)",
+      "priority": 7,
+      "passes": false,
+      "branch": "phase-cfa-07-users-cluster-directory-widening",
+      "summary": "UserDirectoryResource with strict field whitelist (id, name, email, organization_id, department_id, job_title, is_active ONLY). UserPolicy::view rescue for directory endpoint. UserController::show returns sanitized directory shape for cluster actors (NEVER exposes password / tokens / 2FA / security fields / employee_personal_info / login_attempts). NO write widening. NO role assignment widening. STOP if any sensitive field leaks.",
+      "acceptanceCriteria": [
+        "Parent org user with USERS_VIEW + CLUSTER_TREE_VIEW sees child org users in DIRECTORY shape",
+        "Missing USERS_VIEW → denied/empty",
+        "Missing CLUSTER_TREE_VIEW → denied/empty",
+        "Sibling denied",
+        "Child-to-parent denied",
+        "Null-org fail-closed",
+        "UserController::show returns sanitized directory shape for cluster actors (403 OR sanitized — never full PII)",
+        "UserDirectoryResource exposes ONLY the whitelisted fields",
+        "No password / tokens / 2FA / login_attempts / employee_personal_info leak",
+        "No write widening (CRUD stays strict same-org)",
+        "No role assignment widening"
+      ],
+      "autoMergeEligible": false,
+      "riskLevel": "HIGH PII — DO NOT AUTO-MERGE. STOP and require Tariq review of UserDirectoryResource field whitelist before merge."
+    },
+    {
+      "id": "CFA-08",
+      "title": "Tasks cluster read (DEFERRED — after CFA-09 OVR primitive)",
+      "priority": 8,
+      "passes": false,
+      "branch": "phase-cfa-08-tasks-cluster-widening",
+      "summary": "Add SensitivelyScoped marker to Task model so source_sensitivity='confidential' is engine-visible. UserTaskScope::clusterVisibleOrgIds widening. TaskPolicy::view rescue. PDCA transition writes via TASKS_EDIT + CLUSTER_TREE_MANAGE. Personal tasks (owner_id floor) bypass engine. Polymorphic source_type chain (Project / Department / Risk / IncidentReport / Recommendation / MeetingResolution / Kpi / Milestone). MUST follow CFA-09 because OVR source chain depends on OVR aggregate pattern.",
+      "acceptanceCriteria": [
+        "Parent org user with TASKS_VIEW + CLUSTER_TREE_VIEW sees child org tasks",
+        "PDCA transition widens via TASKS_EDIT + CLUSTER_TREE_MANAGE",
+        "source_sensitivity='confidential' enforced as engine floor",
+        "Personal tasks owner_id floor preserved",
+        "Tasks sourced from confidential OVR incidents NOT cluster-visible (depends on CFA-09)",
+        "Sibling / child / null-org denials"
+      ],
+      "autoMergeEligible": false,
+      "riskLevel": "HIGH — polymorphic source chain + OVR confidential floor. STOP and require Tariq review."
+    },
+    {
+      "id": "CFA-09",
+      "title": "OVR cluster aggregate reporting (NEVER raw)",
+      "priority": 9,
+      "passes": false,
+      "branch": "phase-cfa-09-ovr-cluster-aggregate-reporting",
+      "summary": "Build OvrClusterDashboardController (or extend OvrIncidentController::stats) returning COUNT / severity / status aggregates per descendant org. Gated by OVR_VIEW_STATISTICS + CLUSTER_TREE_VIEW. Raw incident read endpoints NEVER cluster-widen. IncidentReport::is_confidential SensitivelyScoped floor is FINAL.",
+      "acceptanceCriteria": [
+        "Aggregate statistics endpoint widens via OVR_VIEW_STATISTICS + CLUSTER_TREE_VIEW",
+        "Raw incident index/show endpoints NEVER cluster-widen",
+        "is_confidential floor preserved (engine-level)",
+        "Patient name / file number (encrypted) never exposed cross-cluster",
+        "CSV/PDF export — aggregate only, never raw",
+        "Sibling / child / null-org denials"
+      ],
+      "autoMergeEligible": false,
+      "riskLevel": "CRITICAL — patient data. STOP and require Tariq review of aggregate SQL."
+    },
+    {
+      "id": "CFA-10",
+      "title": "Surveys aggregate reporting (NEVER raw responses)",
+      "priority": 10,
+      "passes": false,
+      "branch": "phase-cfa-10-surveys-cluster-aggregate-reporting",
+      "summary": "Build SurveyClusterDashboardController returning response COUNT / completion_rate / aggregate_score per descendant org. Gated by SURVEYS_VIEW + CLUSTER_TREE_VIEW. Raw response read endpoints NEVER cluster-widen. survey_responses.respondent_email + respondent_phone encryption upgrade is a SEPARATE migration story — out of CFA scope.",
+      "acceptanceCriteria": [
+        "Aggregate statistics endpoint widens via SURVEYS_VIEW + CLUSTER_TREE_VIEW",
+        "Raw response endpoints NEVER cluster-widen",
+        "survey_invitations.email never exposed cross-cluster",
+        "Export — aggregate only, never raw",
+        "Sibling / child / null-org denials"
+      ],
+      "autoMergeEligible": false,
+      "riskLevel": "HIGH — respondent identity. STOP and require Tariq review of aggregate SQL."
+    },
+    {
+      "id": "CFA-11",
+      "title": "ActivityLog cluster audit role + IP/UA redaction upgrade",
+      "priority": 11,
+      "passes": false,
+      "branch": "phase-cfa-11-activitylog-cluster-audit-role",
+      "summary": "Tighten ActivityLogResource to redact top-level ip_address + user_agent to CIDR / hashed form. ActivityLogController::export gated by AUDIT_EXPORT + CLUSTER_TREE_EXPORT for cluster_auditor role only. Cluster audit role is SEPARATE from cluster PMO role. cross-module index risk (loggable polymorphic).",
+      "acceptanceCriteria": [
+        "ip_address + user_agent redacted at top level (CIDR / family hash)",
+        "Cluster audit role: AUDIT_VIEW + AUDIT_EXPORT + CLUSTER_TREE_VIEW + CLUSTER_TREE_EXPORT",
+        "Cluster PMO role does NOT have audit access",
+        "Export gated by AUDIT_EXPORT + CLUSTER_TREE_EXPORT",
+        "loggable polymorphic cross-module index handled",
+        "Sibling / child / null-org denials"
+      ],
+      "autoMergeEligible": false,
+      "riskLevel": "HIGH — cross-module index. STOP and require Tariq review."
     }
   ],
   "nonGoals": [
-    "Widening KPI write endpoints (store / update / destroy / import / measurement / link create-delete) — all stay strict same-org.",
-    "Widening export in any other module (Projects / Risks / Meetings / Users / Strategy — each is its own CFA-N story).",
-    "Adding CLUSTER_TREE_EXPORT wiring to other modules' controllers (CFA-03+).",
-    "AccessDecision engine changes (engine is stable per CFA-01 contract).",
-    "Migrations (KPIS_EXPORT is a pure RBAC string constant).",
-    "Tasks / OVR / Surveys / HR / ActivityLog touches (excluded or deferred).",
-    "Changing the audit-trail label 'cluster_tree_rescue' (audit discrimination stays via capability string).",
-    "Introduce a KPIS_EXPORT legacy alias in CapabilityAlias (no legacy flat string exists)."
+    "CRUD widening outside documented governance writes",
+    "Project role/member assignment widening",
+    "Meeting operational widening (start/complete/cancel for cluster)",
+    "Recommendation transition widening (recommendation approve/reject etc.)",
+    "Raw OVR cluster read/write/export",
+    "Raw Survey cluster read/export",
+    "Full HR PII exposure",
+    "Tasks cluster widening before CFA-09 OVR primitive",
+    "AccessDecision change unless story explicitly allows",
+    "Migration unless story explicitly allows"
   ],
   "stopConditions": [
-    "AccessDecision engine change seems necessary",
-    "Migration seems necessary",
-    "PII exposure risk appears (KPIs do not carry sensitive PII, but verify no measurement payload includes patient-level fields)",
-    "Write path would be widened (e.g. KpiController::import, store, update, destroy)",
-    "Existing resource response includes sensitive fields (verify KpiImportExportService::rowFor() payload — should be the 14 documented columns only)",
-    "Tests require deleting or weakening real security coverage",
-    "Any conflict with Direction R / Direction B / 9-D-D1a KPI cluster_tree behavior / CFA-01 engine primitive contract",
-    "Any CI failure that cannot be explained by the current story",
-    "Existing admin user with KPIS_VIEW loses access to the existing export endpoint (regression)",
-    "KPIS_VIEW + CLUSTER_TREE_VIEW widens exports cross-org after CFA-02 (only KPIS_EXPORT + CLUSTER_TREE_EXPORT should widen exports)"
+    "CI fails twice on the same story",
+    "Merge conflict",
+    "AccessDecision change needed outside story's documented scope",
+    "Migration needed outside story's documented scope",
+    "PII / raw sensitive data risk discovered",
+    "Write path widened outside story's documented scope",
+    "Unclear authorization contract",
+    "Branch protection blocks merge",
+    "Security P0/P1 finding",
+    "Direction R / Direction B integrity violation",
+    "KPI 9-D-D1a / Strategy 9-D-D1b / CFA-01..03 regression",
+    "Any CFA story with riskLevel=HIGH/CRITICAL — STOP regardless of CI"
   ],
-  "mergeApproval": "Autonomous via the CFA mode — auto-merge if all GitHub CI checks green and no stop condition triggered.",
+  "stopReportFormat": "## Stop Report — CFA-NN\n\n- Story:\n- Branch:\n- Blocker type: (ci_twice | merge_conflict | engine_change | migration | pii | write_widening | unclear_contract | branch_protection | security_p0 | direction_r_violation | regression | high_risk_review)\n- Files involved:\n- Current behavior:\n- Expected behavior:\n- Why this cannot proceed safely:\n- Proposed options:\n- Recommended option:\n",
+  "mergeApproval": "AUTONOMOUS — Tariq standing approval for CFA stories 2026-07-09. Per-story approval REMOVED between CFA-N and CFA-N+1 when all 10 auto-merge conditions hold. Hard stops only on the 11 conditions listed.",
   "completionSignal": "<promise>COMPLETE</promise>"
 }
