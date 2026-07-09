@@ -15,6 +15,7 @@ use App\Modules\Strategy\Http\Requests\ViewReviewRequest;
 use App\Modules\Strategy\Models\Program;
 use App\Modules\Strategy\Models\Review;
 use App\Modules\Strategy\Models\StrategicObjective;
+use App\Modules\Strategy\Scopes\UserStrategyScope;
 use Illuminate\Http\JsonResponse;
 
 class ReviewController extends Controller
@@ -50,17 +51,17 @@ class ReviewController extends Controller
     public function index(ListReviewsRequest $request): JsonResponse
     {
         // Authz (STRATEGY_VIEW) owned by ListReviewsRequest.
+        // Phase 9-D-D1b: cluster_tree read widening via UserStrategyScope.
 
         $query = Review::query()
             ->with(['conductor:id,name']);
 
-        if (! auth()->user()->isSuperAdmin()) {
-            if (auth()->user()->organization_id === null) {
-                abort(403, 'غير مصرح لك بالوصول لهذا العنصر');
-            }
-
-            $query->where('organization_id', auth()->user()->organization_id);
+        $user = auth()->user();
+        if (! $user) {
+            abort(401);
         }
+
+        app(UserStrategyScope::class)->applyToReviews($query, $user);
 
         // Filter by reviewable type
         if ($request->has('type') && $request->has('id')) {

@@ -2,14 +2,16 @@
 
 namespace App\Modules\Strategy\Http\Requests;
 
-use App\Modules\Core\Authorization\AccessDecision;
-use App\Modules\Core\Authorization\Capability;
 use App\Modules\Strategy\Models\Program;
+use App\Modules\Strategy\Policies\ProgramPolicy;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
  * ViewProgramRequest - engine-only authz for reading a single program.
- * Surfaces STRATEGY_VIEW against the resolved program; engine handles
+ *
+ * Phase 9-D-D1b — delegates to ProgramPolicy::view() which contains the
+ * cluster_tree read widening (STRATEGY_VIEW + CLUSTER_TREE_VIEW on actor
+ * ⇒ cross-org read for descendant organizations). The engine handles
  * super_admin bypass + organization isolation (Program is ScopeAware).
  */
 class ViewProgramRequest extends FormRequest
@@ -36,7 +38,7 @@ class ViewProgramRequest extends FormRequest
 
         $this->program = $program;
 
-        return AccessDecision::can($user, Capability::STRATEGY_VIEW, $program);
+        return app(ProgramPolicy::class)->view($user, $program);
     }
 
     public function rules(): array

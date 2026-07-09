@@ -2,14 +2,16 @@
 
 namespace App\Modules\Strategy\Http\Requests;
 
-use App\Modules\Core\Authorization\AccessDecision;
-use App\Modules\Core\Authorization\Capability;
 use App\Modules\Strategy\Models\Review;
+use App\Modules\Strategy\Policies\ReviewPolicy;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
  * ViewReviewRequest - engine-only authz for reading a single review.
- * Surfaces STRATEGY_VIEW against the resolved review; engine handles
+ *
+ * Phase 9-D-D1b — delegates to ReviewPolicy::view() which contains the
+ * cluster_tree read widening (STRATEGY_VIEW + CLUSTER_TREE_VIEW on actor
+ * ⇒ cross-org read for descendant organizations). The engine handles
  * super_admin bypass + organization isolation (Review is ScopeAware).
  */
 class ViewReviewRequest extends FormRequest
@@ -36,7 +38,7 @@ class ViewReviewRequest extends FormRequest
 
         $this->review = $review;
 
-        return AccessDecision::can($user, Capability::STRATEGY_VIEW, $review);
+        return app(ReviewPolicy::class)->view($user, $review);
     }
 
     public function rules(): array

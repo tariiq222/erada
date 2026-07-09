@@ -2,14 +2,16 @@
 
 namespace App\Modules\Strategy\Http\Requests;
 
-use App\Modules\Core\Authorization\AccessDecision;
-use App\Modules\Core\Authorization\Capability;
 use App\Modules\Strategy\Models\Blocker;
+use App\Modules\Strategy\Policies\BlockerPolicy;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
  * ViewBlockerRequest - engine-only authz for reading a single blocker.
- * Surfaces STRATEGY_VIEW against the resolved blocker; engine handles
+ *
+ * Phase 9-D-D1b — delegates to BlockerPolicy::view() which contains the
+ * cluster_tree read widening (STRATEGY_VIEW + CLUSTER_TREE_VIEW on actor
+ * ⇒ cross-org read for descendant organizations). The engine handles
  * super_admin bypass + organization isolation (Blocker is ScopeAware).
  */
 class ViewBlockerRequest extends FormRequest
@@ -36,7 +38,7 @@ class ViewBlockerRequest extends FormRequest
 
         $this->blocker = $blocker;
 
-        return AccessDecision::can($user, Capability::STRATEGY_VIEW, $blocker);
+        return app(BlockerPolicy::class)->view($user, $blocker);
     }
 
     public function rules(): array

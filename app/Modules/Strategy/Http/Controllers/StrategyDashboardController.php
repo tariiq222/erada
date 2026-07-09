@@ -13,6 +13,7 @@ use App\Modules\Strategy\Http\Resources\PortfolioTreeResource;
 use App\Modules\Strategy\Models\Blocker;
 use App\Modules\Strategy\Models\Portfolio;
 use App\Modules\Strategy\Models\Program;
+use App\Modules\Strategy\Scopes\UserStrategyScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
@@ -50,53 +51,80 @@ class StrategyDashboardController extends Controller
         $this->authorizeStrategy('view');
 
         $user = auth()->user();
-        $applyOrgFilter = function ($query) use ($user) {
-            if (! $user->isSuperAdmin()) {
-                if ($user->organization_id === null) {
-                    abort(403, 'غير مصرح لك بالوصول لهذا العنصر');
-                }
+        if (! $user) {
+            abort(401);
+        }
 
-                $query->where('organization_id', $user->organization_id);
-            }
+        // Phase 9-D-D1b: cluster_tree read widening via UserStrategyScope.
+        // The Scope handles super_admin bypass, null-org fail-closed, and
+        // descendant widening when STRATEGY_VIEW + CLUSTER_TREE_VIEW are
+        // both granted on actor.org. The same filter is applied to all
+        // strategy tables (portfolios / programs / blockers) so the summary
+        // counts stay consistent with the per-table list endpoints.
+        $applyOrgFilter = function ($query, string $kind) use ($user) {
+            $scope = app(UserStrategyScope::class);
+
+            match ($kind) {
+                'portfolio' => $scope->applyToPortfolios($query, $user),
+                'program' => $scope->applyToPrograms($query, $user),
+                'blocker' => $scope->applyToBlockers($query, $user),
+                default => $scope->applyToPortfolios($query, $user),
+            };
 
             return $query;
         };
 
-        $portfolios = $applyOrgFilter(Portfolio::active())->get();
-        $programs = $applyOrgFilter(Program::active())->get();
+        $portfolios = $applyOrgFilter(Portfolio::active(), 'portfolio')->get();
+        $programs = $applyOrgFilter(Program::active(), 'program')->get();
 
-        $totalProjects = $applyOrgFilter(Project::query())->count();
-        $unlinkedProjects = $applyOrgFilter(Project::whereNull('program_id'))
+        // Projects + Recommendations keep their existing org-floor filter
+        // (they are NOT part of the Strategy cluster widening in this phase).
+        $applyStandardOrgFilter = function ($query) use ($user) {
+            if ($user->isSuperAdmin()) {
+                return $query;
+            }
+            if ($user->organization_id === null) {
+                abort(403, 'غير مصرح لك بالوصول لهذا العنصر');
+            }
+
+            return $query->where('organization_id', $user->organization_id);
+        };
+
+        $totalProjects = $applyStandardOrgFilter(Project::query())->count();
+        $unlinkedProjects = $applyStandardOrgFilter(Project::whereNull('program_id'))
             ->whereNotIn('status', ['completed', 'cancelled'])
             ->count();
 
-        $openBlockers = $applyOrgFilter(Blocker::open())->count();
+        $openBlockers = $applyOrgFilter(Blocker::open(), 'blocker')->count();
         // Direction B: pending ruling-style recommendations stand in for the
         // legacy `Decision::pending()` counter that lived on the dropped
         // `decisions` table.
-        $pendingDecisions = $applyOrgFilter(Recommendation::pendingRulings())->count();
+        $pendingDecisions = $applyStandardOrgFilter(Recommendation::pendingRulings())->count();
 
-        // Calculate average progress
+        // Calculate average progress (use Eloquent queries so UserStrategyScope's
+        // Builder type-hint matches — DB::table returns QueryBuilder, not Eloquent).
         $portfolioIds = $portfolios->pluck('id');
         $avgPortfolioProgress = $portfolioIds->isEmpty()
             ? 0
             : (float) $applyOrgFilter(
-                DB::table('portfolios')->whereIn('id', $portfolioIds)
+                Portfolio::query()->whereIn('id', $portfolioIds),
+                'portfolio'
             )->avg('portfolio_progress');
         $avgProgramProgress = $programs->isEmpty()
             ? 0
             : (float) $applyOrgFilter(
-                DB::table('programs')->whereIn('id', $programs->pluck('id'))
+                Program::query()->whereIn('id', $programs->pluck('id')),
+                'program'
             )->avg('progress');
 
         return response()->json([
             'portfolios' => [
-                'total' => $applyOrgFilter(Portfolio::query())->count(),
+                'total' => $applyOrgFilter(Portfolio::query(), 'portfolio')->count(),
                 'active' => $portfolios->count(),
                 'avg_progress' => round($avgPortfolioProgress, 2),
             ],
             'programs' => [
-                'total' => $applyOrgFilter(Program::query())->count(),
+                'total' => $applyOrgFilter(Program::query(), 'program')->count(),
                 'active' => $programs->count(),
                 'avg_progress' => round($avgProgramProgress, 2),
             ],
@@ -106,8 +134,8 @@ class StrategyDashboardController extends Controller
             ],
             'blockers' => [
                 'open' => $openBlockers,
-                'critical' => $applyOrgFilter(Blocker::open()->critical())->count(),
-                'overdue' => $applyOrgFilter(Blocker::overdue())->count(),
+                'critical' => $applyOrgFilter(Blocker::open()->critical(), 'blocker')->count(),
+                'overdue' => $applyOrgFilter(Blocker::overdue(), 'blocker')->count(),
             ],
             'decisions' => [
                 'pending' => $pendingDecisions,
@@ -124,16 +152,32 @@ class StrategyDashboardController extends Controller
         $this->authorizeStrategy('view');
 
         $user = auth()->user();
-        $applyOrgFilter = function ($query) use ($user) {
-            if (! $user->isSuperAdmin()) {
-                if ($user->organization_id === null) {
-                    abort(403, 'غير مصرح لك بالوصول لهذا العنصر');
-                }
+        if (! $user) {
+            abort(401);
+        }
 
-                $query->where('organization_id', $user->organization_id);
-            }
+        // Phase 9-D-D1b: cluster_tree read widening via UserStrategyScope.
+        $applyStrategyFilter = function ($query, string $kind) use ($user) {
+            $scope = app(UserStrategyScope::class);
+
+            match ($kind) {
+                'portfolio' => $scope->applyToPortfolios($query, $user),
+                'program' => $scope->applyToPrograms($query, $user),
+                default => $scope->applyToPortfolios($query, $user),
+            };
 
             return $query;
+        };
+
+        $applyStandardOrgFilter = function ($query) use ($user) {
+            if ($user->isSuperAdmin()) {
+                return $query;
+            }
+            if ($user->organization_id === null) {
+                abort(403, 'غير مصرح لك بالوصول لهذا العنصر');
+            }
+
+            return $query->where('organization_id', $user->organization_id);
         };
 
         $chain = [
@@ -144,7 +188,7 @@ class StrategyDashboardController extends Controller
 
         switch ($type) {
             case 'portfolio':
-                $portfolio = $applyOrgFilter(Portfolio::query())->find($id);
+                $portfolio = $applyStrategyFilter(Portfolio::query(), 'portfolio')->find($id);
                 if ($portfolio) {
                     $chain['portfolio'] = [
                         'id' => $portfolio->id,
@@ -156,7 +200,7 @@ class StrategyDashboardController extends Controller
                 break;
 
             case 'program':
-                $program = $applyOrgFilter(Program::with('portfolio'))->find($id);
+                $program = $applyStrategyFilter(Program::with('portfolio'), 'program')->find($id);
                 if ($program) {
                     $chain['portfolio'] = $program->portfolio ? [
                         'id' => $program->portfolio->id,
@@ -174,7 +218,7 @@ class StrategyDashboardController extends Controller
                 break;
 
             case 'project':
-                $project = $applyOrgFilter(Project::with('program.portfolio'))->find($id);
+                $project = $applyStandardOrgFilter(Project::with('program.portfolio'))->find($id);
                 if ($project) {
                     $chain['portfolio'] = $project->program?->portfolio ? [
                         'id' => $project->program->portfolio->id,
