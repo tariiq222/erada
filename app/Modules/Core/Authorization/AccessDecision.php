@@ -575,32 +575,64 @@ class AccessDecision
     }
 
     // ========================================================
-    // Phase 9-D-B — cluster_tree rescue (engine minimal)
+    // Phase 9-D-B + CFA-01 — cluster_tree rescue (engine primitives)
     // ========================================================
     //
-    // هذا الـ primitive محدود:
-    //   - يُطلق فقط لـ Capability::CLUSTER_TREE_VIEW (لا يُفعّل رؤية users.view
-    //     أو projects.view تلقائياً).
-    //   - لا يتجاوز sensitive floor (SensitivelyScoped + isSensitive).
-    //   - يتطلب scoped role على user.organization_id (لا is_admin_role shortcut).
-    //   - يتطلب أن user.organization_id يكون ancestor لـ target.organization_id.
-    //   - read-only — لا يُفعّل create/update/delete.
-    //   - لا يُوسّع list/index scopes (Phase 9-D-D هو الذي يقرر per-module widening).
+    // Three sibling primitives ride the SAME rescue branch:
+    //   - Capability::CLUSTER_TREE_VIEW   — Phase 9-D-B (read)
+    //   - Capability::CLUSTER_TREE_MANAGE  — Phase CFA-01 (governance writes)
+    //   - Capability::CLUSTER_TREE_EXPORT  — Phase CFA-01 (row-level exports)
     //
-    // لا يُعدّل sameOrganization / extractOrganizationId / buildScopeChain.
-    // لا يُعدّل ScopeAssignmentResolver. لا يُعدّل أي OrgGuard.
-    // لا يُعدّل أي User*Scope. لا يُعدّل أي module controller.
+    // Each is a CAPABILITY STRING, not a wildcard. The primitive:
+    //   - fires ONLY for the three constants above (does NOT widen to
+    //     users.view / projects.view / risks.view / meetings.view / ...);
+    //   - does NOT bypass the sensitive floor (SensitivelyScoped + isSensitive);
+    //   - requires a scoped role on user.organization_id (no is_admin_role
+    //     shortcut, no inherit_to_children shortcut);
+    //   - requires user.organization_id to be an ancestor of target.organization_id
+    //     via the parent_id walk (depth cap 32, fail-closed on cycle);
+    //   - does NOT widen list/index scopes (Phase 9-D-D / CFA-02..CFA-11 is
+    //     what decides per-module widening on top of these primitives);
+    //   - does NOT imply any module capability — the module capability MUST
+    //     be held on actor.org in parallel (e.g. STRATEGY_CHANGE_STATUS +
+    //     CLUSTER_TREE_MANAGE; never just one of them).
+    //
+    // The three primitives are distinguished in:
+    //   - authorization_decision_audits (cluster_tree_rescue_layer_*
+    //     discriminator coming via the trace reason);
+    //   - the ActivityLog audit row;
+    //   - the whyCan() return trace.
+    //
+    // Does NOT modify sameOrganization / extractOrganizationId /
+    // buildScopeChain / ScopeAssignmentResolver / any OrgGuard / any
+    // User*Scope / any module controller.
 
     /**
-     * الفحص المسبق لإطلاق rescue branch — يُرجع true فقط إذا
-     *   - $capability === Capability::CLUSTER_TREE_VIEW
-     *   - الـ target غير حساس (SensitivelyScoped + isSensitive=false)
-     *   - sameOrganization سيفشل (cross-org case)
-     *   - crossOrgClusterTreeAdmitted فعلاً يُرجع true
+     * The set of capability strings that activate the cluster_tree rescue
+     * branch. Sibling primitives — each fires through the SAME ancestor walk
+     * + scoped-role check; the only difference is the audit-trail label.
+     *
+     * @return list<string>
+     */
+    protected static function clusterTreePrimitiveCapabilities(): array
+    {
+        return [
+            Capability::CLUSTER_TREE_VIEW,
+            Capability::CLUSTER_TREE_MANAGE,
+            Capability::CLUSTER_TREE_EXPORT,
+        ];
+    }
+
+    /**
+     * Pre-flight gate for the cluster_tree rescue branch. Returns true ONLY when:
+     *   - $capability is one of {CLUSTER_TREE_VIEW, CLUSTER_TREE_MANAGE, CLUSTER_TREE_EXPORT},
+     *   - the target is NOT sensitive (SensitivelyScoped + isSensitive=false),
+     *   - sameOrganization would deny (cross-org case),
+     *   - crossOrgClusterTreeAdmitted actually returns true.
      */
     protected static function clusterTreeRescueApplies(User $user, string $capability, Model $target): bool
     {
-        if ($capability !== Capability::CLUSTER_TREE_VIEW) {
+        if (! in_array($capability, static::clusterTreePrimitiveCapabilities(), true)) {
             return false;
         }
 
@@ -616,18 +648,24 @@ class AccessDecision
     }
 
     /**
-     * الفحص الأساسي لـ cross-org cluster_tree grant.
+     * Core cross-org cluster_tree grant check.
      *
-     * يرجع true إذا:
-     *   1. user.organization_id != null
-     *   2. target org id != null ومختلف عن user org
-     *   3. user.organization_id موجود في ancestors(target.organization_id)
-     *   4. المستخدم يحمل scoped role نشطة على user.organization_id
-     *      وفيها permission = Capability::CLUSTER_TREE_VIEW
+     * Returns true if:
+     *   1. $capability is one of the cluster_tree primitives,
+     *   2. user.organization_id != null,
+     *   3. target organization_id != null and differs from user org,
+     *   4. user.organization_id appears in ancestors(target.organization_id)
+     *      via the parent_id walk (depth cap 32, fail-closed on cycle),
+     *   5. user holds a scoped role on user.organization_id whose
+     *      ScopedRoleDefinition.permissions[] contains the requested
+     *      primitive (no is_admin_role shortcut, no inherit_to_children shortcut).
      */
     protected static function crossOrgClusterTreeAdmitted(User $user, string $capability, Model $target): bool
     {
-        if ($capability !== Capability::CLUSTER_TREE_VIEW || $user->organization_id === null) {
+        if (! in_array($capability, static::clusterTreePrimitiveCapabilities(), true)) {
+            return false;
+        }
+        if ($user->organization_id === null) {
             return false;
         }
 
