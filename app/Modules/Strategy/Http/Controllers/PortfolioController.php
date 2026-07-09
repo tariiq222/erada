@@ -17,6 +17,7 @@ use App\Modules\Strategy\Http\Requests\UpdatePortfolioStrategicStatusRequest;
 use App\Modules\Strategy\Http\Requests\ViewPortfolioRequest;
 use App\Modules\Strategy\Http\Resources\PortfolioResource;
 use App\Modules\Strategy\Models\Portfolio;
+use App\Modules\Strategy\Scopes\UserStrategyScope;
 use App\Modules\Strategy\Services\PortfolioDecisionService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
@@ -29,17 +30,17 @@ use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * Portfolio Controller (الالتزامات التنفيذية)
+ * PortfolioController — Strategic commitment ("الالتزام التنفيذي") controller.
  *
- * ملاحظة: الـ API يستخدم مصطلح Portfolio داخلياً
- * لكن الـ Frontend يعرض "الالتزام التنفيذي" للمستخدم
+ * Note: the API uses the term "Portfolio" internally but the Frontend surfaces
+ * "الالتزام التنفيذي" (strategic commitment) to end users.
  */
 class PortfolioController extends Controller
 {
     use HasOrganizationScope;
 
     /**
-     * معالجة الأخطاء غير المتوقعة
+     * Handle unexpected exceptions and return a sanitized JSON envelope.
      */
     private function handleException(\Throwable $e, string $context): JsonResponse
     {
@@ -71,7 +72,7 @@ class PortfolioController extends Controller
     ) {}
 
     /**
-     * التحقق من صلاحية الوصول للاستراتيجية
+     * Verify the actor's strategy authorization.
      *
      * Super-admin bypass is handled automatically by AccessDecision::can()
      * (engine short-circuit), so no manual isSuperAdmin() check is needed
@@ -102,19 +103,20 @@ class PortfolioController extends Controller
     {
         try {
             // Authz (STRATEGY_VIEW) owned by ListPortfoliosRequest.
+            // Phase 9-D-D1b: cluster_tree read widening via UserStrategyScope —
+            // super_admin bypass, null-org fail-closed, descendant widening when
+            // STRATEGY_VIEW + CLUSTER_TREE_VIEW are both granted on actor.org.
 
             $query = Portfolio::query()
                 ->with(['creator:id,name'])
                 ->withCount('programs');
 
             $user = auth()->user();
-            if (! $user?->isSuperAdmin()) {
-                if ($user?->organization_id === null) {
-                    abort(403, 'ليس لديك صلاحية الوصول لهذا العنصر');
-                }
-
-                $query->where('organization_id', $user->organization_id);
+            if (! $user) {
+                abort(401);
             }
+
+            app(UserStrategyScope::class)->applyToPortfolios($query, $user);
 
             // Filter by operational status
             if ($request->has('status') && $request->status) {
@@ -244,7 +246,7 @@ class PortfolioController extends Controller
                 unset($validated['priority_rank'], $validated['weight']);
             }
 
-            // التحقق من قاعدة الإغلاق الاستراتيجي
+            // Strategic close guard
             if (($validated['portfolio_status'] ?? null) === Portfolio::PORTFOLIO_STATUS_CLOSED) {
                 if (! $portfolio->canBeClosedStrategically()) {
                     if (! $this->canForceClosePortfolio($portfolio)) {
@@ -253,7 +255,7 @@ class PortfolioController extends Controller
                             'errors' => ['portfolio_status' => ['يوجد برامج نشطة مرتبطة بهذه المحفظة']],
                         ], 422);
                     }
-                    // تسجيل قرار الإغلاق القسري
+                    // Log the force-close decision
                     $this->decisionService->logForceCloseDecision(
                         $portfolio,
                         auth()->user(),
@@ -301,12 +303,13 @@ class PortfolioController extends Controller
 
     /**
      * Get a simple list for dropdowns.
-     * يعرض المحافظ النشطة استراتيجياً (بغض النظر عن الحالة التشغيلية)
+     * Return strategically-active portfolios (regardless of operational status).
      */
     public function list(ListPortfoliosDropdownRequest $request): JsonResponse
     {
         try {
             // Authz (STRATEGY_VIEW) owned by ListPortfoliosDropdownRequest.
+            // Phase 9-D-D1b: cluster_tree read widening via UserStrategyScope.
 
             $query = Portfolio::strategicallyActive()
                 ->whereIn('status', ['draft', 'active'])
@@ -315,13 +318,11 @@ class PortfolioController extends Controller
                 ->orderBy('order');
 
             $user = auth()->user();
-            if (! $user?->isSuperAdmin()) {
-                if ($user?->organization_id === null) {
-                    abort(403, 'ليس لديك صلاحية الوصول لهذا العنصر');
-                }
-
-                $query->where('organization_id', $user->organization_id);
+            if (! $user) {
+                abort(401);
             }
+
+            app(UserStrategyScope::class)->applyToPortfolios($query, $user);
 
             $portfolios = $query->get();
 
@@ -365,7 +366,7 @@ class PortfolioController extends Controller
             $oldStatus = $portfolio->portfolio_status;
             $isForceClose = false;
 
-            // التحقق من قاعدة الإغلاق الاستراتيجي
+            // Strategic close guard
             if ($validated['portfolio_status'] === Portfolio::PORTFOLIO_STATUS_CLOSED) {
                 if (! $portfolio->canBeClosedStrategically()) {
                     if (! $this->canForceClosePortfolio($portfolio)) {
@@ -379,7 +380,7 @@ class PortfolioController extends Controller
 
             $portfolio->update(['portfolio_status' => $validated['portfolio_status']]);
 
-            // تسجيل القرار
+            // Log the decision
             if ($isForceClose) {
                 $this->decisionService->logForceCloseDecision(
                     $portfolio,
@@ -412,17 +413,15 @@ class PortfolioController extends Controller
     {
         try {
             // Authz (STRATEGY_VIEW) owned by PortfolioSummaryRequest.
+            // Phase 9-D-D1b: cluster_tree read widening via UserStrategyScope.
 
-            $scopePortfolioQuery = function ($query) {
-                $user = auth()->user();
+            $user = auth()->user();
+            if (! $user) {
+                abort(401);
+            }
 
-                if (! $user?->isSuperAdmin()) {
-                    if ($user?->organization_id === null) {
-                        abort(403, 'ليس لديك صلاحية الوصول لهذا العنصر');
-                    }
-
-                    $query->where('organization_id', $user->organization_id);
-                }
+            $scopePortfolioQuery = function ($query) use ($user) {
+                app(UserStrategyScope::class)->applyToPortfolios($query, $user);
 
                 return $query;
             };

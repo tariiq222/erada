@@ -16,6 +16,7 @@ use App\Modules\Strategy\Http\Requests\UpdateProgramRequest;
 use App\Modules\Strategy\Http\Requests\ViewProgramRequest;
 use App\Modules\Strategy\Models\Portfolio;
 use App\Modules\Strategy\Models\Program;
+use App\Modules\Strategy\Scopes\UserStrategyScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -24,7 +25,7 @@ class ProgramController extends Controller
     use HasOrganizationScope;
 
     /**
-     * التحقق من صلاحية الوصول للاستراتيجية
+     * Verify the actor's strategy authorization.
      *
      * Super-admin bypass is handled automatically by AccessDecision::can()
      * (engine short-circuit), so no manual isSuperAdmin() check is needed
@@ -54,6 +55,7 @@ class ProgramController extends Controller
     public function index(ListProgramsRequest $request): JsonResponse
     {
         // Authz (STRATEGY_VIEW) owned by ListProgramsRequest.
+        // Phase 9-D-D1b: cluster_tree read widening via UserStrategyScope.
 
         $query = Program::query()
             ->with([
@@ -66,15 +68,13 @@ class ProgramController extends Controller
             ]);
 
         $user = auth()->user();
-        if (! $user?->isSuperAdmin()) {
-            if ($user?->organization_id === null) {
-                abort(403, 'ليس لديك صلاحية الوصول لهذا العنصر');
-            }
-
-            $query->where('organization_id', $user->organization_id);
+        if (! $user) {
+            abort(401);
         }
 
-        // Filter by portfolio (الالتزام التنفيذي)
+        app(UserStrategyScope::class)->applyToPrograms($query, $user);
+
+        // Filter by portfolio
         if ($request->has('portfolio_id') && is_numeric($request->portfolio_id)) {
             $query->where('portfolio_id', (int) $request->portfolio_id);
         }
@@ -234,13 +234,12 @@ class ProgramController extends Controller
             ->select('id', 'code', 'name', 'portfolio_id');
 
         $user = auth()->user();
-        if (! $user?->isSuperAdmin()) {
-            if ($user?->organization_id === null) {
-                abort(403, 'ليس لديك صلاحية الوصول لهذا العنصر');
-            }
-
-            $query->where('organization_id', $user->organization_id);
+        if (! $user) {
+            abort(401);
         }
+
+        // Phase 9-D-D1b: cluster_tree read widening via UserStrategyScope.
+        app(UserStrategyScope::class)->applyToPrograms($query, $user);
 
         if ($request->has('portfolio_id') && is_numeric($request->portfolio_id)) {
             $query->where('portfolio_id', (int) $request->portfolio_id);

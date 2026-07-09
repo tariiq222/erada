@@ -2,14 +2,16 @@
 
 namespace App\Modules\Strategy\Http\Requests;
 
-use App\Modules\Core\Authorization\AccessDecision;
-use App\Modules\Core\Authorization\Capability;
 use App\Modules\Strategy\Models\Portfolio;
+use App\Modules\Strategy\Policies\PortfolioPolicy;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
  * ViewPortfolioRequest - engine-only authz for reading a single portfolio.
- * Surfaces STRATEGY_VIEW against the resolved portfolio; engine handles
+ *
+ * Phase 9-D-D1b — delegates to PortfolioPolicy::view() which contains the
+ * cluster_tree read widening (STRATEGY_VIEW + CLUSTER_TREE_VIEW on actor
+ * ⇒ cross-org read for descendant organizations). The engine handles
  * super_admin bypass + organization isolation (Portfolio is ScopeAware).
  */
 class ViewPortfolioRequest extends FormRequest
@@ -36,7 +38,7 @@ class ViewPortfolioRequest extends FormRequest
 
         $this->portfolio = $portfolio;
 
-        return AccessDecision::can($user, Capability::STRATEGY_VIEW, $portfolio);
+        return app(PortfolioPolicy::class)->view($user, $portfolio);
     }
 
     public function rules(): array

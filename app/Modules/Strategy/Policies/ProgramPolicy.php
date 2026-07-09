@@ -9,17 +9,27 @@ use App\Modules\Strategy\Models\Program;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
 /**
- * ProgramPolicy — سياسة صلاحيات المبادرات (Programs)
+ * ProgramPolicy — Program authorization policy.
  *
- * engine-only: يعتمد كلياً على AccessDecision::can().
- * المنطق القديم (Spatie flat / مقارنات FK) أُزيل بعد تثبيت engine=ON في Phase هـ.
+ * Engine-only: relies entirely on AccessDecision::can(). The legacy Spatie
+ * flat / FK-comparison logic was removed when engine=ON was finalized
+ * (Phase E).
+ *
+ * Phase 9-D-D1b — Cluster tree read widening:
+ *   - view() / viewReports() allow AccessDecision::can(CLUSTER_TREE_VIEW, $program)
+ *     as a second path if and only if the actor holds Capability::STRATEGY_VIEW
+ *     + CLUSTER_TREE_VIEW on actor.organization_id.
+ *   - update / delete / create / changePortfolio / manageWeight /
+ *     manageProjects / assignProgramManager / assignExecutiveSponsor /
+ *     linkProject stay strict same-org.
+ *   - Does not widen to gain write access in any other module.
  */
 class ProgramPolicy
 {
     use HandlesAuthorization;
 
     /**
-     * Super Admin يتجاوز كل الصلاحيات.
+     * Super Admin bypasses all abilities.
      */
     public function before(User $user, string $ability): ?bool
     {
@@ -31,7 +41,7 @@ class ProgramPolicy
     }
 
     /**
-     * عرض قائمة المبادرات.
+     * List programs.
      */
     public function viewAny(User $user): bool
     {
@@ -39,15 +49,42 @@ class ProgramPolicy
     }
 
     /**
-     * عرض مبادرة معينة.
+     * Show a single program.
+     *
+     * Phase 9-D-D1b — Cluster tree widening applies to view() only.
+     *
+     * Decision paths:
+     *  1) STRATEGY_VIEW on program (same org): engine's same-org + role check.
+     *  2) CLUSTER_TREE_VIEW on program (cluster ancestor): engine's rescue
+     *     branch verifies the ancestor walk + non-sensitive + scoped-role
+     *     grant. Only fires if the actor holds Capability::STRATEGY_VIEW +
+     *     CLUSTER_TREE_VIEW on actor.organization_id.
+     *
+     * Missing either capability ⇒ deny. Writes are unaffected (they go
+     * through update / delete / create / changePortfolio / manageWeight /
+     * manageProjects / assignProgramManager / assignExecutiveSponsor /
+     * linkProject).
      */
     public function view(User $user, Program $program): bool
     {
-        return AccessDecision::can($user, Capability::STRATEGY_VIEW, $program);
+        // Path 1: same-org STRATEGY_VIEW via engine.
+        if (AccessDecision::can($user, Capability::STRATEGY_VIEW, $program)) {
+            return true;
+        }
+
+        // Path 2: cross-org cluster_tree widening — requires BOTH entitlements on actor.org.
+        if (! AccessDecision::can($user, Capability::STRATEGY_VIEW)) {
+            return false;
+        }
+        if (! AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW)) {
+            return false;
+        }
+
+        return AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW, $program);
     }
 
     /**
-     * إنشاء مبادرة.
+     * Create a program.
      */
     public function create(User $user): bool
     {
@@ -59,7 +96,7 @@ class ProgramPolicy
     }
 
     /**
-     * تعديل مبادرة.
+     * Update a program.
      */
     public function update(User $user, Program $program): bool
     {
@@ -67,7 +104,7 @@ class ProgramPolicy
     }
 
     /**
-     * حذف مبادرة.
+     * Delete a program.
      */
     public function delete(User $user, Program $program): bool
     {
@@ -75,7 +112,7 @@ class ProgramPolicy
     }
 
     /**
-     * استعادة مبادرة محذوفة — Super Admin فقط (يتم في before).
+     * Restore a soft-deleted program — Super Admin only (handled in before()).
      */
     public function restore(User $user, Program $program): bool
     {
@@ -83,7 +120,7 @@ class ProgramPolicy
     }
 
     /**
-     * حذف نهائي — Super Admin فقط (يتم في before).
+     * Force-delete a program — Super Admin only (handled in before()).
      */
     public function forceDelete(User $user, Program $program): bool
     {
@@ -91,7 +128,7 @@ class ProgramPolicy
     }
 
     /**
-     * تغيير محفظة المبادرة أو وزنها — يتطلب manage_priority.
+     * Change a program's parent portfolio or weight — requires manage_priority.
      */
     public function changePortfolio(User $user, Program $program): bool
     {
@@ -99,7 +136,7 @@ class ProgramPolicy
     }
 
     /**
-     * إدارة وزن المبادرة.
+     * Manage a program's weight.
      */
     public function manageWeight(User $user, Program $program): bool
     {
@@ -107,7 +144,7 @@ class ProgramPolicy
     }
 
     /**
-     * إدارة المشاريع داخل المبادرة.
+     * Manage the projects inside a program.
      */
     public function manageProjects(User $user, Program $program): bool
     {
@@ -115,7 +152,7 @@ class ProgramPolicy
     }
 
     /**
-     * تعيين مدير برنامج.
+     * Assign a program manager.
      */
     public function assignProgramManager(User $user, Program $program): bool
     {
@@ -123,7 +160,7 @@ class ProgramPolicy
     }
 
     /**
-     * تعيين راعٍ تنفيذي.
+     * Assign an executive sponsor.
      */
     public function assignExecutiveSponsor(User $user, Program $program): bool
     {
@@ -131,7 +168,7 @@ class ProgramPolicy
     }
 
     /**
-     * ربط/فك مشروع.
+     * Link or unlink a project to/from the program.
      */
     public function linkProject(User $user, Program $program): bool
     {
@@ -139,7 +176,7 @@ class ProgramPolicy
     }
 
     /**
-     * عرض تقارير ومؤشرات المبادرة.
+     * View a program's reports and indicators.
      */
     public function viewReports(User $user, Program $program): bool
     {

@@ -2,9 +2,8 @@
 
 namespace App\Modules\Strategy\Http\Requests;
 
-use App\Modules\Core\Authorization\AccessDecision;
-use App\Modules\Core\Authorization\Capability;
 use App\Modules\Strategy\Models\Portfolio;
+use App\Modules\Strategy\Policies\PortfolioPolicy;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -15,8 +14,9 @@ use Illuminate\Foundation\Http\FormRequest;
  *   - include_status=active|all  (default: active)
  *   - hide_empty_programs=1
  *
- * The FormRequest enforces STRATEGY_VIEW against the resolved Portfolio;
- * the controller still applies org isolation via the engine.
+ * Phase 9-D-D1b — delegates to PortfolioPolicy::view() so cluster_tree
+ * read widening applies (STRATEGY_VIEW + CLUSTER_TREE_VIEW on actor ⇒
+ * read access to descendant organizations' portfolios).
  */
 class ViewPortfolioTreeRequest extends FormRequest
 {
@@ -42,7 +42,7 @@ class ViewPortfolioTreeRequest extends FormRequest
 
         $this->portfolio = $portfolio;
 
-        return AccessDecision::can($user, Capability::STRATEGY_VIEW, $portfolio);
+        return app(PortfolioPolicy::class)->view($user, $portfolio);
     }
 
     public function rules(): array

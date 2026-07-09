@@ -16,6 +16,7 @@ use App\Modules\Strategy\Http\Requests\UpdateBlockerRequest;
 use App\Modules\Strategy\Http\Requests\ViewBlockerRequest;
 use App\Modules\Strategy\Models\Blocker;
 use App\Modules\Strategy\Models\Program;
+use App\Modules\Strategy\Scopes\UserStrategyScope;
 use App\Modules\Tasks\Models\Task;
 use Illuminate\Http\JsonResponse;
 
@@ -24,7 +25,7 @@ class BlockerController extends Controller
     use HasOrganizationScope;
 
     /**
-     * التحقق من صلاحية الوصول للاستراتيجية
+     * Verify the actor's strategy authorization.
      */
     protected function authorizeStrategy(string $ability = 'view'): void
     {
@@ -52,17 +53,17 @@ class BlockerController extends Controller
     public function index(ListBlockersRequest $request): JsonResponse
     {
         // Authz (STRATEGY_VIEW) owned by ListBlockersRequest.
+        // Phase 9-D-D1b: cluster_tree read widening via UserStrategyScope.
 
         $query = Blocker::query()
             ->with(['reporter:id,name', 'assignee:id,name']);
 
-        if (! auth()->user()->isSuperAdmin()) {
-            if (auth()->user()->organization_id === null) {
-                abort(403, 'غير مصرح لك بالوصول لهذا العنصر');
-            }
-
-            $query->where('organization_id', auth()->user()->organization_id);
+        $user = auth()->user();
+        if (! $user) {
+            abort(401);
         }
+
+        app(UserStrategyScope::class)->applyToBlockers($query, $user);
 
         // Filter by blockable type
         if ($request->has('type') && $request->has('id')) {
@@ -242,7 +243,7 @@ class BlockerController extends Controller
             'program' => Program::class,
             'project' => Project::class,
             'task' => Task::class,
-            default => throw new \InvalidArgumentException('نوع العنصر غير صالح'),
+            default => throw new \InvalidArgumentException('Invalid blockable entity type'),
         };
     }
 }
