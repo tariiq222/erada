@@ -1,56 +1,52 @@
 {
-  "branchName": "phase-9d-d1b-strategy-cluster-tree-read",
-  "epic": "Phase 9-D Cluster Tree Read Rollout",
-  "story": "STORY CLT-01 — Strategy Cluster Tree Read",
-  "description": "Read-only widening of Strategy (Portfolio / Program / Review / Blocker / Dashboard) for users holding BOTH strategy.view + core.cluster_tree.view, mirroring the KPI 9-D-D1a pattern.",
+  "branchName": "phase-cfa-02-kpi-cluster-export-widening",
+  "epic": "Phase CFA-02 — KPI Cluster Export Widening",
+  "story": "STORY CFA-02 — KPI cluster export widening",
+  "description": "Wire the CFA-01 cluster_tree.export rescue primitive into the Performance (KPI) module so a cluster admin with Capability::KPIS_EXPORT + Capability::CLUSTER_TREE_EXPORT can export KPIs across descendant organizations. Mirrors the 9-D-D1a read widening pattern, but for the EXPORT surface. Read-only by design — no widening to update / create / delete / import.",
   "userStories": [
     {
-      "id": "CLT-01",
-      "title": "Strategy cluster_tree read widening (Portfolio / Program / Review / Blocker / Dashboard)",
+      "id": "CFA-02",
+      "title": "KPI cluster export widening (KPI list export only)",
       "priority": 1,
       "passes": false,
       "acceptanceCriteria": [
-        "Parent org user with strategy.view + core.cluster_tree.view sees child org portfolios (index + show).",
-        "Parent org user with strategy.view + core.cluster_tree.view sees child org programs (index + show).",
-        "Parent org user with strategy.view + core.cluster_tree.view sees child org reviews (index + show).",
-        "Parent org user with strategy.view + core.cluster_tree.view sees child org blockers (index + show).",
-        "Missing strategy.view → denied/empty.",
-        "Missing core.cluster_tree.view → denied/empty.",
-        "Sibling org → denied/empty.",
-        "Child org cannot see parent org.",
-        "Null-org user → denied/empty (whereRaw false).",
-        "All Strategy write endpoints stay 403 cross-org (store / update / delete / priority / status / link / unlink / resolve / escalate / assignOwner / manageProjects / changePortfolio / manageWeight / changeStrategicStatus / forceClose).",
-        "Super admin unchanged (short-circuit).",
-        "No AccessDecision changes, no migrations, no SCOPE_CLUSTER revival, no excluded-module touches."
+        "Capability::KPIS_EXPORT = 'kpis.export' constant declared in Capability.php.",
+        "UserKpiScope::clusterVisibleOrgIds() widens when actor holds KPIS_EXPORT + CLUSTER_TREE_EXPORT (purpose='export') on actor.organization_id. Existing KPIS_VIEW + CLUSTER_TREE_VIEW widening (purpose=null/'view') preserved for reads.",
+        "KpiController::export() authz: 'export' ability accepts EITHER KPIS_EXPORT OR KPIS_VIEW (backward compat for same-org export). Cross-org export requires KPIS_EXPORT + CLUSTER_TREE_EXPORT (strict per CFA-00 contract via scope).",
+        "KpiController::filteredKpiQuery accepts purpose parameter; export endpoint calls with purpose='export' so the export-pair widening applies (not the view-pair widening).",
+        "Cluster admin (KPIS_EXPORT + CLUSTER_TREE_EXPORT) export endpoint includes KPIs from descendant organizations in the CSV/XLSX stream.",
+        "User without KPIS_EXPORT (only KPIS_VIEW) export endpoint stays strict same-org (no descendant KPIs in stream).",
+        "User without CLUSTER_TREE_EXPORT (only KPIS_EXPORT) export endpoint stays strict same-org.",
+        "User with KPIS_VIEW + CLUSTER_TREE_VIEW (read pair) export endpoint stays strict same-org per CFA-00 strict contract — read pair does NOT widen exports.",
+        "Sibling cluster user denied descendant KPIs in export stream.",
+        "Child user denied parent cluster KPIs in export stream (one-directional).",
+        "Null-org user fail-closed (empty export).",
+        "Super admin sees all KPIs in export regardless of cluster_tree grants.",
+        "All KPI write endpoints stay strict same-org (store / update / destroy / import / measurement / link).",
+        "No AccessDecision engine change (no modification of clusterTreeRescueApplies / crossOrgClusterTreeAdmitted / sameOrganization / extractOrganizationId / buildScopeChain / ScopeAssignmentResolver / any OrgGuard).",
+        "No migration. No CapabilityAlias entry needed (no legacy flat string for 'kpis.export').",
+        "No OVR / Surveys / HR / ActivityLog / Tasks / Projects / Risks / Meetings touches.",
+        "Direction R preserved (no legacy decisions routes restored, no manageMembers restored).",
+        "PR #6 / KPI 9-D-D1a read widening behavior not regressed (ClusterTreeKpiPolicyTest + ClusterTreeUserKpiScopeTest stay green).",
+        "CFA-01 engine primitive tests (ClusterTreeManageExportPrimitiveTest 19 tests) stay green.",
+        "All non-target regression tests stay green (UserKpiScopeTest, KpiPolicyTest, KpiMeasurementPolicyTest, KpiLinkPolicyTest, KpiOrgGuardTest, KpiControllerTest, KpiEngineAuthzTest, KpiRelationsTest, KpiValueIntegrityTest, ImprovementKpiRequiredTest)."
       ],
-      "referenceImplementation": "Phase 9-D-D1a — branch `phase-9d-d1a-kpi-cluster-tree-read` (merged via PR #6 → commit `79eb65e`). Mirror the same pattern in Strategy without touching AccessDecision.",
+      "referenceImplementation": "CFA-01 (branch phase-cfa-01-cluster-tree-manage-export-primitives, PR #10, merge commit 7dc6e44) for the engine primitive. Phase 9-D-D1a (branch phase-9d-d1a-kpi-cluster-tree-read, PR #6, merge commit 79eb65e) for the read-widening pattern to mirror.",
       "files": {
         "create": [
-          "app/Modules/Strategy/Scopes/UserStrategyScope.php",
-          "app/Modules/Strategy/Policies/BlockerPolicy.php",
-          "app/Modules/Strategy/Policies/ReviewPolicy.php",
-          "tests/Unit/Strategy/Policies/ClusterTreeStrategyPolicyTest.php",
-          "tests/Unit/Strategy/Scopes/ClusterTreeUserStrategyScopeTest.php"
+          "tests/Unit/Performance/Scopes/ClusterTreeKpiExportScopeTest.php",
+          "tests/Feature/Api/Performance/KpiExportClusterTreeTest.php"
         ],
         "modify": [
-          "app/Modules/Strategy/Http/Controllers/PortfolioController.php",
-          "app/Modules/Strategy/Http/Controllers/ProgramController.php",
-          "app/Modules/Strategy/Http/Controllers/ReviewController.php",
-          "app/Modules/Strategy/Http/Controllers/BlockerController.php",
-          "app/Modules/Strategy/Http/Controllers/StrategyDashboardController.php",
-          "app/Modules/Strategy/Http/Requests/ViewBlockerRequest.php",
-          "app/Modules/Strategy/Http/Requests/ViewPortfolioRequest.php",
-          "app/Modules/Strategy/Http/Requests/ViewPortfolioTreeRequest.php",
-          "app/Modules/Strategy/Http/Requests/ViewProgramRequest.php",
-          "app/Modules/Strategy/Http/Requests/ViewReviewRequest.php",
-          "app/Modules/Strategy/Policies/PortfolioPolicy.php",
-          "app/Modules/Strategy/Policies/ProgramPolicy.php"
+          "app/Modules/Core/Authorization/Capability.php",
+          "app/Modules/Performance/Scopes/UserKpiScope.php",
+          "app/Modules/Performance/Http/Controllers/KpiController.php"
         ]
       },
       "qualityGates": [
         "./vendor/bin/pint --test app database tests",
         "composer phpstan",
-        "php artisan test --filter=Strategy",
+        "php artisan test --filter=Performance",
         "php artisan test --filter=ClusterTree",
         "php artisan test --filter=AccessDecision",
         "php artisan test --filter=OrganizationHierarchy",
@@ -59,23 +55,27 @@
     }
   ],
   "nonGoals": [
-    "Cluster_tree WIDENING to any other module (Projects / Risks / Meetings / Users come in their own stories CLT-02..CLT-05).",
-    "Any write path widening (create / update / delete / status / priority / link / unlink / resolve / escalate / assignOwner).",
-    "AccessDecision changes.",
-    "Migrations.",
-    "Tasks / OVR / Surveys / HR / ActivityLog touches (excluded or deferred)."
+    "Widening KPI write endpoints (store / update / destroy / import / measurement / link create-delete) — all stay strict same-org.",
+    "Widening export in any other module (Projects / Risks / Meetings / Users / Strategy — each is its own CFA-N story).",
+    "Adding CLUSTER_TREE_EXPORT wiring to other modules' controllers (CFA-03+).",
+    "AccessDecision engine changes (engine is stable per CFA-01 contract).",
+    "Migrations (KPIS_EXPORT is a pure RBAC string constant).",
+    "Tasks / OVR / Surveys / HR / ActivityLog touches (excluded or deferred).",
+    "Changing the audit-trail label 'cluster_tree_rescue' (audit discrimination stays via capability string).",
+    "Introduce a KPIS_EXPORT legacy alias in CapabilityAlias (no legacy flat string exists)."
   ],
   "stopConditions": [
-    "AccessDecision change seems necessary",
+    "AccessDecision engine change seems necessary",
     "Migration seems necessary",
-    "PII exposure risk appears",
-    "Write path would be widened",
-    "Existing resource response includes sensitive fields",
-    "Current module has unclear authorization contract",
+    "PII exposure risk appears (KPIs do not carry sensitive PII, but verify no measurement payload includes patient-level fields)",
+    "Write path would be widened (e.g. KpiController::import, store, update, destroy)",
+    "Existing resource response includes sensitive fields (verify KpiImportExportService::rowFor() payload — should be the 14 documented columns only)",
     "Tests require deleting or weakening real security coverage",
-    "Any conflict with Direction R / Direction B / KPI cluster_tree behavior",
-    "Any CI failure that cannot be explained by the current story"
+    "Any conflict with Direction R / Direction B / 9-D-D1a KPI cluster_tree behavior / CFA-01 engine primitive contract",
+    "Any CI failure that cannot be explained by the current story",
+    "Existing admin user with KPIS_VIEW loses access to the existing export endpoint (regression)",
+    "KPIS_VIEW + CLUSTER_TREE_VIEW widens exports cross-org after CFA-02 (only KPIS_EXPORT + CLUSTER_TREE_EXPORT should widen exports)"
   ],
-  "mergeApproval": "Tariq only — never auto-merge in this epic.",
+  "mergeApproval": "Autonomous via the CFA mode — auto-merge if all GitHub CI checks green and no stop condition triggered.",
   "completionSignal": "<promise>COMPLETE</promise>"
 }

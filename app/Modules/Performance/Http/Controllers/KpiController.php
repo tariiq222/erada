@@ -40,9 +40,16 @@ class KpiController extends Controller
 
     public function export(Request $request, KpiImportExportService $service, string $format): StreamedResponse
     {
-        $this->authorizePerformance('view');
+        $this->authorizePerformance('export');
 
-        $query = $this->filteredKpiQuery($request);
+        // CFA-02: scope widening for the export pair (KPIS_EXPORT + CLUSTER_TREE_EXPORT).
+        // Reuses filteredKpiQuery so all search/status/category filters still apply,
+        // but passes purpose='export' to UserKpiScope so the export-specific widening
+        // (and not the view-pair widening) applies. Strict per CFA-00: a user with only
+        // KPIS_VIEW + CLUSTER_TREE_VIEW (read-only cluster access) can read descendants
+        // via index/show/list, but cannot export them — they see only their own org in
+        // the streamed CSV/XLSX.
+        $query = $this->filteredKpiQuery($request, 'export');
         $filename = 'performance-kpis-'.now()->toDateString().'.'.$format;
 
         return match ($format) {
@@ -155,10 +162,29 @@ class KpiController extends Controller
      * Engine-based gate: maps a controller-level ability to the matching
      * Capability constant. Authorization is decided by the unified AuthZ
      * engine (AccessDecision::can), not by a flat Spatie permission name.
+     *
+     * CFA-02: 'export' ability accepts EITHER Capability::KPIS_EXPORT (the new
+     * canonical export capability, paired with CLUSTER_TREE_EXPORT for the
+     * cluster rescue branch) OR Capability::KPIS_VIEW (backward-compat for
+     * existing users who only hold KPIS_VIEW). This preserves the pre-CFA-02
+     * same-org export behavior while introducing the new export capability
+     * for cluster widening.
      */
     protected function authorizePerformance(string $ability = 'view'): void
     {
         $user = auth()->user();
+
+        if ($ability === 'export') {
+            // CFA-02: KPIS_EXPORT (new canonical, gates cross-org export) OR
+            // KPIS_VIEW (backward-compat for same-org export only).
+            if (! AccessDecision::can($user, Capability::KPIS_EXPORT)
+                && ! AccessDecision::can($user, Capability::KPIS_VIEW)) {
+                abort(403, 'ليس لديك صلاحية الوصول');
+            }
+
+            return;
+        }
+
         $capability = match ($ability) {
             'create', 'update', 'delete' => Capability::KPIS_MANAGE,
             default => Capability::KPIS_VIEW,
@@ -169,7 +195,7 @@ class KpiController extends Controller
         }
     }
 
-    protected function scopeToCurrentOrganization($query): void
+    protected function scopeToCurrentOrganization($query, ?string $purpose = null): void
     {
         $user = auth()->user();
 
@@ -181,17 +207,24 @@ class KpiController extends Controller
             abort(403, 'ليس لديك صلاحية الوصول لهذا العنصر');
         }
 
-        // Phase 4: delegate to UserKpiScope (single source of truth for KPI org floor).
-        app(UserKpiScope::class)->applyToKpis($query, $user);
+        // Phase 4 + CFA-02: delegate to UserKpiScope (single source of truth
+        // for KPI org floor). The optional $purpose controls which cluster_tree
+        // widening pair applies — null uses the 9-D-D1a read pair;
+        // 'export' uses the CFA-02 export pair.
+        app(UserKpiScope::class)->applyToKpis($query, $user, $purpose);
     }
 
     /**
+     * @param  string|null  $purpose  Optional purpose forwarded to
+     *                                UserKpiScope::applyToKpis for export widening.
+     *                                null ⇒ read pair (default).
+     *                                'export' ⇒ CFA-02 export pair.
      * @return Builder<Kpi>
      */
-    private function filteredKpiQuery(Request $request): Builder
+    private function filteredKpiQuery(Request $request, ?string $purpose = null): Builder
     {
         $query = Kpi::query();
-        $this->scopeToCurrentOrganization($query);
+        $this->scopeToCurrentOrganization($query, $purpose);
 
         if ($request->filled('status')) {
             $query->where('status', $request->string('status')->toString());

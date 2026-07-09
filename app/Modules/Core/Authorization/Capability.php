@@ -203,6 +203,31 @@ final class Capability
 
     const KPIS_MANAGE = 'kpis.manage';
 
+    /**
+     * Phase CFA-02 — KPI cluster export widening.
+     *
+     * The canonical "can export KPIs" capability, paired with
+     * `Capability::CLUSTER_TREE_EXPORT` for the cluster rescue branch in
+     * `AccessDecision::clusterTreeRescueApplies()`.
+     *
+     * Contract (per CFA-00 / CFA-01):
+     *   - Same-org export: held on actor.org, gates the
+     *     `GET /api/performance/kpis/export/{format}` endpoint alongside
+     *     `KPIS_VIEW` (backward compat — existing users with KPIS_VIEW
+     *     only can still export same-org KPIs).
+     *   - Cross-org export: requires BOTH `KPIS_EXPORT` AND
+     *     `CLUSTER_TREE_EXPORT` on actor.org; the scope widening reaches
+     *     descendant organizations via `Organization::descendantIds()`.
+     *   - This constant does NOT widen read, write, or manage paths; the
+     *     9-D-D1a read widening (KPIS_VIEW + CLUSTER_TREE_VIEW) and the
+     *     write paths (KPIS_MANAGE strict same-org) remain unchanged.
+     *   - No migration: the constant is a pure RBAC string; existing roles
+     *     that need cross-org export must be granted KPIS_EXPORT via the
+     *     normal role-management UI.
+     *   - No CapabilityAlias entry: no legacy flat string for this cap.
+     */
+    const KPIS_EXPORT = 'kpis.export';
+
     // ========================================================
     // Meetings (incl. Decisions and Recommendations)
     // ========================================================
