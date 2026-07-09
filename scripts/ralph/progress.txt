@@ -1,0 +1,153 @@
+# Ralph Progress Log — Phase 9-D-D1b (Strategy cluster_tree read)
+
+Started: 2026-07-09
+Branch: phase-9d-d1b-strategy-cluster-tree-read
+PRD: scripts/ralph/prd.json
+
+## Codebase Patterns (consolidated across iterations)
+
+- **Cluster-tree read widening pattern (KPI 9-D-D1a → Strategy 9-D-D1b)**:
+  - `Scopes/User<Module>Scope.php` provides `applyTo<Entity>s(Builder, User)`:
+    super_admin → no filter; null-org → `whereRaw('false')`; regular actor →
+    `whereIn('<table>.organization_id', $this->clusterVisibleOrgIds($actor))`.
+  - `clusterVisibleOrgIds()` requires BOTH `Capability::<MODULE>_VIEW` +
+    `Capability::CLUSTER_TREE_VIEW` on actor.org; if both held, union with
+    `Organization::descendantIds()` (BFS via `parent_id`, depth cap 32, visited set,
+    fail-closed on cycle).
+  - `Policy::view()` uses the two-path pattern: Path 1 = `AccessDecision::can($user,
+    <MODULE>_VIEW, $entity)` (same-org); Path 2 = `AccessDecision::can($user,
+    CLUSTER_TREE_VIEW, $entity)` (rescue), but ONLY if both module + cluster_tree
+    entitlements are held on actor.org (two explicit checks before rescue).
+  - Writes (update / delete / create / etc.) stay strict same-org via precheck /
+    `AccessDecision::can($user, <WRITE_CAPABILITY>, $entity)`.
+  - `FormRequest::authorize()` for show-style requests delegates to
+    `app(<Entity>Policy::class)->view($user, $model)`; list-style requests keep
+    module-view capability check.
+  - Null-org fail-closed: Scope returns `whereRaw('false')` for null-org non-super
+    actor. Engine returns `org_isolation_denied` from `whyCan::step 2` for null-org
+    actors. The controller no longer needs an explicit `null-org → 403` check.
+
+- **Comment language convention (PR #6 merge pattern)**:
+  - All comments must be in English. Arabic in code comments was translated in the
+    KPI merge (`c598ad7 refactor(performance): translate KPI cluster_tree comments
+    to English + null-org guard`). Apply same convention here.
+
+- **Engine rescue branch (9-D-B primitive)**:
+  - `AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW, $model)` short-circuits
+    inside the engine's rescue branch after same-org/org-isolation checks fail. It
+    verifies: (a) `Organization::ancestorIds()` reaches actor.org from `$model->organization_id`,
+    (b) target is not in the sensitive-targets list, (c) actor holds the
+    scoped-role grant for the relevant module.
+
+- **Authz contract per request**:
+  - `FormRequest::authorize()` is the authz seam. Don't add `authorize()` to
+    controllers (CLAUDE.md global rule + IDOR audit convention).
+
+- **Test naming convention (KPI 9-D-D1a style)**:
+  - `tests/Unit/<Module>/Policies/ClusterTree<Module>PolicyTest.php`
+  - `tests/Unit/<Module>/Scopes/ClusterTreeUser<Module>ScopeTest.php`
+  - Cover the 6+ acceptance scenarios with explicit names:
+    `test_parent_with_both_grants_sees_child_<entity>`,
+    `test_missing_module_view_denied`,
+    `test_missing_cluster_tree_view_denied`,
+    `test_sibling_org_denied`,
+    `test_child_to_parent_denied`,
+    `test_null_org_fail_closed`,
+    `test_write_endpoints_strict_same_org`,
+    `test_super_admin_unchanged`.
+
+- **Git workflow (LR-008 + Ralph)**: stage explicit paths; never `add -A`; verify
+  `git status --short` before each commit. The current working tree had
+  pre-staged files when the Ralph session started; preserve them.
+
+## Iteration Log
+
+<!--
+APPEND iterations below this line. Format:
+## [Date/Time] - [Story ID]
+- What was implemented
+- Files changed
+- **Learnings for future iterations:**
+  - ...
+---
+-->
+## 2026-07-09 — CLT-01 (Strategy cluster_tree read)
+
+### What was implemented
+
+Phase 9-D-D1b — Read-only cluster_tree widening for the Strategy module
+(Portfolio / Program / Review / Blocker / Dashboard), mirroring the KPI
+9-D-D1a reference pattern (`c598ad7`). No AccessDecision changes, no
+migrations, no SCOPE_CLUSTER revival, no excluded-module touches.
+
+### Files changed
+
+**Created (5):**
+- `app/Modules/Strategy/Scopes/UserStrategyScope.php` — unified org filter
+  with cluster_visible_org_ids widening; null-org fail-closed via whereRaw('false');
+  requires BOTH Capability::STRATEGY_VIEW + CLUSTER_TREE_VIEW on actor.org.
+- `app/Modules/Strategy/Policies/BlockerPolicy.php` — new policy using the
+  two-path view() pattern (same-org via engine; cross-org via CLUSTER_TREE_VIEW rescue).
+- `app/Modules/Strategy/Policies/ReviewPolicy.php` — same pattern.
+- `tests/Unit/Strategy/Policies/ClusterTreeStrategyPolicyTest.php` — 20 tests
+  covering all four surfaces (Portfolio / Program / Review / Blocker).
+- `tests/Unit/Strategy/Scopes/ClusterTreeUserStrategyScopeTest.php` — 11 tests
+  covering the per-list filter.
+
+**Modified (13):**
+- 5 controllers (Portfolio / Program / Review / Blocker / StrategyDashboard):
+  list/index/show/summary/goldenChain endpoints now use UserStrategyScope; writes
+  keep their precheck same-org guards.
+- 5 FormRequests (ViewPortfolioRequest / ViewPortfolioTreeRequest / ViewProgramRequest
+  / ViewReviewRequest / ViewBlockerRequest): `authorize()` now delegates to
+  `app(<Entity>Policy::class)->view($user, $model)` so the cluster_tree rescue
+  branch applies.
+- 2 policies (PortfolioPolicy / ProgramPolicy): view() refactored to two-path
+  pattern. Other abilities untouched.
+- 4 test fixture updates: review type 'periodic' → 'monthly' (the enum is
+  monthly/quarterly/annual/adhoc); StrategyDashboardController converted
+  `DB::table('portfolios')` calls to Eloquent queries so UserStrategyScope's
+  `Illuminate\Database\Eloquent\Builder` type-hint matches.
+
+### Learnings for future iterations (CLT-02 → CLT-07)
+
+- **Builder type hint pitfall**: `UserStrategyScope::applyTo*` accepts only
+  `Illuminate\Database\Eloquent\Builder`. `DB::table(...)` returns
+  `Illuminate\Database\Query\Builder` and will fail with a TypeError when passed
+  through. Always use `Model::query()->whereIn(...)` style in dashboard/aggregate
+  endpoints, not `DB::table(...)`.
+
+- **Review type enum constraint**: the `reviews.type` column is enum
+  `[monthly, quarterly, annual, adhoc]`. `periodic` fails with check constraint
+  violation. Use the same enum values as existing ReviewControllerTest.
+
+- **Comment-language convention**: PR #6 (`c598ad7 refactor(performance): translate
+  KPI cluster_tree comments to English + null-org guard`) translated all code
+  comments and docblocks to English but kept Arabic user-facing strings (abort
+  messages, JSON message fields) — the product is Arabic-first. Apply the same
+  split: translate comments, keep user-facing strings in Arabic.
+
+- **FormRequest authorize delegation pattern**: ViewPortfolioRequest / etc. switch
+  from `AccessDecision::can(...)` to `app(<Entity>Policy::class)->view($user, $model)`
+  to get the cluster_tree rescue path. List-style FormRequests keep their
+  module-view capability check (no entity to bind).
+
+- **Engine rescue path**: `AccessDecision::can($user, CLUSTER_TREE_VIEW, $entity)`
+  verifies (a) `Organization::ancestorIds()` reaches actor.org from
+  `$entity->organization_id`, (b) target is not sensitive, (c) actor holds the
+  scoped-role grant. The Policy explicitly checks BOTH module + cluster_tree
+  before invoking the rescue (two-path pattern), keeping the surface auditable.
+
+### Quality gates (this iteration)
+
+- `./vendor/bin/pint --test app/Modules/Strategy/ ...` → **passed**
+- `composer phpstan` → **No errors** (573/573 files)
+- `php artisan test --filter='ClusterTreeStrategyPolicyTest|ClusterTreeUserStrategyScopeTest'` →
+  **31 passed (32 assertions)** in 9.07s
+
+### Next iteration (CLT-02)
+
+Projects cluster_tree read widening. Branch: `phase-9d-d2a-projects-cluster-tree-read`.
+Mirror the same Scope + Policy + FormRequest pattern; UserProjectScope (or extend
+the existing UserProjectScope if one exists). Confirm the project's response shape
+does NOT include tasks / activity logs / comments / attachments — STOP if it does.
