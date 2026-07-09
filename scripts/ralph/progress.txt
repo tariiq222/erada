@@ -235,3 +235,81 @@ Projects cluster_tree read widening. Branch: `phase-9d-d2a-projects-cluster-tree
 Mirror the same Scope + Policy + FormRequest pattern; UserProjectScope (or extend
 the existing UserProjectScope if one exists). Confirm the project's response shape
 does NOT include tasks / activity logs / comments / attachments — STOP if it does.
+
+## 2026-07-09 — STANDING APPROVAL — Autonomous CFA Loop (Tariq)
+
+After CFA-03 merged (commit b6496bf, PR #12), Tariq granted standing
+approval for the CFA autonomous loop:
+
+- Ralph runs CFA stories end-to-end (branch → tests → push → PR → CI →
+  merge → next) WITHOUT per-story approval
+- Auto-merge allowed if all 10 conditions hold (CI green · no conflicts ·
+  no migrations outside story · no AccessDecision change outside story ·
+  no raw PII · no write widening outside story · no forbidden modules ·
+  no P0/P1 security · clean tree · scope matches CFA-00 roadmap)
+- Hard stop on 11 conditions (CI fails twice · merge conflict · engine
+  change outside story · migration outside story · PII risk · write
+  widening outside story · unclear contract · branch protection ·
+  security P0/P1 · Direction R/B violation · CFA-01..03 regression)
+- Stories with riskLevel=HIGH/CRITICAL do NOT auto-merge — STOP and
+  require Tariq review (CFA-07, CFA-08, CFA-09, CFA-10, CFA-11)
+
+Updated `scripts/ralph/CLAUDE.md` to encode these rules. Updated
+`scripts/ralph/prd.json` with the full CFA-01..CFA-11 user-story
+manifest.
+
+## 2026-07-09 — CFA-03 Done (Strategy cluster_tree.manage widening)
+
+### What was implemented
+
+Phase CFA-03 wires the CFA-01 `cluster_tree.manage` rescue primitive into
+the Strategy module's governance writes. Cluster admin with BOTH the
+matching module capability AND `core.cluster_tree.manage` on
+actor.organization_id can perform governance writes on descendant org
+records.
+
+Widened abilities:
+  PortfolioPolicy:
+    - changeStrategicStatus (STRATEGY_CHANGE_STATUS + CLUSTER_TREE_MANAGE)
+    - forceClose            (STRATEGY_CHANGE_STATUS + CLUSTER_TREE_MANAGE)
+    - managePriority        (STRATEGY_MANAGE_PRIORITY + CLUSTER_TREE_MANAGE)
+    - assignOwner           (STRATEGY_ASSIGN_OWNER + CLUSTER_TREE_MANAGE)
+  BlockerPolicy:
+    - resolve               (STRATEGY_EDIT + CLUSTER_TREE_MANAGE)
+    - escalate              (STRATEGY_EDIT + CLUSTER_TREE_MANAGE)
+
+Explicitly OUT (CFA-00 owner decision):
+  - Portfolio/Blocker CRUD (update / delete / create) — strict same-org
+  - ProgramPolicy::linkProject — strict same-org
+  - 9-D-D1b read widening path — unchanged
+
+### Files changed
+- app/Modules/Strategy/Policies/PortfolioPolicy.php (+86 -17)
+- app/Modules/Strategy/Policies/BlockerPolicy.php (+61 -17)
+- tests/Unit/Strategy/Policies/ClusterTreeStrategyManageTest.php (new, ~400 lines)
+
+### Tests
+- 20 new in ClusterTreeStrategyManageTest
+- 57 regression in ClusterTreeStrategyPolicyTest +
+  ClusterTreeUserStrategyScopeTest + PortfolioPolicyTest + ProgramPolicyTest
+- Pint passed · PHPStan No errors · CI all 4 checks SUCCESS (PR #12)
+- Merged to main as c079f7a
+
+### Learnings for CFA-04..CFA-11
+
+- **Two-path helper pattern**: `clusterManagedAbility($user, $entity,
+  $moduleCapability)` is the canonical pattern for governance write
+  rescue. Reuse this same shape — Path 1 same-org, Path 2 cross-org
+  rescue with two explicit capability checks before the CLUSTER_TREE_*
+  rescue call. CFA-04..CFA-07 should use the same shape.
+- **Assignee-validation contract**: cluster widening authorizes the
+  ACTION only, not the assignee selection. Controller still enforces
+  same-org on the picked user via `organizationIdForWrite()`. Apply
+  same contract to CFA-04 (Project update assignee) and CFA-07 (User
+  role assignment — but CFA-07 is OUT OF CFA scope per CFA-00).
+- **CRUD stays strict same-org** unless explicitly widened by a CFA
+  story. CFA-04 widens project status / PDCA only — NOT update/delete
+  of arbitrary fields.
+- **PR review comments**: CFA-02 + CFA-03 both had clean PRs without
+  reviewer findings. Pattern: minimal Policy surface, clear docblock
+  comments, exhaustive tests covering all 6+ acceptance scenarios.
