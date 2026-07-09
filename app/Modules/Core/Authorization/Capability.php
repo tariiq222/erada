@@ -367,6 +367,52 @@ final class Capability
      */
     const CLUSTER_TREE_VIEW = 'core.cluster_tree.view';
 
+    /**
+     * Phase CFA-01 — Cluster Full Authority: cluster_tree MANAGE primitive.
+     *
+     * Sibling to CLUSTER_TREE_VIEW. Activates the same rescue branch in
+     * `AccessDecision::clusterTreeRescueApplies()` for governance-level
+     * write operations (status / priority / approve / reassess / escalate)
+     * across descendant organizations. Required IN ADDITION TO the
+     * module-specific write capability — never implied by it.
+     *
+     * Strict contract:
+     *   - The module's edit/manage/change_status/approve/etc. capability
+     *     MUST be held on actor.org (otherwise same-org path returns false).
+     *   - This primitive does NOT widen to module read capabilities.
+     *   - This primitive does NOT widen to module export capabilities.
+     *   - This primitive does NOT bypass the OVR / Tasks confidential floor.
+     *   - This primitive does NOT allow project role/member assignment
+     *     (CFA-00 owner decision, 2026-07-09).
+     *
+     * See: docs/audits/phase-cfa-00-cluster-full-authority-audit.md (CFA-00)
+     * for the full contract, exclusion list, and stop conditions.
+     */
+    const CLUSTER_TREE_MANAGE = 'core.cluster_tree.manage';
+
+    /**
+     * Phase CFA-01 — Cluster Full Authority: cluster_tree EXPORT primitive.
+     *
+     * Sibling to CLUSTER_TREE_VIEW. Activates the same rescue branch in
+     * `AccessDecision::clusterTreeRescueApplies()` for row-level data
+     * exports (CSV / PDF / XLSX) across descendant organizations.
+     * Required IN ADDITION TO the module's export capability (or
+     * audit.export for the cluster_auditor role) — never implied by it.
+     *
+     * Strict contract:
+     *   - The module's export capability MUST be held on actor.org.
+     *   - For the cluster_auditor role: `audit.export` is the paired capability.
+     *   - This primitive does NOT widen to module read or write capabilities.
+     *   - This primitive does NOT bypass the OVR / Surveys / HR PII floor
+     *     (aggregate/de-identified exports only — see CFA-00 audit).
+     *   - Module controllers (CFA-02..CFA-11) gate each export endpoint
+     *     individually; this primitive only fires when both grants are held.
+     *
+     * See: docs/audits/phase-cfa-00-cluster-full-authority-audit.md (CFA-00)
+     * for the full contract, exclusion list, and stop conditions.
+     */
+    const CLUSTER_TREE_EXPORT = 'core.cluster_tree.export';
+
     const AUDIT_VIEW = 'audit.view';
 
     const AUDIT_EXPORT = 'audit.export';
