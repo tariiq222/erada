@@ -10,6 +10,7 @@ use App\Modules\Meetings\Http\Requests\UpdateMinutesRequest;
 use App\Modules\Meetings\Models\Meeting;
 use App\Modules\Meetings\Notifications\AgendaRequestedNotification;
 use App\Modules\Meetings\Notifications\MeetingScheduledNotification;
+use App\Modules\Meetings\Scopes\UserMeetingScope;
 use App\Modules\Meetings\Support\DecidableType;
 use App\Modules\Shared\Traits\HasOrganizationScope;
 use Illuminate\Http\JsonResponse;
@@ -30,12 +31,12 @@ class MeetingController extends Controller
 
         $query = Meeting::query()->with(['organizer:id,name', 'subject', 'attendees:id,name', 'category:id,name']);
 
-        if (! auth()->user()->isSuperAdmin()) {
-            // Null-org fail-closed floor: a non-super user without an
-            // organization_id has nothing to scope to — deny instead of leaking.
-            abort_if(auth()->user()->organization_id === null, 403, self::NULL_ORG_MESSAGE);
-            $query->where('organization_id', auth()->user()->organization_id);
-        }
+        // Phase CFA-06: Use the scope's applyToMeetings() so cluster_tree
+        // widening kicks in automatically when MEETINGS_VIEW +
+        // CLUSTER_TREE_VIEW are both held by the actor. Without this, only
+        // the inline same-org filter would run — defeating the cluster
+        // widening at the list endpoints.
+        app(UserMeetingScope::class)->applyToMeetings($query, auth()->user());
 
         if ($type = $request->query('subject_type')) {
             $request->validate([
@@ -76,10 +77,8 @@ class MeetingController extends Controller
     {
         $this->authorize('viewAny', Meeting::class);
         $query = Meeting::query()->select('id', 'title', 'reference_number', 'scheduled_at', 'status');
-        if (! auth()->user()->isSuperAdmin()) {
-            abort_if(auth()->user()->organization_id === null, 403, self::NULL_ORG_MESSAGE);
-            $query->where('organization_id', auth()->user()->organization_id);
-        }
+        // Phase CFA-06: Same cluster-aware floor as index().
+        app(UserMeetingScope::class)->applyToMeetings($query, auth()->user());
 
         return response()->json(['data' => $query->orderBy('scheduled_at', 'desc')->limit(200)->get()]);
     }

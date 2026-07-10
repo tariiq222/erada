@@ -43,13 +43,40 @@ class MeetingPolicy
         return AccessDecision::can($user, Capability::MEETINGS_VIEW);
     }
 
+    /**
+     * Phase CFA-06 — Cluster tree widening applies to view() only.
+     *
+     * Decision paths:
+     *  1) MEETINGS_VIEW on meeting (same org): engine's same-org + role check.
+     *  2) CLUSTER_TREE_VIEW on meeting (cluster ancestor): engine's rescue
+     *     branch verifies the ancestor walk + non-sensitive + scoped-role
+     *     grant. Only fires if the actor holds Capability::MEETINGS_VIEW +
+     *     Capability::CLUSTER_TREE_VIEW on actor.organization_id — two
+     *     explicit checks before the rescue.
+     *
+     * Missing either capability ⇒ deny. Writes (update / delete / start /
+     * complete / cancel) are unaffected by cluster_tree and go through
+     * precheck() / authorize().
+     */
     public function view(User $user, Meeting $meeting): bool
     {
-        if (! $this->precheck($user, $meeting)) {
+        // super_admin is handled in the engine (short-circuit in whyCan::step 1).
+        // null-org actor is handled in the engine (org_isolation_denied in step 2).
+
+        // Path 1: same-org MEETINGS_VIEW via engine.
+        if (AccessDecision::can($user, Capability::MEETINGS_VIEW, $meeting)) {
+            return true;
+        }
+
+        // Path 2: cross-org cluster_tree widening — requires BOTH entitlements on actor.org.
+        if (! AccessDecision::can($user, Capability::MEETINGS_VIEW)) {
+            return false;
+        }
+        if (! AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW)) {
             return false;
         }
 
-        return AccessDecision::can($user, Capability::MEETINGS_VIEW, $meeting);
+        return AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW, $meeting);
     }
 
     public function create(User $user): bool
