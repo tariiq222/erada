@@ -1,7 +1,13 @@
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@shared/lib/utils';
-import { Button, Card, CardContent } from '@shared/ui';
+// Phase 4C — direct leaf imports (not via @shared/ui barrel). The
+// barrel re-exports FilterRow + Button/Card/CardContent; pulling
+// siblings through the barrel would route this leaf's chunk through
+// the same chunk as the barrel, creating a circular chunk shape.
+// The stable direct imports keep the chunk graph acyclic.
+import { Button } from './Button';
+import { Card, CardContent } from './Card';
 
 export interface FilterRowProps {
   /** حقول الفلترة، يفضّل لفّها بـ FilterField */

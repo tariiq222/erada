@@ -66,10 +66,22 @@ export interface ScopeType {
   updated_at?: string;
 }
 
+/**
+ * Phase 4B — ActivityLogEntry FE shape.
+ *
+ * The backend ActivityLogResource (Phase 1) emits actor as { id, name }
+ * only — the FE must NOT expect email on the user / actor pointer.
+ * The earlier type leaked a stable `email: string` field; the page
+ * still rendered it which made the page re-add email to the DOM
+ * from a column the BE never returned. The Phase 1 backend contract
+ * is opaque email. Both the resource and any actor pointer on the
+ * same row comply with that contract — the FE honors the contract
+ * by NOT typing email here.
+ */
 export interface ActivityLogEntry {
   id: number;
   user_id: number | null;
-  user?: { id: number; name: string; email: string } | null;
+  user?: { id: number; name: string } | null;
   action: string;
   description: string;
   loggable_type: string | null;
@@ -131,7 +143,12 @@ export interface AuditRecentRow {
   id: number;
   action: string;
   description: string | null;
-  actor: { id: number; name: string; email: string } | null;
+  // Phase 4B — Phase 1's AuditRecentResource returns actor as
+  // { id, name } (no email). The earlier FE type leaked the email
+  // field; the page was reading activityLogsApi.actor.email which
+  // would render as undefined or surface a stale backend cache for
+  // legacy rows. The FE honors the BE contract.
+  actor: { id: number; name: string } | null;
   target_user: { id: number; name: string } | null;
   scope_type: string | null;
   scope_id: number | null;

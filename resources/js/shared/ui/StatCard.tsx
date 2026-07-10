@@ -1,5 +1,8 @@
 import React from 'react';
-import { Card, CardContent } from '@shared/ui';
+// Phase 4C — direct leaf imports (not via @shared/ui barrel). Same
+// rationale as FilterRow: avoid a circular chunk shape on every
+// code split.
+import { Card, CardContent } from './Card';
 import {type LucideIcon} from '@tabler/icons-react';
 
 export type StatCardColor = 'accent' | 'success' | 'warning' | 'danger' | 'info';
