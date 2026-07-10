@@ -5,6 +5,7 @@ namespace App\Modules\OVR\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\OVR\Enums\ReportStatus;
@@ -19,6 +20,7 @@ use App\Modules\OVR\Models\IncidentReport;
 use App\Modules\OVR\Notifications\ReportAssignedNotification;
 use App\Modules\OVR\Notifications\ReportSubmittedNotification;
 use App\Modules\OVR\Notifications\StatusChangedNotification;
+use App\Modules\OVR\Scopes\UserOvrScope;
 use App\Modules\OVR\Services\IncidentExportService;
 use App\Modules\OVR\Services\OvrAuthorizationService;
 use App\Modules\Shared\Http\Resources\ActivityLogResource;
@@ -28,6 +30,7 @@ use App\Modules\Tasks\Enums\TaskPriority;
 use App\Modules\Tasks\Enums\TaskStatus;
 use App\Modules\Tasks\Enums\TaskType;
 use App\Modules\Tasks\Models\Task;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
@@ -595,6 +598,264 @@ class IncidentReportController extends Controller
                 'to' => $to?->toIso8601String(),
             ],
         ]);
+    }
+
+    /**
+     * Phase CFA-09 — Cluster aggregate statistics (NEVER raw).
+     *
+     * Returns AGGREGATE counts / breakdowns across the actor's organization
+     * AND its descendants when the actor holds BOTH
+     * Capability::OVR_VIEW_STATISTICS + Capability::CLUSTER_TREE_VIEW on
+     * actor.organization_id. Without both grants, the floor is strict
+     * same-org (the actor's organization only).
+     *
+     * STRICT INVARIANTS — verified by ClusterTreeOvrConfidentialFloorInvariantTest:
+     *   - AGGREGATE ONLY. No row-level incident data is returned. The response
+     *     shape is {total, by_status, by_severity, ...per_org, period, scope}.
+     *   - is_confidential floor preserved: confidential rows are excluded from
+     *     the aggregate via UserOvrScope::applyToIncidentReportsForStats.
+     *   - does NOT widen raw index/show/recent/export paths (those stay strict).
+     *
+     * Mirrors the per-org stats() shape, plus a `per_org` block listing each
+     * visible descendant organization's counts.
+     */
+    public function clusterStats(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $this->authorize('viewStats', IncidentReport::class);
+
+        $reportsTable = (new IncidentReport)->getTable();
+
+        $baseQuery = IncidentReport::query();
+        // Cluster widening (CFA-09): widens org floor to descendants when actor
+        // holds BOTH grants. Filters out confidential reports unconditionally
+        // (the cluster actor does not hold OVR_CONFIDENTIAL by construction).
+        app(UserOvrScope::class)->applyToIncidentReportsForStats($baseQuery, $user);
+
+        [$from, $to] = $this->resolveDateRange($request);
+        if ($from) {
+            $baseQuery->where("{$reportsTable}.created_at", '>=', $from);
+        }
+        if ($to) {
+            $baseQuery->where("{$reportsTable}.created_at", '<=', $to);
+        }
+
+        $this->applyStatsFilters($baseQuery, $request, $reportsTable);
+
+        // Aggregate counts (org-isolated by the scope above).
+        $total = (clone $baseQuery)->count();
+
+        $byStatus = [];
+        foreach (ReportStatus::cases() as $status) {
+            $byStatus[$status->value] = (clone $baseQuery)->where("{$reportsTable}.status", $status->value)->count();
+        }
+
+        $bySeverity = [];
+        foreach (SeverityLevel::cases() as $severity) {
+            $bySeverity[$severity->value] = (clone $baseQuery)->where("{$reportsTable}.severity_level", $severity->value)->count();
+        }
+
+        $patientRelated = (clone $baseQuery)->where("{$reportsTable}.is_patient_related", true)->count();
+        $immediateActionRequired = (clone $baseQuery)->where("{$reportsTable}.immediate_action_required", true)->count();
+
+        $overdue = (clone $baseQuery)
+            ->whereNotIn("{$reportsTable}.status", [ReportStatus::Closed->value, ReportStatus::Archived->value, ReportStatus::Resolved->value])
+            ->where("{$reportsTable}.due_date", '<', now())
+            ->count();
+
+        // Per-org breakdown (the cluster-specific surface). One row per visible
+        // org — total, by_status, by_severity. NEVER row-level data.
+        $perOrg = $this->clusterPerOrgBreakdown($baseQuery, $reportsTable);
+
+        return response()->json([
+            'total' => $total,
+            'by_status' => $byStatus,
+            'by_severity' => $bySeverity,
+            'patient_related' => $patientRelated,
+            'immediate_action_required' => $immediateActionRequired,
+            'overdue' => $overdue,
+            'per_org' => $perOrg,
+            'scope' => [
+                'mode' => 'cluster_aggregate',
+                'organizations_visible' => array_column($perOrg, 'organization_id'),
+            ],
+            'period' => [
+                'from' => $from?->toIso8601String(),
+                'to' => $to?->toIso8601String(),
+            ],
+        ]);
+    }
+
+    /**
+     * Per-org aggregate breakdown for clusterStats(). Returns one row per visible
+     * organization with counts only. Never row-level incident data.
+     *
+     * @return list<array{organization_id: int, organization_name: ?string, total: int, by_status: array<string, int>, by_severity: array<string, int>}>
+     */
+    protected function clusterPerOrgBreakdown($baseQuery, string $reportsTable): array
+    {
+        $orgIds = array_values(array_unique(array_map(
+            fn ($row) => (int) $row->organization_id,
+            (clone $baseQuery)->select("{$reportsTable}.organization_id")->distinct()->get()->all()
+        )));
+
+        if ($orgIds === []) {
+            return [];
+        }
+
+        $orgs = Organization::query()
+            ->whereIn('id', $orgIds)
+            ->select('id', 'name')
+            ->get()
+            ->keyBy('id');
+
+        $byStatus = [];
+        foreach (ReportStatus::cases() as $status) {
+            $rows = (clone $baseQuery)
+                ->where("{$reportsTable}.status", $status->value)
+                ->select("{$reportsTable}.organization_id")
+                ->selectRaw('COUNT(*) as aggregate_count')
+                ->groupBy("{$reportsTable}.organization_id")
+                ->get();
+            foreach ($rows as $row) {
+                $byStatus[(int) $row->organization_id][$status->value] = (int) $row->aggregate_count;
+            }
+        }
+
+        $bySeverity = [];
+        foreach (SeverityLevel::cases() as $severity) {
+            $rows = (clone $baseQuery)
+                ->where("{$reportsTable}.severity_level", $severity->value)
+                ->select("{$reportsTable}.organization_id")
+                ->selectRaw('COUNT(*) as aggregate_count')
+                ->groupBy("{$reportsTable}.organization_id")
+                ->get();
+            foreach ($rows as $row) {
+                $bySeverity[(int) $row->organization_id][$severity->value] = (int) $row->aggregate_count;
+            }
+        }
+
+        $totals = (clone $baseQuery)
+            ->select("{$reportsTable}.organization_id")
+            ->selectRaw('COUNT(*) as aggregate_count')
+            ->groupBy("{$reportsTable}.organization_id")
+            ->pluck('aggregate_count', "{$reportsTable}.organization_id");
+
+        $out = [];
+        foreach ($orgIds as $orgId) {
+            $byStatusRow = $byStatus[$orgId] ?? [];
+            $bySeverityRow = $bySeverity[$orgId] ?? [];
+            $out[] = [
+                'organization_id' => $orgId,
+                'organization_name' => $orgs[$orgId]->name ?? null,
+                'total' => (int) ($totals[$orgId] ?? 0),
+                'by_status' => $byStatusRow,
+                'by_severity' => $bySeverityRow,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Phase CFA-09 — Cluster aggregate export (NEVER raw).
+     *
+     * Writes AGGREGATE rows (one per visible org) to CSV or PDF — never raw
+     * incident rows. OVR_EXPORT permits the actor's own organization; adding
+     * CLUSTER_TREE_EXPORT widens the aggregate to descendants. The CSV row format is intentionally structured so a
+     * downstream consumer cannot reconstruct individual incident records
+     * from the export: report_number / patient_name / patient_file_number /
+     * incident_description / reporter_name are NEVER included.
+     *
+     * Gated by IncidentReportPolicy::exportsAggregates (OVR_EXPORT). The
+     * existing /incidents/export endpoint stays strict same-org and unchanged.
+     */
+    public function clusterExport(Request $request): StreamedResponse|Response
+    {
+        $user = $request->user();
+        $this->authorize('exportsAggregates', IncidentReport::class);
+
+        $reportsTable = (new IncidentReport)->getTable();
+
+        $baseQuery = IncidentReport::query();
+        app(UserOvrScope::class)->applyToIncidentReportsForExport($baseQuery, $user);
+
+        [$from, $to] = $this->resolveDateRange($request);
+        if ($from) {
+            $baseQuery->where("{$reportsTable}.created_at", '>=', $from);
+        }
+        if ($to) {
+            $baseQuery->where("{$reportsTable}.created_at", '<=', $to);
+        }
+
+        $this->applyStatsFilters($baseQuery, $request, $reportsTable);
+
+        $perOrg = $this->clusterPerOrgBreakdown($baseQuery, $reportsTable);
+
+        $stamp = now()->format('Y-m-d');
+        $format = $request->query('format');
+
+        // CSV is aggregate-only (one row per visible org + count columns).
+        if ($format !== 'pdf') {
+            return $this->streamClusterAggregateCsv($perOrg, "ovr-cluster-aggregate-{$stamp}.csv");
+        }
+
+        // PDF path is also aggregate-only.
+        return $this->downloadClusterAggregatePdf($perOrg, "ovr-cluster-aggregate-{$stamp}.pdf");
+    }
+
+    /**
+     * Stream the cluster aggregate breakdown as CSV. One header row, then
+     * one row per organization. NEVER includes row-level incident data.
+     *
+     * @param  list<array{organization_id: int, organization_name: ?string, total: int, by_status: array<string, int>, by_severity: array<string, int>}>  $perOrg
+     */
+    protected function streamClusterAggregateCsv(array $perOrg, string $filename): StreamedResponse
+    {
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ];
+
+        return response()->stream(function () use ($perOrg) {
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\xEF\xBB\xBF");
+            $statuses = ReportStatus::cases();
+            $severities = SeverityLevel::cases();
+
+            fputcsv($out, array_merge(
+                ['organization_id', 'organization_name', 'total'],
+                array_map(fn (ReportStatus $status) => $status->value, $statuses),
+                array_map(fn (SeverityLevel $severity) => $severity->value, $severities)
+            ));
+
+            foreach ($perOrg as $row) {
+                fputcsv($out, array_merge(
+                    [$row['organization_id'], $row['organization_name'], $row['total']],
+                    array_map(fn (ReportStatus $status) => $row['by_status'][$status->value] ?? 0, $statuses),
+                    array_map(fn (SeverityLevel $severity) => $row['by_severity'][$severity->value] ?? 0, $severities)
+                ));
+            }
+
+            fclose($out);
+        }, 200, $headers);
+    }
+
+    /**
+     * Render the cluster aggregate breakdown as a PDF.
+     *
+     * @param  list<array{organization_id: int, organization_name: ?string, total: int, by_status: array<string, int>, by_severity: array<string, int>}>  $perOrg
+     */
+    protected function downloadClusterAggregatePdf(array $perOrg, string $filename): Response
+    {
+        $pdf = Pdf::loadView('ovr.export-cluster-pdf', [
+            'perOrg' => $perOrg,
+            'generatedAt' => now()->format('Y-m-d H:i'),
+            'statuses' => ReportStatus::cases(),
+            'severities' => SeverityLevel::cases(),
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download($filename);
     }
 
     /**

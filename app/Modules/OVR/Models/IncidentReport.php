@@ -15,6 +15,7 @@ use App\Modules\OVR\Enums\SeverityLevel;
 use App\Modules\OVR\Services\OvrAuthorizationService;
 use App\Modules\Shared\Traits\LogsActivity;
 use Carbon\Carbon;
+use Database\Factories\IncidentReportFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -130,6 +131,19 @@ class IncidentReport extends Model implements ScopeAware, SensitivelyScoped
                 $report->tracking_token = Str::random(64);
             }
         });
+    }
+
+    /**
+     * Point the Eloquent factory resolver at the model's dedicated factory class.
+     * Laravel's default resolver expects Database\Factories\<FQCN>Factory, which
+     * for a model under App\Modules\OVR\Models\IncidentReport would map to
+     * Database\Factories\App\Modules\OVR\Models\IncidentReportFactory. The actual
+     * factory lives at database/factories/IncidentReportFactory, so we override
+     * here. Mirrors the pattern in App\Modules\Core\Models\User.
+     */
+    protected static function newFactory(): IncidentReportFactory
+    {
+        return IncidentReportFactory::new();
     }
 
     /**
