@@ -264,8 +264,13 @@ class SurveyResponseController extends Controller
      *   - completion_rate (percentage of submitted responses; 0..100)
      *   - aggregate_score (mean completion_time in seconds for submitted responses)
      *
-     * The query is grouped by organization and joined through the survey
-     * parent (survey_responses does not carry organization_id directly).
+     * The query is grouped by organization and joined through the
+     * respondent_organization_id STAMP stamped on the row at
+     * submission time (Phase 3A). The stamp is decoupled from the
+     * live users.organization_id relation — moving a respondent to a
+     * different org after submission does NOT re-attribute the
+     * historical response. The cluster aggregate stays stable as
+     * users churn.
      *
      * @param  list<int>  $visibleOrgIds  the descendant org ids the actor can see
      * @return list<array<string, mixed>>
@@ -279,15 +284,15 @@ class SurveyResponseController extends Controller
 
         $rows = [];
         foreach ($orgs as $org) {
-            // User respondents are attributed to their current organization.
-            // Anonymous or deleted respondents fall back to the survey owner.
+            // Phase 3A — group by the respondent_organization_id
+            // snapshot stamped at submission time, NOT the live
+            // users.organization_id relation. Identified respondents
+            // and anonymous / deleted respondents both surface under
+            // their stamped org (the legacy fallback attributes the
+            // latter to the survey's organization).
             $responsesQuery = SurveyResponse::query()
-                ->leftJoin('users', 'users.id', '=', 'survey_responses.respondent_id')
                 ->where('survey_responses.survey_id', $survey->id)
-                ->whereRaw('COALESCE(users.organization_id, ?) = ?', [
-                    (int) $survey->organization_id,
-                    (int) $org->id,
-                ]);
+                ->where('survey_responses.respondent_organization_id', (int) $org->id);
 
             $total = (clone $responsesQuery)->count();
 
