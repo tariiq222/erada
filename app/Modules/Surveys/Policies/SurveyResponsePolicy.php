@@ -5,6 +5,7 @@ namespace App\Modules\Surveys\Policies;
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\User;
+use App\Modules\Surveys\Models\Survey;
 use App\Modules\Surveys\Models\SurveyResponse;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
@@ -43,5 +44,88 @@ class SurveyResponsePolicy
         }
 
         return (int) $user->organization_id === (int) $surveyOrgId;
+    }
+
+    /**
+     * Phase CFA-10 — View aggregate stats for a survey (NEVER raw responses).
+     *
+     * Decoupled from `review()` on purpose: `review()` keeps its existing
+     * same-org semantics (returns false for any descendant-org target) and
+     * is the SOLE authz seam for raw-response access. `viewStats()` is the
+     * dedicated aggregate-only seam that cluster-widens to descendant
+     * organizations. Returning true here does NOT enable raw response
+     * reads, per-response review, or flag/review mutations.
+     *
+     * Two-path rescue:
+     *   - The actor must hold Capability::SURVEYS_VIEW on actor.organization_id
+     *     (the surveys view capability — never implied by cluster_tree alone).
+     *   - The actor must hold Capability::CLUSTER_TREE_VIEW on actor.organization_id
+     *     (the cluster_tree primitive — read-only, no implicit widening).
+     *   - The survey's organization must be an ancestor of actor.organization_id
+     *     via the parent_id walk (depth cap 32, fail-closed on cycle) — or the
+     *     actor.org MUST equal the survey's org (same-org path).
+     *   - super_admin short-circuits to true (actor bypasses every gate).
+     *   - null-org actor ⇒ false (fail-closed, matches the engine convention).
+     *   - siblings are isolated by the ancestor walk (one-directional).
+     *
+     * This is a TWO-PATH grant: the actor must satisfy BOTH the module cap
+     * and the cluster_tree primitive. Either alone returns false. CFA-00
+     * stop conditions apply unchanged (no respondent PII leaks, no raw
+     * response widening, no write widening).
+     */
+    public function viewStats(User $user, Survey $survey): bool
+    {
+        // super_admin already short-circuited in before(); defensive belt-and-braces
+        // in case the policy is invoked without the engine.
+        if ($user->isSuperAdmin()) {
+            return true;
+        }
+
+        // null-org actor ⇒ fail-closed. Engine convention.
+        if ($user->organization_id === null || $survey->organization_id === null) {
+            return false;
+        }
+
+        // Path 1: same-org SURVEYS_VIEW via engine strict equality + scoped role.
+        if (AccessDecision::can($user, Capability::SURVEYS_VIEW, $survey)) {
+            return true;
+        }
+
+        // Path 2: cross-org cluster_tree widening — both grants required on actor.org.
+        if (! AccessDecision::can($user, Capability::SURVEYS_VIEW)) {
+            return false;
+        }
+        if (! AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW)) {
+            return false;
+        }
+
+        // Engine's rescue branch verifies ancestor walk + non-sensitive target.
+        return AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW, $survey);
+    }
+
+    public function exportStats(User $user, Survey $survey): bool
+    {
+        if ($user->isSuperAdmin()) {
+            return true;
+        }
+
+        if ($user->organization_id === null || $survey->organization_id === null) {
+            return false;
+        }
+
+        if (! AccessDecision::can($user, Capability::SURVEYS_EXPORT)) {
+            return false;
+        }
+
+        if (! AccessDecision::can($user, Capability::SURVEYS_VIEW)) {
+            return false;
+        }
+
+        if ((int) $user->organization_id === (int) $survey->organization_id) {
+            return AccessDecision::can($user, Capability::SURVEYS_VIEW, $survey);
+        }
+
+        return AccessDecision::can($user, Capability::CLUSTER_TREE_EXPORT)
+            && AccessDecision::can($user, Capability::CLUSTER_TREE_EXPORT, $survey);
     }
 }

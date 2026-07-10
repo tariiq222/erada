@@ -312,6 +312,31 @@ final class Capability
 
     const SURVEYS_REVIEW_RESPONSES = 'surveys.review_responses';
 
+    /**
+     * Phase CFA-10 — Surveys cluster aggregate reporting.
+     *
+     * The canonical "can export aggregate survey stats" capability. The
+     * cluster aggregate endpoint (`GET /api/surveys/{survey}/cluster-stats`
+     * and its aggregate-only export sibling) requires BOTH this capability
+     * AND `Capability::CLUSTER_TREE_VIEW` for cross-org widening — neither
+     * primitive implies the other.
+     *
+     * Contract (per CFA-00 / CFA-01):
+     *   - Same-org aggregate export: held on actor.org, gates the
+     *     cluster aggregate endpoint alongside `SURVEYS_VIEW`.
+     *   - Cross-org aggregate export: requires BOTH `SURVEYS_EXPORT` AND
+     *     `CLUSTER_TREE_EXPORT` on actor.org; the scope widening reaches
+     *     descendant organizations via `Organization::descendantIds()`.
+     *   - This constant does NOT widen raw response read, write, or
+     *     per-response review paths; the existing
+     *     `SURVEYS_REVIEW_RESPONSES` strict same-org gate remains unchanged.
+     *   - No migration: the constant is a pure RBAC string; existing roles
+     *     that need cross-org aggregate export must be granted
+     *     SURVEYS_EXPORT via the normal role-management UI.
+     *   - No CapabilityAlias entry: no legacy flat string for this cap.
+     */
+    const SURVEYS_EXPORT = 'surveys.export';
+
     // Phase 8-C: surfaces the engine capability for the legacy
     // `review_data_imports` Spatie permission. The route
     // `/api/data-imports/{id}/(approve|reject|apply|retry|bulk-*)`
