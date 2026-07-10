@@ -191,18 +191,27 @@ class ActivityLogController extends Controller
     private function exportCsv($logs): StreamedResponse
     {
         $filename = 'activity-log-'.now()->format('Ymd-His').'.csv';
+        $actor = request()->user();
+        $request = request();
 
-        return response()->streamDownload(function () use ($logs) {
+        return response()->streamDownload(function () use ($logs, $actor, $request) {
             $out = fopen('php://output', 'w');
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, ['التاريخ', 'المستخدم', 'الإجراء', 'الوصف', 'الهدف']);
 
             foreach ($logs as $log) {
+                // Phase 1C — CSV must use the same serializer as JSON
+                // export (and as interactive reads). Resolving through
+                // ActivityLogResource applies the dual-shape selection:
+                // a cross-org cluster row returns the minimal envelope,
+                // so its description is null and the CSV cell is empty.
+                $row = $this->resourceForActor($log, $actor)->resolve($request);
+
                 fputcsv($out, [
                     $log->created_at?->toDateTimeString(),
-                    $log->user?->name,
-                    $log->action,
-                    $log->description,
+                    $row['user']['name'] ?? null,
+                    $row['action'],
+                    $row['description'] ?? '',
                     $log->loggable_type ? class_basename($log->loggable_type).'#'.$log->loggable_id : '',
                 ]);
             }

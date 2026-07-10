@@ -346,6 +346,139 @@ class ActivityLogClusterDualSerializerTest extends TestCase
     }
 
     // ──────────────────────────────────────────────────────────────
+    // Phase 1C — CSV / JSON export parity
+    //
+    // The pre-Phase-1C exportCsv() bypassed the resource and emitted the
+    // raw `description` column. That meant a cluster_auditor cross-org
+    // export pulled the child row's description into a column on disk.
+    // The design brief is explicit: CSV and JSON export must use the
+    // same serializer (and so the same dual-shape rules) as interactive
+    // reads. These tests pin that contract.
+    // ──────────────────────────────────────────────────────────────
+
+    public function test_csv_export_same_org_audit_user_description_is_present(): void
+    {
+        $org = Organization::factory()->create();
+        $dept = Department::factory()->create(['organization_id' => $org->id]);
+        $auditor = User::factory()->create([
+            'organization_id' => $org->id,
+            'department_id' => $dept->id,
+            'is_active' => true,
+        ]);
+        $this->grantEngineCapability($auditor, [
+            Capability::AUDIT_VIEW,
+            Capability::AUDIT_EXPORT,
+        ]);
+        $owner = User::factory()->create([
+            'organization_id' => $org->id,
+            'is_active' => true,
+        ]);
+        ActivityLog::create([
+            'user_id' => $owner->id,
+            'action' => 'cfa_phase1c_same_org',
+            'description' => 'Same-org description must surface in CSV',
+            'loggable_type' => User::class,
+            'loggable_id' => $owner->id,
+            'organization_id' => $org->id,
+        ]);
+
+        $response = $this->actingAs($auditor, 'sanctum')
+            ->get('/api/activity-logs/export?action=cfa_phase1c_same_org');
+
+        $response->assertOk();
+        $this->assertSame('text/csv; charset=UTF-8', $response->headers->get('content-type'));
+        $csv = $response->streamedContent();
+        $this->assertStringStartsWith("\xEF\xBB\xBF", $csv);
+        $this->assertStringContainsString('Same-org description must surface in CSV', $csv);
+    }
+
+    public function test_csv_export_cross_org_cluster_row_description_is_empty_cell(): void
+    {
+        // A cluster_auditor exporting a child-org row's activity log
+        // must get an empty CSV cell for the description column. The
+        // resource's minimal envelope projects description = null; CSV
+        // has no native null, so the cell is written as an empty
+        // string. Either way the row text never makes it to disk.
+        [$cluster, $hospital] = $this->makeClusterTree();
+
+        $auditor = User::factory()->create([
+            'organization_id' => $cluster->id,
+            'is_active' => true,
+        ]);
+        $this->grantEngineCapability($auditor, [
+            Capability::AUDIT_EXPORT,
+            Capability::CLUSTER_TREE_EXPORT,
+        ]);
+
+        $childUser = User::factory()->create([
+            'organization_id' => $hospital->id,
+            'is_active' => true,
+        ]);
+        ActivityLog::create([
+            'user_id' => $childUser->id,
+            'action' => 'cfa_phase1c_cross_org',
+            'description' => 'PRIVATE_DETAIL_MUST_NOT_LEAK',
+            'loggable_type' => User::class,
+            'loggable_id' => $childUser->id,
+            'organization_id' => $hospital->id,
+        ]);
+
+        $response = $this->actingAs($auditor, 'sanctum')
+            ->get('/api/activity-logs/export?action=cfa_phase1c_cross_org');
+
+        $response->assertOk();
+        $csv = $response->streamedContent();
+        $this->assertStringNotContainsString(
+            'PRIVATE_DETAIL_MUST_NOT_LEAK',
+            $csv,
+            'cross-org cluster row description must NEVER appear in the CSV export'
+        );
+    }
+
+    public function test_json_export_cross_org_cluster_row_minimal_envelope(): void
+    {
+        // Phase 1B wired exportJson through the resource; this test
+        // pins the dual-shape parity for the JSON export format too
+        // (it's the natural companion to the CSV test above).
+        [$cluster, $hospital] = $this->makeClusterTree();
+
+        $auditor = User::factory()->create([
+            'organization_id' => $cluster->id,
+            'is_active' => true,
+        ]);
+        $this->grantEngineCapability($auditor, [
+            Capability::AUDIT_EXPORT,
+            Capability::CLUSTER_TREE_EXPORT,
+        ]);
+
+        $childUser = User::factory()->create([
+            'organization_id' => $hospital->id,
+            'is_active' => true,
+        ]);
+        ActivityLog::create([
+            'user_id' => $childUser->id,
+            'action' => 'cfa_phase1c_json_minimal',
+            'description' => 'private text',
+            'loggable_type' => User::class,
+            'loggable_id' => $childUser->id,
+            'organization_id' => $hospital->id,
+        ]);
+
+        $response = $this->actingAs($auditor, 'sanctum')
+            ->getJson('/api/activity-logs/export?format=json&action=cfa_phase1c_json_minimal');
+
+        $response->assertOk();
+        $payload = json_decode($response->streamedContent(), true);
+        $this->assertSame(1, $payload['count']);
+        $this->assertNull($payload['logs'][0]['description']);
+        $this->assertNull($payload['logs'][0]['reason']);
+        $this->assertNull($payload['logs'][0]['old_values']);
+        $this->assertNull($payload['logs'][0]['new_values']);
+        $this->assertNull($payload['logs'][0]['metadata']);
+        $this->assertStringNotContainsString('private text', json_encode($payload));
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // helpers
     // ──────────────────────────────────────────────────────────────
 
