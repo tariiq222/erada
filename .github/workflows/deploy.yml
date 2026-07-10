@@ -58,6 +58,19 @@ jobs:
           path: vendor
           key: composer-${{ hashFiles('composer.lock') }}
 
+      - name: Prepare Laravel runtime dirs
+        # composer install triggers Laravel's package:discover post-autoload-
+        # dump, which resolves the Blade compiler. On a fresh runner,
+        # realpath(storage_path('framework/views')) is false until these
+        # directories exist.
+        run: |
+          mkdir -p storage/framework/views
+          mkdir -p storage/framework/cache
+          mkdir -p storage/framework/sessions
+          mkdir -p storage/logs
+          mkdir -p storage/fonts
+          mkdir -p bootstrap/cache
+
       - name: Install PHP dependencies
         run: composer install --prefer-dist --no-progress
 
@@ -82,24 +95,6 @@ jobs:
 
       - name: Generate key
         run: php artisan key:generate
-
-      - name: Prepare Laravel runtime dirs
-        # RTL-D1: mirrors ci.yml's CI-1 step. `composer install` (run earlier
-        # in this job) triggers Laravel's `package:discover` post-autoload-
-        # dump, which boots Laravel and registers Blade directives via
-        # `app('blade.compiler')` — its constructor requires a valid
-        # `realpath(storage_path('framework/views'))`. On a fresh runner
-        # that returns `false`, the directive registration aborts. Pre-
-        # creating these dirs + storage/fonts + bootstrap/cache is what
-        # ci.yml already does to keep its own `composer install` from
-        # aborting before tests/migrations run.
-        run: |
-          mkdir -p storage/framework/views
-          mkdir -p storage/framework/cache
-          mkdir -p storage/framework/sessions
-          mkdir -p storage/logs
-          mkdir -p storage/fonts
-          mkdir -p bootstrap/cache
 
       - name: Run migrations
         env:
