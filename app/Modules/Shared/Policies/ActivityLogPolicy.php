@@ -58,6 +58,24 @@ class ActivityLogPolicy
 
     /**
      * هل يستطيع المستخدم رؤية سجلّ نشاط واحد؟
+     *
+     * Phase 1A — same-org disclosure boundary closed.
+     *
+     * The pre-Phase-1 same-org branch returned true for ANY same-org user,
+     * regardless of AUDIT_VIEW. That contract let a regular member of the
+     * org inspect every audit row in their organization, which exposed the
+     * full content of every change-log entry — including patient codes,
+     * reporter PII, task descriptions, and project business fields — to
+     * roles that should never have held them.
+     *
+     * New contract:
+     *   - super_admin ⇒ true (unchanged; full audit visibility).
+     *   - Same-org path: BOTH `organization_id` strict equality
+     *     AND AccessDecision::can(user, AUDIT_VIEW) on actor.org must
+     *     hold. Reading the row requires the audit capability.
+     *   - Cross-org cluster rescue: unchanged — AUDIT_VIEW +
+     *     CLUSTER_TREE_VIEW on actor.org + target is a descendant of
+     *     actor.org + target.organization_id is non-null.
      */
     public function view(User $user, ActivityLog $activityLog): bool
     {
@@ -65,14 +83,13 @@ class ActivityLogPolicy
             return true;
         }
 
-        // Same-org path: existing strict-equality contract.
+        // Same-org path: strict equality is necessary but no longer
+        // sufficient. The actor must additionally hold AUDIT_VIEW on
+        // actor.org. AUDIT_EXPORT alone does NOT widen the read path.
         if ($activityLog->organization_id !== null
             && $user->organization_id !== null
             && (int) $activityLog->organization_id === (int) $user->organization_id) {
-            // Preserve the established same-org show contract. The index
-            // remains audit-capability gated; a user may inspect a row they
-            // can already reach within their own organization.
-            return true;
+            return AccessDecision::can($user, Capability::AUDIT_VIEW);
         }
 
         // Cross-org path: cluster_auditor rescue.
