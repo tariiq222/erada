@@ -69,9 +69,10 @@ class ActivityLogController extends Controller
         // H-01: do not leak the existence of activity-log rows in another
         // organization. A super_admin can see any row; a regular user only
         // sees rows that pass the UserActivityLogScope (same org, or
-        // fail-closed for null org / null actor). If the row falls outside
-        // that scope we 404 before authorize() — otherwise the policy's
-        // "different org" branch returns 403, which leaks existence.
+        // cluster descendant for cluster_auditor — see Phase CFA-11). If
+        // the row falls outside that scope we 404 before authorize() —
+        // otherwise the policy's "different org" branch returns 403, which
+        // leaks existence.
         if ($user !== null && ! $user->isSuperAdmin()) {
             $visible = app(UserActivityLogScope::class)
                 ->apply(ActivityLog::query()->whereKey($activityLog->id), $user)
@@ -105,15 +106,16 @@ class ActivityLogController extends Controller
     }
 
     /**
-     * Route AUDIT_VIEW through the unified engine — replaces the legacy
-     * `$this->authorize('view_audit_logs')` Spatie fallback that never
-     * consulted AccessDecision. There is no Policy method for audit access,
-     * so the engine is the canonical gate.
-     */
-    /**
      * Tenant-scope an ActivityLog query to the actor's organization (H-01).
      * يستخدم UserActivityLogScope (الفلتر الموحّد). super_admin يرى الكل
      * ويشمل السجلات بلا organization_id (events النظامية).
+     *
+     * Phase CFA-11 — cluster_auditor widening:
+     *   UserActivityLogScope widens to descendant organization ids when the
+     *   actor holds BOTH `Capability::AUDIT_VIEW` AND `Capability::CLUSTER_TREE_VIEW`
+     *   on actor.organization_id. The widening is read-only — same strict
+     *   contract as the engine's rescue branch (org-strict for everyone
+     *   else; super_admin sees all).
      */
     private function applyOrgScope($query): void
     {
@@ -124,6 +126,15 @@ class ActivityLogController extends Controller
         app(UserActivityLogScope::class)->apply($query, $actor);
     }
 
+    /**
+     * Phase CFA-11 — admit the cluster_auditor read pair (AUDIT_VIEW +
+     * CLUSTER_TREE_VIEW) on top of the legacy AUDIT_VIEW same-org path.
+     *
+     * Route AUDIT_VIEW through the unified engine — replaces the legacy
+     * `$this->authorize('view_audit_logs')` Spatie fallback that never
+     * consulted AccessDecision. There is no Policy method for audit access,
+     * so the engine is the canonical gate.
+     */
     private function authorizeAuditView(): void
     {
         $user = request()->user();
@@ -134,9 +145,19 @@ class ActivityLogController extends Controller
         if (! AccessDecision::can($user, Capability::AUDIT_VIEW)) {
             abort(403, 'غير مصرح لك بعرض سجل النشاطات');
         }
+
+        // Cluster widening is OPT-IN: the same-org AUDIT_VIEW path above
+        // admits any user who holds the audit capability on actor.org.
+        // The cluster widening is honored by UserActivityLogScope (which
+        // calls Organization::descendantIds()) — the controller gate
+        // above does NOT need to change. The policy-level rescue in
+        // ActivityLogPolicy::view() handles per-row cross-org access.
     }
 
     /**
+     * Phase CFA-11 — admit the cluster_auditor export pair (AUDIT_EXPORT +
+     * CLUSTER_TREE_EXPORT) on top of the legacy AUDIT_EXPORT same-org path.
+     *
      * Route AUDIT_EXPORT through the unified engine. Separate capability so
      * a future "view but no export" role tier is policy-driven, not a string
      * convention.
