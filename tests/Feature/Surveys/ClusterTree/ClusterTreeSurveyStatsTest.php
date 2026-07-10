@@ -224,7 +224,9 @@ class ClusterTreeSurveyStatsTest extends TestCase
         $sameOrgExport = $this->actingAs($actor, 'sanctum')
             ->getJson("/api/surveys/{$this->clusterSurvey->id}/cluster-export?format=csv")
             ->assertOk();
-        $sameOrgContent = Storage::disk('local')->get('exports/'.$sameOrgExport->json('filename'));
+        // Phase 3B — endpoint is direct download; read the body, not
+        // the storage layer.
+        $sameOrgContent = $sameOrgExport->getContent();
         $this->assertStringNotContainsString((string) $this->hospital->id, $sameOrgContent);
 
         $this->grantEngineCapability($actor, [
@@ -235,7 +237,7 @@ class ClusterTreeSurveyStatsTest extends TestCase
         $clusterExport = $this->actingAs($actor, 'sanctum')
             ->getJson("/api/surveys/{$this->clusterSurvey->id}/cluster-export?format=csv")
             ->assertOk();
-        $clusterContent = Storage::disk('local')->get('exports/'.$clusterExport->json('filename'));
+        $clusterContent = $clusterExport->getContent();
         $this->assertStringContainsString((string) $this->hospital->id, $clusterContent);
     }
 
