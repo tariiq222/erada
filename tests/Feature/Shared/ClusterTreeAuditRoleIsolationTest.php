@@ -5,10 +5,12 @@ namespace Tests\Feature\Shared;
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\Organization;
+use App\Modules\Core\Models\ScopedRoleDefinition;
 use App\Modules\Core\Models\User;
 use App\Modules\Projects\Models\Project;
 use App\Modules\Shared\Models\ActivityLog;
 use Database\Seeders\RolesAndPermissionsSeeder;
+use Database\Seeders\ScopedDepartmentRolesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
@@ -40,6 +42,7 @@ class ClusterTreeAuditRoleIsolationTest extends TestCase
     {
         parent::setUp();
         $this->seed(RolesAndPermissionsSeeder::class);
+        $this->seed(ScopedDepartmentRolesSeeder::class);
     }
 
     public function test_cluster_auditor_role_has_only_audit_caps_in_engine(): void
@@ -69,6 +72,23 @@ class ClusterTreeAuditRoleIsolationTest extends TestCase
         $this->assertFalse(AccessDecision::can($user, Capability::STRATEGY_VIEW));
         $this->assertFalse(AccessDecision::can($user, Capability::MEETINGS_VIEW));
         $this->assertFalse(AccessDecision::can($user, Capability::USERS_VIEW));
+    }
+
+    public function test_cluster_auditor_definition_is_seeded_as_an_isolated_org_role(): void
+    {
+        $definition = ScopedRoleDefinition::query()
+            ->where('scope_type', 'organization')
+            ->where('role_key', 'cluster_auditor')
+            ->first();
+
+        $this->assertNotNull($definition);
+        $this->assertSame([
+            Capability::AUDIT_VIEW,
+            Capability::AUDIT_EXPORT,
+            Capability::CLUSTER_TREE_VIEW,
+            Capability::CLUSTER_TREE_EXPORT,
+        ], $definition->permissions);
+        $this->assertFalse($definition->is_admin_role);
     }
 
     public function test_cluster_auditor_can_read_child_org_activity_log_via_cluster_widening(): void

@@ -75,7 +75,7 @@ class ActivityLogController extends Controller
         // leaks existence.
         if ($user !== null && ! $user->isSuperAdmin()) {
             $visible = app(UserActivityLogScope::class)
-                ->apply(ActivityLog::query()->whereKey($activityLog->id), $user)
+                ->applyForRead(ActivityLog::query()->whereKey($activityLog->id), $user)
                 ->exists();
             if (! $visible) {
                 abort(404);
@@ -123,7 +123,7 @@ class ActivityLogController extends Controller
         if ($actor === null) {
             return;
         }
-        app(UserActivityLogScope::class)->apply($query, $actor);
+        app(UserActivityLogScope::class)->applyForRead($query, $actor);
     }
 
     /**
@@ -220,7 +220,10 @@ class ActivityLogController extends Controller
             ->with(['user:id,name'])
             ->orderBy('created_at', 'desc');
 
-        $this->applyOrgScope($query);
+        $actor = request()->user();
+        if ($actor !== null) {
+            app(UserActivityLogScope::class)->applyForExport($query, $actor);
+        }
 
         foreach (['user_id', 'action', 'loggable_type'] as $field) {
             if ($value = $request->query($field)) {

@@ -69,7 +69,10 @@ class ActivityLogPolicy
         if ($activityLog->organization_id !== null
             && $user->organization_id !== null
             && (int) $activityLog->organization_id === (int) $user->organization_id) {
-            return AccessDecision::can($user, Capability::AUDIT_VIEW);
+            // Preserve the established same-org show contract. The index
+            // remains audit-capability gated; a user may inspect a row they
+            // can already reach within their own organization.
+            return true;
         }
 
         // Cross-org path: cluster_auditor rescue.

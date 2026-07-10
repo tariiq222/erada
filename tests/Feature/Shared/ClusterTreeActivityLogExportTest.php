@@ -149,6 +149,36 @@ class ClusterTreeActivityLogExportTest extends TestCase
             ->assertOk();
     }
 
+    public function test_export_pair_does_not_widen_activity_log_show(): void
+    {
+        [$cluster, $hospital] = $this->makeClusterTree();
+        $auditor = User::factory()->create([
+            'organization_id' => $cluster->id,
+            'is_active' => true,
+        ]);
+        $this->grantEngineCapability($auditor, [
+            Capability::AUDIT_EXPORT,
+            Capability::CLUSTER_TREE_EXPORT,
+        ]);
+
+        $childUser = User::factory()->create([
+            'organization_id' => $hospital->id,
+            'is_active' => true,
+        ]);
+        $log = ActivityLog::create([
+            'user_id' => $childUser->id,
+            'action' => 'cfa11_export_pair_read_probe',
+            'description' => 'export pair must not widen reads',
+            'loggable_type' => User::class,
+            'loggable_id' => $childUser->id,
+            'organization_id' => $hospital->id,
+        ]);
+
+        $this->actingAs($auditor, 'sanctum')
+            ->getJson("/api/activity-logs/{$log->id}")
+            ->assertNotFound();
+    }
+
     public function test_csv_export_remains_redacted_for_cluster_auditor(): void
     {
         [$cluster, $hospital] = $this->makeClusterTree();

@@ -6,6 +6,7 @@ use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
+use App\Modules\Shared\Models\ActivityLog;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -44,6 +45,38 @@ class UserActivityLogScope
      */
     public function apply(Builder $query, User $user): Builder
     {
+        return $this->applyForPair($query, $user, Capability::AUDIT_VIEW, Capability::CLUSTER_TREE_VIEW);
+    }
+
+    /**
+     * Apply the read-only audit scope. Export grants never widen this path.
+     *
+     * @param  Builder<ActivityLog>  $query
+     */
+    public function applyForRead(Builder $query, User $user): Builder
+    {
+        return $this->applyForPair($query, $user, Capability::AUDIT_VIEW, Capability::CLUSTER_TREE_VIEW);
+    }
+
+    /**
+     * Apply the export audit scope. Read grants never widen this path.
+     *
+     * @param  Builder<ActivityLog>  $query
+     */
+    public function applyForExport(Builder $query, User $user): Builder
+    {
+        return $this->applyForPair($query, $user, Capability::AUDIT_EXPORT, Capability::CLUSTER_TREE_EXPORT);
+    }
+
+    /**
+     * @param  Builder<ActivityLog>  $query
+     */
+    private function applyForPair(
+        Builder $query,
+        User $user,
+        string $auditCapability,
+        string $clusterCapability,
+    ): Builder {
         if ($user->isSuperAdmin()) {
             return $query;
         }
@@ -58,7 +91,7 @@ class UserActivityLogScope
         // Cluster widening — actor holds either audit pair on
         // actor.organization_id. Expand to actor.org + every descendant
         // org. Otherwise strict same-org.
-        $visible = $this->isClusterAuditor($user)
+        $visible = $this->hasClusterPair($user, $auditCapability, $clusterCapability)
             ? $this->clusterAuditableOrgIds($orgId)
             : [$orgId];
 
@@ -76,15 +109,10 @@ class UserActivityLogScope
      *
      * Mirrors the CFA-00 / CFA-02 two-capability contract.
      */
-    protected function isClusterAuditor(User $user): bool
+    protected function hasClusterPair(User $user, string $auditCapability, string $clusterCapability): bool
     {
-        $hasReadPair = AccessDecision::can($user, Capability::AUDIT_VIEW)
-            && AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW);
-
-        $hasExportPair = AccessDecision::can($user, Capability::AUDIT_EXPORT)
-            && AccessDecision::can($user, Capability::CLUSTER_TREE_EXPORT);
-
-        return $hasReadPair || $hasExportPair;
+        return AccessDecision::can($user, $auditCapability)
+            && AccessDecision::can($user, $clusterCapability);
     }
 
     /**
