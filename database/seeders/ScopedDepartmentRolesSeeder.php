@@ -173,6 +173,25 @@ class ScopedDepartmentRolesSeeder extends Seeder
                     Capability::RISKS_REASSESS, Capability::RISKS_CHANGE_STATUS, Capability::RISKS_VIEW_REPORTS,
                 ],
             ],
+            [
+                'scope_type_id' => $orgScopeId,
+                'scope_type_key' => 'organization',
+                'role_key' => 'cluster_auditor',
+                'label_ar' => 'مدقق سجل النشاط على مستوى التجمع',
+                'label_en' => 'Cluster Audit Viewer',
+                'is_admin_role' => false,
+                'can_manage_members' => false,
+                'can_edit' => false,
+                'can_delete' => false,
+                'can_view_all' => false,
+                'sort_order' => 80,
+                'permissions' => [
+                    Capability::AUDIT_VIEW,
+                    Capability::AUDIT_EXPORT,
+                    Capability::CLUSTER_TREE_VIEW,
+                    Capability::CLUSTER_TREE_EXPORT,
+                ],
+            ],
         ];
 
         foreach ($definitions as $def) {

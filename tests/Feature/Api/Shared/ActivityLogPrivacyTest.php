@@ -93,8 +93,12 @@ class ActivityLogPrivacyTest extends TestCase
             ->assertJsonPath('data.0.old_values.nested.password', '[REDACTED]')
             ->assertJsonPath('data.0.new_values.reporter_email', '[REDACTED]')
             ->assertJsonPath('data.0.metadata.safe_context', 'kept')
-            ->assertJsonMissingPath('data.0.ip_address')
-            ->assertJsonMissingPath('data.0.user_agent')
+            // Phase CFA-11 — ip_address / user_agent are now surfaced as
+            // redacted shapes (CIDR / browser family), not stripped.
+            // The raw values must never appear; the redacted form must.
+            ->assertJsonPath('data.0.ip_address', '203.0.113.0/24')
+            ->assertJsonPath('data.0.user_agent', 'other')
+            ->assertJsonPath('data.0.metadata.ip_address', '[REDACTED]')
             ->assertJsonMissingPath('data.0.target_user_id')
             ->assertJsonMissingPath('data.0.user.email');
 
@@ -112,8 +116,8 @@ class ActivityLogPrivacyTest extends TestCase
             ->assertJsonPath('data.old_values.token', '[REDACTED]')
             ->assertJsonPath('data.new_values.patient_file_number', '[REDACTED]')
             ->assertJsonPath('data.metadata.ip_address', '[REDACTED]')
-            ->assertJsonMissingPath('data.ip_address')
-            ->assertJsonMissingPath('data.user_agent')
+            ->assertJsonPath('data.ip_address', '203.0.113.0/24')
+            ->assertJsonPath('data.user_agent', 'other')
             ->assertJsonMissingPath('data.target_user_id')
             ->assertJsonMissingPath('data.user.email');
 
@@ -134,8 +138,10 @@ class ActivityLogPrivacyTest extends TestCase
         $this->assertSame($this->activityLog->id, $payload['logs'][0]['id']);
         $this->assertSame('[REDACTED]', $payload['logs'][0]['old_values']['patient_name']);
         $this->assertSame('[REDACTED]', $payload['logs'][0]['new_values']['metadata']['authorization']);
-        $this->assertArrayNotHasKey('ip_address', $payload['logs'][0]);
-        $this->assertArrayNotHasKey('user_agent', $payload['logs'][0]);
+        // Phase CFA-11 — ip_address / user_agent surface as redacted shapes
+        // (CIDR / browser family) in the JSON export too.
+        $this->assertSame('203.0.113.0/24', $payload['logs'][0]['ip_address']);
+        $this->assertSame('other', $payload['logs'][0]['user_agent']);
         $this->assertArrayNotHasKey('target_user_id', $payload['logs'][0]);
         $this->assertArrayNotHasKey('email', $payload['logs'][0]['user']);
         $this->assertSafeActivityLogPayload($content);
@@ -206,7 +212,8 @@ class ActivityLogPrivacyTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('data.old_values.token', '[REDACTED]')
             ->assertJsonPath('data.new_values.patient_file_number', '[REDACTED]')
-            ->assertJsonMissingPath('data.ip_address')
+            ->assertJsonPath('data.ip_address', '203.0.113.0/24')
+            ->assertJsonPath('data.user_agent', 'other')
             ->assertJsonMissingPath('data.user.email');
 
         $this->assertSafeActivityLogPayload($response->getContent());
