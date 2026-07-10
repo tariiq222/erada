@@ -28,10 +28,9 @@ use Illuminate\Database\Eloquent\Builder;
  *
  * Source-aware widening for OVR / Recommendation / MeetingResolution /
  * Risk / Kpi / Milestone tasks is handled inside Task::scopeVisibleTo's
- * branch (3) — those source rows can have UUID primary keys (OVR
- * IncidentReport) which would mismatch tasks.source_id (bigint) at the
- * SQL layer. The polymorphic widening lives where the type-compatibility
- * is handled correctly.
+ * branch (3). OVR source IDs cannot be joined directly because incident
+ * IDs are UUIDs while tasks.source_id is bigint; the copied
+ * source_sensitivity stamp is the task-side confidentiality authority.
  *
  * CFA-08 widening rules (read + PDCA status writes):
  *   - super_admin: no filter.
@@ -114,8 +113,7 @@ class UserTaskScope
      * itself cluster-aware). Production list endpoints route through
      * Task::scopeVisibleTo directly — the per-source-type widening for
      * OVR / Recommendation / MeetingResolution / Risk / Kpi / Milestone
-     * lives in Task::sourceAwareScope where the UUID vs bigint type
-     * compatibility is handled. This scope intentionally narrows to
+     * lives in Task::sourceAwareScope. This scope intentionally narrows to
      * project/department tasks + the unconditional source_sensitivity
      * filter; it does NOT widen the polymorphic-source branch (the
      * source-aware widening is centralized on Task::scopeVisibleTo).
@@ -184,13 +182,9 @@ class UserTaskScope
      *   source_sensitivity IS NULL OR source_sensitivity != 'confidential'
      *
      * Schema note: tasks.source_id is bigint while IncidentReport.id is
-     * UUID — direct source-row comparison at the SQL layer is not
-     * expressible in PostgreSQL (uuid = bigint operator does not
-     * exist). The per-row source_sensitivity stamp is therefore the
-     * authoritative filter at the SQL layer. The engine's
-     * clusterTreeRescueApplies pre-flight check (via Task::isSensitive +
-     * SensitivelyScoped) handles the source-row resolution path at the
-     * per-record layer for tasks where source_id IS a UUID.
+     * UUID, so direct source-row comparison is not expressible in PostgreSQL.
+     * The copied source_sensitivity stamp is therefore authoritative for both
+     * list filtering and the per-record SensitivelyScoped gate.
      */
     private function applyUnconditionalConfidentialFloor(Builder $query, string $tasksTable): Builder
     {

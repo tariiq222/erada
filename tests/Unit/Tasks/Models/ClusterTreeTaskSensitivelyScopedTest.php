@@ -6,8 +6,6 @@ use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
-use App\Modules\OVR\Models\IncidentReport;
-use App\Modules\OVR\Models\IncidentType;
 use App\Modules\Projects\Models\Project;
 use App\Modules\Tasks\Models\Task;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -19,14 +17,14 @@ use Tests\TestCase;
  *
  * Pins the contract that a Task implements SensitivelyScoped correctly:
  *   - Task::isSensitive() returns true when source_sensitivity='confidential'.
- *   - Task::isSensitive() returns true when source_type='IncidentReport'
- *     AND the related source is_confidential=true.
+ *   - OVR-sourced tasks inherit sensitivity through the copied task stamp;
+ *     tasks.source_id cannot reference the OVR UUID primary key.
  *   - Task::isSensitive() returns false for normal tasks (no source
  *     sensitivity, non-confidential OVR source, no source at all,
  *     personal tasks).
  *   - Task::mayAccessSensitive() honors the engine's structural floor:
- *     super_admin, the reporter of the linked incident, the task owner,
- *     and a user with an OVR_CONFIDENTIAL scoped role are granted;
+ *     super_admin, the task creator/owner/assignee, and a user with an
+ *     OVR_CONFIDENTIAL scoped role are granted;
  *     everyone else (including a cluster actor with ONLY cluster grants)
  *     is denied.
  *
@@ -48,8 +46,6 @@ class ClusterTreeTaskSensitivelyScopedTest extends TestCase
 
     private User $owner;
 
-    private IncidentType $incidentType;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -61,15 +57,6 @@ class ClusterTreeTaskSensitivelyScopedTest extends TestCase
         ]);
         $this->owner = User::factory()->create(['organization_id' => $this->org->id, 'is_active' => true]);
 
-        // The factory at Database\Factories\IncidentReportFactory is not
-        // reachable via IncidentReport::factory() (Laravel's resolver
-        // looks for the nested-namespace path). Use direct ::create() —
-        // matches TaskSourceSensitivityLeakTest's established pattern.
-        $this->incidentType = IncidentType::create([
-            'name' => 'Medication Error',
-            'name_ar' => 'خطأ دوائي',
-            'is_active' => true,
-        ]);
     }
 
     private function makeNormalTask(): Task
@@ -228,18 +215,12 @@ class ClusterTreeTaskSensitivelyScopedTest extends TestCase
         $this->assertTrue($task->mayAccessSensitive($this->owner));
     }
 
-    public function test_may_access_sensitive_returns_true_for_incident_reporter(): void
+    public function test_may_access_sensitive_uses_the_task_creator_when_ovr_source_is_stamped(): void
     {
-        // Reporting the incident grounds the task — reporter_id on the
-        // source row carries through to the mayAccessSensitive() hook.
-        // However, tasks.source_id is a bigint while IncidentReport.id is
-        // a UUID — direct FK is not expressible. The mayAccessSensitive
-        // resolver fallback returns null for an unresolvable source row,
-        // so the reporter-floor arm cannot be tested here at the
-        // polymorphic-source level. The created_by / owner_id arm
-        // (tested above) covers the structural floor for the task row
-        // itself; the SQL filter for the OVR confidential leak is
-        // asserted by ClusterTreeOvrSourcedTaskForbiddenTest.
+        // OVR source IDs cannot be resolved through tasks.source_id because
+        // the column is bigint while OVR uses UUIDs. The task's copied stamp
+        // is the confidentiality source of truth; task-level ownership is the
+        // available structural need-to-know path.
         $task = Task::factory()->create([
             'project_id' => $this->project->id,
             'type' => 'project',
@@ -250,8 +231,7 @@ class ClusterTreeTaskSensitivelyScopedTest extends TestCase
             'source_sensitivity' => 'confidential',
         ]);
 
-        // The task-row's created_by floor — owner / creator has
-        // need-to-know access via the structural floor.
+        // The task-row's created_by floor grants need-to-know access.
         $this->assertTrue($task->mayAccessSensitive($this->owner));
     }
 

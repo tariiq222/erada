@@ -18,14 +18,13 @@ use Tests\TestCase;
  * ClusterTreeOvrSourcedTaskForbiddenTest — Phase CFA-08 (CRITICAL INVARIANT).
  *
  * Pins the OVR confidential floor for Tasks:
- *   - A task sourced from a confidential OVR IncidentReport
- *     (source_type='IncidentReport' AND source.is_confidential=true)
+ *   - A task stamped as sourced from a confidential OVR IncidentReport
+ *     (source_type='IncidentReport' AND source_sensitivity='confidential')
  *     is NEVER visible to a cluster actor via the cluster rescue branch.
  *   - Even with BOTH TASKS_VIEW + CLUSTER_TREE_VIEW on actor.org.
  *   - The engine's clusterTreeRescueApplies short-circuits on the
- *     SensitivelyScoped + isSensitive()=true gate (the
- *     Task::isSensitive() implementation resolves the source row's
- *     is_confidential lazily via AccessDecision::resolveScopeParent).
+ *     SensitivelyScoped + isSensitive()=true gate. The copied task stamp is
+ *     authoritative because tasks.source_id cannot store OVR UUID IDs.
  *   - The Task::scopeVisibleTo + the cluster floor NEVER include these
  *     tasks in the query result set.
  *
@@ -59,10 +58,8 @@ class ClusterTreeOvrSourcedTaskForbiddenTest extends TestCase
         // is bigint — direct FK is not expressible. The synthetic source_id
         // stands in for the (UUID, does not exist in tasks.source_id) pair;
         // the per-row source_sensitivity='confidential' stamp is the
-        // authoritative signal here. The Task::isSensitive() engine pre-flight
-        // check would resolve the UUID source row, but for the LIST/SHOW
-        // cross-org case here the SQL filter (and the per-row stamp) is the
-        // gate that blocks the cluster actor.
+        // authoritative signal here. The SQL filter and the per-row stamp are
+        // the gates that block the cluster actor on list and show paths.
         $ovrConfidentialTask = Task::factory()->create([
             'project_id' => $hospitalProject->id,
             'type' => 'project',

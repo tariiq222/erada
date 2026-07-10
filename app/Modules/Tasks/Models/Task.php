@@ -83,8 +83,8 @@ class Task extends Model implements OwnerEditable, ScopeAware, SensitivelyScoped
         'next_occurrence',
 
         // Phase 4 polymorphic source (AuthZ unification): the task can be
-        // attached to any ScopeAware parent (Project, Department, Risk,
-        // IncidentReport, Recommendation, Kpi, Milestone). The
+        // attached to a source (Project, Department, Risk, IncidentReport,
+        // Recommendation, Kpi, Milestone). The
         // migration 2026_07_05_171421_add_source_fields_to_tasks_table
         // backfills project_id / department_id rows so existing data keeps
         // behaving exactly the same.
@@ -741,7 +741,6 @@ class Task extends Model implements OwnerEditable, ScopeAware, SensitivelyScoped
         'Project' => Project::class,
         'Department' => Department::class,
         'Risk' => Risk::class,
-        'IncidentReport' => IncidentReport::class,
         'Recommendation' => Recommendation::class,
         'MeetingResolution' => MeetingResolution::class,
         'Kpi' => Kpi::class,
@@ -824,23 +823,12 @@ class Task extends Model implements OwnerEditable, ScopeAware, SensitivelyScoped
     // ========== SensitivelyScoped (Phase CFA-08) ==========
 
     /**
-     * A task is sensitive when its source carries an explicit need-to-know
-     * stamp. Two independent triggers cover the existing leak surfaces:
-     *
-     *   (a) source_sensitivity = 'confidential' — the direct per-row stamp
-     *       carried into tasks by the source-aware backfill. Means the
-     *       source is confidential-regardless-of-row (e.g. OVR
-     *       IncidentReport with is_confidential = true), and the task
-     *       inherits the stamp.
-     *
-     *   (b) source_type = IncidentReport (any of its accepted tokens) AND
-     *       the related source row's is_confidential = true. Resolved
-     *       lazily via the source_id FK so a freshly-confidential-stamped
-     *       incident (or one whose stamp backfilled after the task was
-     *       created) cannot leak. The lookup is memoized by the engine's
-     *       resolveScopeParent cache so repeated cluster-rescue probes on
-     *       tasks sharing one incident collapse to one IncidentReport
-     *       read.
+     * A task is sensitive when its source carries the explicit
+     * source_sensitivity='confidential' stamp. This is the authoritative
+     * task-side record because tasks.source_id is bigint while OVR incident
+     * IDs are UUIDs; Task cannot safely resolve an OVR source row at runtime.
+     * The producer that creates or updates an OVR-sourced task must maintain
+     * the copied stamp.
      *
      * Sensitivity is independent of the cluster rescue — a cluster actor
      * with TASKS_VIEW + CLUSTER_TREE_VIEW STILL gets a deny for sensitive
@@ -859,73 +847,7 @@ class Task extends Model implements OwnerEditable, ScopeAware, SensitivelyScoped
             return false;
         }
 
-        if ($this->source_sensitivity === 'confidential') {
-            return true;
-        }
-
-        if ($this->source_type === null || $this->source_id === null) {
-            return false;
-        }
-
-        $sensitiveSourceTokens = [
-            'App\\Modules\\OVR\\Models\\IncidentReport',
-            'IncidentReport',
-            'incident_report',
-            IncidentReport::class,
-        ];
-
-        if (! in_array($this->source_type, $sensitiveSourceTokens, true)) {
-            return false;
-        }
-
-        // Schema workaround: tasks.source_id is bigint while
-        // IncidentReport.id is UUID. Detect UUID-shape before resolving
-        // so a synthetic bigint cannot abort the surrounding PostgreSQL
-        // transaction with SQLSTATE[22P02]. The per-row
-        // source_sensitivity stamp (checked first) is the dominant
-        // signal — this row-resolution arm is a defense-in-depth backstop.
-        $incident = $this->resolveOvrIncidentSafely();
-        if (! $incident instanceof IncidentReport) {
-            return false;
-        }
-
-        return (bool) $incident->is_confidential;
-    }
-
-    /**
-     * Resolve the related OVR IncidentReport for the polymorphic source
-     * pointer (source_type='IncidentReport', source_id=<UUID>).
-     *
-     * Schema workaround: tasks.source_id is bigint while IncidentReport.id
-     * is UUID. A naive cast (PostgreSQL bigint→uuid) raises
-     * SQLSTATE[22P02] — which aborts the surrounding transaction even
-     * when caught via try/catch (PG marks the txn poisoned). To avoid
-     * that, gate the resolution on a UUID-shape pre-check: non-UUID
-     * source_ids (synthetic test values) short-circuit to null without
-     * touching the DB, so the engine's per-record surface stays clean
-     * while the per-row source_sensitivity stamp carries the leak gate.
-     */
-    private function resolveOvrIncidentSafely(): ?IncidentReport
-    {
-        if ($this->source_id === null) {
-            return null;
-        }
-
-        // UUID v4 shape: 8-4-4-4-12 hex (case-insensitive). A future
-        // migration that converts tasks.source_id to UUID can drop this
-        // gate; until then, the heuristic keeps both the test fixtures
-        // and any synthetic data row in scope without crashing.
-        if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', (string) $this->source_id) !== 1) {
-            return null;
-        }
-
-        try {
-            $incident = AccessDecision::resolveScopeParent(IncidentReport::class, (int) $this->source_id);
-        } catch (\Throwable) {
-            $incident = null;
-        }
-
-        return $incident instanceof IncidentReport ? $incident : null;
+        return $this->source_sensitivity === 'confidential';
     }
 
     /**
@@ -934,11 +856,7 @@ class Task extends Model implements OwnerEditable, ScopeAware, SensitivelyScoped
      * Mirrors TaskPolicy::isConfidentialSource + userMayViewConfidential —
      * a sensitive task is accessible to:
      *   - super_admin (handled by the engine before() short-circuit).
-     *   - the reporter/assignee/owner of the related incident (via the
-     *     structural floor: isOwner() check in AccessDecision handles
-     *     created_by / owner_id; reporter_id/assigned_to on the
-     *     IncidentReport are checked by the structural floor's column
-     *     sweep).
+     *   - the task creator, owner, or assignee.
      *   - any user holding an active scoped role whose
      *     permissions[] contains Capability::OVR_CONFIDENTIAL — the
      *     same need-to-know capability OVR requires for the underlying
@@ -962,34 +880,11 @@ class Task extends Model implements OwnerEditable, ScopeAware, SensitivelyScoped
             return true;
         }
 
-        // Reporter / assignee / owner / creator — the personal-task-style
-        // structural floor carries through the polymorphic source to the
-        // underlying IncidentReport when one exists.
+        // Creator, owner, and assignee have task-level need-to-know access.
         if ((int) ($this->created_by ?? 0) === (int) $user->id
             || (int) ($this->owner_id ?? 0) === (int) $user->id
             || (int) ($this->assigned_to ?? 0) === (int) $user->id) {
             return true;
-        }
-
-        if ($this->source_type !== null && $this->source_id !== null) {
-            $sensitiveTokens = [
-                'App\\Modules\\OVR\\Models\\IncidentReport',
-                'IncidentReport',
-                'incident_report',
-                IncidentReport::class,
-            ];
-            if (in_array($this->source_type, $sensitiveTokens, true)) {
-                // See resolveOvrIncidentSafely() — UUID-shape pre-check
-                // prevents a synthetic source_id from aborting the
-                // surrounding PostgreSQL transaction.
-                $incident = $this->resolveOvrIncidentSafely();
-                if ($incident instanceof IncidentReport) {
-                    if ((int) ($incident->reporter_id ?? 0) === (int) $user->id
-                        || (int) ($incident->assigned_to ?? 0) === (int) $user->id) {
-                        return true;
-                    }
-                }
-            }
         }
 
         // Confidential-cleared scoped role — the only path through the
