@@ -2,6 +2,7 @@
 
 namespace App\Modules\Tasks\Http\Resources;
 
+use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Http\Resources\UserResource;
 use App\Modules\Shared\Support\ElementAbilities;
@@ -12,12 +13,53 @@ class TaskResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $user = $request?->user() ?? request()->user();
+
+        // Phase CFA-08 — Cluster-read sanitization.
+        //
+        // When the actor is reading this task cross-org via CLUSTER_TREE_VIEW
+        // rescue (actor.org != task-effective-organization AND actor holds
+        // CLUSTER_TREE_VIEW), sensitive payload is STRIPPED:
+        //   - description (often freeform narrative — PII / partial-confidential)
+        //   - challenges / lessons_learned / status_comment (per-record closure
+        //     narrative; can carry names of staff / patients)
+        //   - assignee / creator / owner (UserResource collection — exposes
+        //     user PII cross-org)
+        //   - subtasks (cross-module child task data — widened separately when
+        //     the actor revisits with a focused cross-org query)
+        //   - comments_count / attachments_count (counts surfaced as metadata
+        //     only; the underlying records require a separate authorized read)
+        //
+        // Preserved for cluster actors:
+        //   - id, type, title, status / priority / progress
+        //   - start_date / due_date / completed_date (no PII)
+        //   - project_id / department_id / milestone_id / parent_id (FK pointers
+        //     — no leakage)
+        //   - source_type / source_id / source_sensitivity (FK pointers — the
+        //     sensitive-source stamp is intentionally preserved so the FE
+        //     can render the "this task inherits a confidential source" badge
+        //     without fetching the row)
+        //   - assigned_to / created_by / owner_id (FK pointers — no names)
+        //   - is_private, order, recurrence_rule
+        //   - time_indicator / days_* / total_days / time_progress / is_overdue
+        //   - abilities (per-record — needed for UI; engine-resolved)
+        //
+        // super_admin bypasses sanitization. The cluster detection fails closed
+        // (no actor / null actor / same-org ⇒ not cluster-read).
+        $isClusterRead = $user !== null
+            && ! $user->isSuperAdmin()
+            && $this->resource->exists
+            && $user->organization_id !== null
+            && $this->resource->scopeOrganizationId() !== null
+            && (int) $user->organization_id !== (int) $this->resource->scopeOrganizationId()
+            && AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW);
+
         return [
             'id' => $this->id,
             'type' => $this->type?->value ?? $this->type,
             'type_label' => $this->type?->label() ?? null,
             'title' => $this->title,
-            'description' => $this->description,
+            'description' => $isClusterRead ? null : $this->description,
             'status' => $this->status?->value ?? $this->status,
             'status_label' => $this->status?->label() ?? null,
             'status_color' => $this->status?->color() ?? null,
@@ -48,6 +90,12 @@ class TaskResource extends JsonResource
             'order' => $this->order,
             'recurrence_rule' => $this->recurrence_rule,
 
+            // حقول الإكمال — strip on cluster read (per-row closure narrative
+            // can carry sensitive surfaces like staff / patient names).
+            'challenges' => $isClusterRead ? null : $this->challenges,
+            'lessons_learned' => $isClusterRead ? null : $this->lessons_learned,
+            'status_comment' => $isClusterRead ? null : $this->status_comment,
+
             // العلاقات
             'project_id' => $this->project_id,
             'project' => $this->whenLoaded('project', fn () => [
@@ -76,23 +124,43 @@ class TaskResource extends JsonResource
             ]),
 
             'assigned_to' => $this->assigned_to,
-            'assignee' => $this->whenLoaded('assignee', fn () => new UserResource($this->assignee)),
+            'assignee' => $isClusterRead
+                ? null
+                : $this->whenLoaded('assignee', fn () => new UserResource($this->assignee)),
 
             'created_by' => $this->created_by,
-            'creator' => $this->whenLoaded('creator', fn () => new UserResource($this->creator)),
+            'creator' => $isClusterRead
+                ? null
+                : $this->whenLoaded('creator', fn () => new UserResource($this->creator)),
 
             'owner_id' => $this->owner_id,
-            'owner' => $this->whenLoaded('owner', fn () => new UserResource($this->owner)),
+            'owner' => $isClusterRead
+                ? null
+                : $this->whenLoaded('owner', fn () => new UserResource($this->owner)),
+
+            // Phase 4 polymorphic source — surfaced as FK pointers so the FE
+            // can resolve the parent record via its own scoped API. The
+            // source_sensitivity stamp is preserved (read-only metadata for
+            // a "this task inherits a confidential source" badge); the row
+            // itself is unreachable to cluster actors per the engine's
+            // sensitive gate.
+            'source_type' => $this->source_type,
+            'source_id' => $this->source_id,
+            'source_sensitivity' => $this->source_sensitivity,
 
             // المهام الفرعية
-            'subtasks' => $this->whenLoaded('subtasks', fn () => TaskResource::collection($this->subtasks)),
+            'subtasks' => $isClusterRead
+                ? null
+                : $this->whenLoaded('subtasks', fn () => TaskResource::collection($this->subtasks)),
             'subtasks_count' => $this->relationCount('subtasks'),
             'has_subtasks' => $this->relationCount('subtasks') > 0,
             'incomplete_subtasks_count' => $this->relationCount('incomplete_subtasks', 'subtasks', fn () => $this->subtasks()
                 ->whereNotIn('status', ['completed', 'cancelled'])
                 ->count()),
 
-            // التعليقات والمرفقات
+            // التعليقات والمرفقات — counts preserved as metadata; the
+            // comment / attachment records themselves require a separate
+            // authorized read so the array-of-records surfaces are stripped.
             'comments_count' => $this->relationCount('comments'),
             'attachments_count' => $this->relationCount('attachments'),
 
@@ -100,7 +168,7 @@ class TaskResource extends JsonResource
             // frontend never re-derives scope-chain logic. Fall back to the
             // active request user when toArray() is invoked without a Request.
             'abilities' => ElementAbilities::resolve(
-                $request?->user() ?? request()->user(),
+                $user,
                 $this->resource,
                 [
                     'view' => Capability::TASKS_VIEW,
