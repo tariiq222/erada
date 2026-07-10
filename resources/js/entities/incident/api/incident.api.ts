@@ -33,6 +33,18 @@ export const incidentsApi = {
 		const query = params ? "?" + new URLSearchParams(params).toString() : "";
 		return api.get(`/ovr/incidents/stats${query}`);
 	},
+	// Phase 4D — OVR cluster aggregate stats + cluster aggregate
+	// direct download. Both backed by IncidentReportController::
+	// clusterStats / clusterExport on /ovr/incidents/cluster-stats and
+	// /ovr/incidents/cluster-export. Aggregate-only contract — no
+	// raw incident rows, no PII (patient_name / reporter_email /
+	// reporter_phone are gated by OVR_CONFIDENTIAL, not surfaced
+	// here). The OVR_EXPORT + CLUSTER_TREE_EXPORT capability pair
+	// is the backend-supported gate; super_admin bypass + the same
+	// fail-closed null-org floor from the BE side apply.
+	clusterStats: () => api.get("/ovr/incidents/cluster-stats"),
+	downloadClusterExport: (format: "csv" | "json" = "csv") =>
+		api.blob(`/ovr/incidents/cluster-export?format=${format}`),
 	getOne: (report: string) => api.get(`/ovr/incidents/${report}`),
 	// Departments the user may target when creating a report (scoped picker).
 	getCreatableDepartments: () => api.get("/ovr/incidents/creatable-departments"),
