@@ -32,8 +32,8 @@ class IncidentReportFactory extends Factory
             'incident_datetime' => $this->faker->dateTimeBetween('-30 days', 'now'),
             'incident_type_id' => IncidentType::factory(),
             'incident_description' => $this->faker->sentence(),
-            'severity_level' => $this->faker->randomElement(SeverityLevel::values()),
-            'status' => ReportStatus::Submitted,
+            'severity_level' => $this->faker->randomElement(array_map(fn (SeverityLevel $s) => $s->value, SeverityLevel::cases())),
+            'status' => ReportStatus::New,
             'is_confidential' => false,
         ];
     }

@@ -38,8 +38,16 @@ Route::middleware('auth:sanctum')->prefix('ovr')->group(function () {
         ->name('ovr.incidents.recent');
     Route::get('/incidents/stats', [IncidentReportController::class, 'stats'])
         ->name('ovr.incidents.stats');
+    // Phase CFA-09 — cluster aggregate stats (NEVER raw). Gated by
+    // IncidentReportPolicy::viewStats (OVR_VIEW_STATISTICS + CLUSTER_TREE_VIEW).
+    Route::get('/incidents/cluster-stats', [IncidentReportController::class, 'clusterStats'])
+        ->name('ovr.incidents.cluster-stats');
     Route::get('/incidents/export', [IncidentReportController::class, 'export'])
         ->name('ovr.incidents.export');
+    // Phase CFA-09 — cluster aggregate export (NEVER raw). Gated by
+    // IncidentReportPolicy::exportsAggregates (OVR_EXPORT + CLUSTER_TREE_EXPORT).
+    Route::get('/incidents/cluster-export', [IncidentReportController::class, 'clusterExport'])
+        ->name('ovr.incidents.cluster-export');
     Route::get('/incidents/{report}', [IncidentReportController::class, 'show'])
         ->name('ovr.incidents.show');
     Route::put('/incidents/{report}', [IncidentReportController::class, 'update'])
