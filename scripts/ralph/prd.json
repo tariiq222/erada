@@ -66,7 +66,7 @@
       "id": "CFA-04",
       "title": "Projects cluster read + status writes + sanitized show",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "branch": "phase-cfa-04-projects-cluster-widening",
       "summary": "UserProjectScope::clusterVisibleOrgIds widening for view. ProjectPolicy::view two-path rescue. ProjectPolicy::update rescue for status / PDCA transitions via PROJECTS_EDIT + CLUSTER_TREE_MANAGE. SANITIZE ProjectResource show (strip or per-child gate the eager-loaded members / stakeholders / tasks / milestones / expenses / kpis / risks / comments / attachments / activity_log). NO project role/member assignment widening (CFA-00 decision).",
       "acceptanceCriteria": [
@@ -89,7 +89,7 @@
       "id": "CFA-05",
       "title": "Risks cluster read + reassess/status writes + export gate",
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "branch": "phase-cfa-05-risks-cluster-widening",
       "summary": "UserRiskScope::clusterVisibleOrgIds widening. RiskPolicy::view rescue. RiskPolicy::reassess + changeStatus rescue via RISKS_REASSESS + RISKS_CHANGE_STATUS + CLUSTER_TREE_MANAGE. RiskDashboardController::export gated by RISKS_VIEW_REPORTS + CLUSTER_TREE_EXPORT.",
       "acceptanceCriteria": [
@@ -106,7 +106,7 @@
       "id": "CFA-06",
       "title": "Meetings cluster read + governance writes (Direction R/B integrity)",
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "branch": "phase-cfa-06-meetings-cluster-widening",
       "summary": "UserMeetingScope::clusterVisibleOrgIds widening. MeetingPolicy::view + RecommendationPolicy::view rescue. MeetingPolicy::update rescue for start/complete/cancel via MEETINGS_EDIT + CLUSTER_TREE_MANAGE. RecommendationPolicy approve/reject/defer/accept/complete rescue. Direction R/B integrity preserved. Self-approval block preserved. Attendees + internal_comments sanitized for cluster read.",
       "acceptanceCriteria": [
@@ -152,6 +152,9 @@
       "title": "Tasks cluster read (DEFERRED — after CFA-09 OVR primitive)",
       "priority": 8,
       "passes": false,
+      "dependsOn": [
+        "CFA-09"
+      ],
       "branch": "phase-cfa-08-tasks-cluster-widening",
       "summary": "Add SensitivelyScoped marker to Task model so source_sensitivity='confidential' is engine-visible. UserTaskScope::clusterVisibleOrgIds widening. TaskPolicy::view rescue. PDCA transition writes via TASKS_EDIT + CLUSTER_TREE_MANAGE. Personal tasks (owner_id floor) bypass engine. Polymorphic source_type chain (Project / Department / Risk / IncidentReport / Recommendation / MeetingResolution / Kpi / Milestone). MUST follow CFA-09 because OVR source chain depends on OVR aggregate pattern.",
       "acceptanceCriteria": [

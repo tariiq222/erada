@@ -7,6 +7,8 @@ set -e
 # Parse arguments
 TOOL="claude"  # Default to claude for this project
 MAX_ITERATIONS=10
+RALPH_SLEEP_SECONDS="${RALPH_SLEEP_SECONDS:-2}"
+RALPH_CLAUDE_BIN="${RALPH_CLAUDE_BIN:-claude}"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -85,21 +87,33 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   echo "  Ralph Iteration $i of $MAX_ITERATIONS ($TOOL)"
   echo "==============================================================="
 
+  OUTPUT_FILE=$(mktemp "${TMPDIR:-/tmp}/ralph-output.XXXXXX")
+
   if [[ "$TOOL" == "amp" ]]; then
-    OUTPUT=$(cat "$SCRIPT_DIR/prompt.md" | amp --dangerously-allow-all 2>&1 | tee /dev/stderr) || true
+    cat "$SCRIPT_DIR/prompt.md" | amp --dangerously-allow-all 2>&1 | tee /dev/stderr "$OUTPUT_FILE" || true
   else
-    OUTPUT=$(claude --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee /dev/stderr) || true
+    "$RALPH_CLAUDE_BIN" --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee /dev/stderr "$OUTPUT_FILE" || true
   fi
 
-  if echo "$OUTPUT" | grep -q "<promise>COMPLETE</promise>"; then
-    echo ""
-    echo "Ralph completed all tasks!"
-    echo "Completed at iteration $i of $MAX_ITERATIONS"
-    exit 0
-  fi
+  STATUS=$("$SCRIPT_DIR/ralph-output-status.sh" "$OUTPUT_FILE")
+  rm -f "$OUTPUT_FILE"
+
+  case "$STATUS" in
+    complete)
+      echo ""
+      echo "Ralph completed all tasks!"
+      echo "Completed at iteration $i of $MAX_ITERATIONS"
+      exit 0
+      ;;
+    stop)
+      echo ""
+      echo "Ralph stopped on a hard-stop condition. Review the stop report above."
+      exit 2
+      ;;
+  esac
 
   echo "Iteration $i complete. Continuing..."
-  sleep 2
+  sleep "$RALPH_SLEEP_SECONDS"
 done
 
 echo ""

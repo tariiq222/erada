@@ -313,3 +313,12 @@ Explicitly OUT (CFA-00 owner decision):
 - **PR review comments**: CFA-02 + CFA-03 both had clean PRs without
   reviewer findings. Pattern: minimal Policy surface, clear docblock
   comments, exhaustive tests covering all 6+ acceptance scenarios.
+
+## 2026-07-10 — Ralph control-flow recovery
+
+- Reconciled CFA-04, CFA-05, and CFA-06 with their merged state on `origin/main`.
+- Added explicit `dependsOn` metadata so CFA-08 cannot run before CFA-09.
+- Added machine-readable STOP handling; the wrapper exits 2 and does not start
+  another iteration after a hard-stop report.
+- Added a dependency-aware story selector and shell regression coverage.
+- CFA-07 through CFA-11 remain `passes: false` until review and merge.
