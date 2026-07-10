@@ -324,6 +324,44 @@ class UsersClusterDirectoryTest extends TestCase
         $this->assertEmpty($descendantUserIds);
     }
 
+    public function test_cluster_actor_list_returns_descendant_users_in_directory_shape(): void
+    {
+        $actor = $this->makeClusterActor();
+        $target = $this->makeTarget($this->hospital);
+        $sibling = $this->makeTarget($this->sibling);
+
+        $response = $this->actingAs($actor, 'sanctum')
+            ->getJson('/api/users/list')
+            ->assertOk();
+
+        $rows = collect($response->json());
+
+        $this->assertNotNull($rows->firstWhere('id', $target->id));
+        $this->assertNull($rows->firstWhere('id', $sibling->id));
+
+        foreach ($rows as $row) {
+            $this->assertSame(UserDirectoryResource::WHITELISTED_KEYS, array_keys($row));
+        }
+    }
+
+    public function test_user_list_stays_same_org_without_cluster_tree_view(): void
+    {
+        $actor = User::factory()->create([
+            'organization_id' => $this->cluster->id,
+            'department_id' => $this->deptCluster->id,
+            'is_active' => true,
+        ]);
+        $this->grantEngineCapability($actor, Capability::USERS_VIEW);
+
+        $target = $this->makeTarget($this->hospital);
+
+        $response = $this->actingAs($actor, 'sanctum')
+            ->getJson('/api/users/list')
+            ->assertOk();
+
+        $this->assertNull(collect($response->json())->firstWhere('id', $target->id));
+    }
+
     /**
      * Make a cluster actor (cluster org + USERS_VIEW + CLUSTER_TREE_VIEW).
      */
@@ -349,7 +387,6 @@ class UsersClusterDirectoryTest extends TestCase
             'department_id' => $org->id === $this->hospital->id ? $this->deptHospital->id : $this->deptCluster->id,
             'is_active' => true,
             'name' => 'Target User',
-            'email' => 'target@example.test',
             'job_title' => 'Coordinator',
         ]);
     }

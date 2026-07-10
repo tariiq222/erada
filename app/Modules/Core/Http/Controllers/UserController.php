@@ -416,10 +416,18 @@ class UserController extends Controller
             $this->authorize('viewAny', User::class);
 
             $user = $request->user();
-            $query = User::select('id', 'name', 'email', 'job_title', 'department_id')
-                ->where('is_active', true);
+            $scope = app(UserOrganizationScope::class);
+            $clusterDirectory = $scope->canViewClusterDirectory($user);
+            $columns = $clusterDirectory
+                ? UserDirectoryResource::WHITELISTED_KEYS
+                : ['id', 'name', 'email', 'job_title', 'department_id'];
+            $query = User::select($columns)->where('is_active', true);
 
-            $this->applyUserVisibility($query, $user);
+            if ($clusterDirectory) {
+                $scope->applyToUsersClusterDirectory($query, $user);
+            } else {
+                $this->applyUserVisibility($query, $user);
+            }
 
             // فلترة بقسم واحد
             if ($request->has('department_id') && is_numeric($request->department_id)) {
@@ -438,7 +446,15 @@ class UserController extends Controller
                 }
             }
 
-            return response()->json($query->orderBy('name')->get());
+            $users = $query->orderBy('name')->get();
+
+            if ($clusterDirectory) {
+                return response()->json(
+                    UserDirectoryResource::collection($users)->resolve($request)
+                );
+            }
+
+            return response()->json($users);
         } catch (\Throwable $e) {
             return $this->handleException($e, 'list');
         }

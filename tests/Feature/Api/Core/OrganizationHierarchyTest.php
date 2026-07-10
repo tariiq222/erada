@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\Core;
 
+use App\Modules\Core\Http\Resources\UserDirectoryResource;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Scopes\UserOrganizationScope;
@@ -513,9 +514,9 @@ class OrganizationHierarchyTest extends TestCase
     }
 
     /**
-     * مستخدم في cluster لا يستطيع رؤية user نشط في child org — حتى عبر show endpoint.
+     * A cluster admin sees a child user only through the sanitized directory shape.
      */
-    public function test_user_in_cluster_cannot_show_user_in_child_org(): void
+    public function test_user_in_cluster_sees_child_user_in_directory_shape(): void
     {
         $orgCluster = Organization::factory()->cluster()->create();
         $orgHospital = Organization::factory()->hospital()->childOf($orgCluster)->create();
@@ -536,9 +537,14 @@ class OrganizationHierarchyTest extends TestCase
             'is_active' => true,
         ]);
 
-        $this->actingAs($userCluster, 'sanctum')
+        $response = $this->actingAs($userCluster, 'sanctum')
             ->getJson("/api/users/{$userHospital->id}")
-            ->assertStatus(403);
+            ->assertOk();
+
+        $this->assertSame(
+            UserDirectoryResource::WHITELISTED_KEYS,
+            array_keys($response->json())
+        );
     }
 
     /**

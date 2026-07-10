@@ -128,11 +128,24 @@ class UserOrganizationScope
     }
 
     /**
+     * Whether the actor may opt into the sanitized cluster directory.
+     *
+     * Super admins keep the existing unrestricted list response. For every
+     * other actor, both capabilities and an organization are mandatory.
+     */
+    public function canViewClusterDirectory(User $actor): bool
+    {
+        return ! $actor->isSuperAdmin()
+            && $actor->organization_id !== null
+            && AccessDecision::can($actor, Capability::USERS_VIEW)
+            && AccessDecision::can($actor, Capability::CLUSTER_TREE_VIEW);
+    }
+
+    /**
      * Cluster visible organization ids (Phase CFA-07, read-only).
      *
-     * Returns [actor.org] strictly when the actor holds BOTH
-     * Capability::USERS_VIEW AND Capability::CLUSTER_TREE_VIEW; otherwise
-     * widens to [actor.org, ...descendants].
+     * Returns [actor.org] unless the actor holds both required capabilities;
+     * paired actors receive [actor.org, ...descendants].
      *
      * Mirrors UserKpiScope::clusterVisibleOrgIds pattern: same one-directional
      * walk from actor.org toward descendants, same dependency on
