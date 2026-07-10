@@ -47,8 +47,12 @@ class RiskAssessmentController extends Controller
 
     public function store(StoreRiskAssessmentRequest $request, Risk $risk): JsonResponse
     {
-        $this->authorizeRisk('reassess');
-        $this->assertSameOrganization($risk);
+        // Phase CFA-05 — Policy-driven two-path reassess (cluster rescue via
+        // RISKS_REASSESS + CLUSTER_TREE_MANAGE). Replacing the prior
+        // authorizeRisk('reassess') (flat) + assertSameOrganization pair so
+        // the cluster widening takes effect; the policy already enforces
+        // same-org via the engine when no cluster grants are held.
+        $this->authorize('reassess', $risk);
 
         $data = $request->validated();
 
