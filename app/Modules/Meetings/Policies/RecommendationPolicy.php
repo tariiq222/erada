@@ -30,6 +30,15 @@ use App\Modules\Meetings\Support\MeetingOrgGuard;
  * same notion — the assignee is a worker, not the requester.
  *
  * Phase 5.B: per-record org-isolation عبر MeetingOrgGuard + null-org fail-closed.
+ *
+ * Phase CFA-06 — Cluster tree read widening:
+ *   - view() allows AccessDecision::can(CLUSTER_TREE_VIEW, $rec) as a second
+ *     path if and only if the actor holds Capability::RECOMMENDATIONS_VIEW +
+ *     Capability::CLUSTER_TREE_VIEW on actor.organization_id. The engine's
+ *     rescue branch verifies the ancestor walk + non-sensitive target.
+ *   - approve / reject / defer / accept / complete stay strict same-org
+ *     (Direction B integrity preserved per CFA-00 owner decision).
+ *   - create / update / delete stay strict same-org.
  */
 class RecommendationPolicy
 {
@@ -54,13 +63,41 @@ class RecommendationPolicy
         return AccessDecision::can($user, Capability::RECOMMENDATIONS_VIEW);
     }
 
+    /**
+     * Phase CFA-06 — Cluster tree widening applies to view() only.
+     *
+     * Decision paths:
+     *  1) RECOMMENDATIONS_VIEW on recommendation (same org): engine's
+     *     same-org + role check via the meeting-parent scope chain.
+     *  2) CLUSTER_TREE_VIEW on recommendation (cluster ancestor): engine's
+     *     rescue branch verifies the ancestor walk + non-sensitive +
+     *     scoped-role grant. Only fires if the actor holds
+     *     Capability::RECOMMENDATIONS_VIEW + Capability::CLUSTER_TREE_VIEW
+     *     on actor.organization_id — two explicit checks before the rescue.
+     *
+     * Missing either capability ⇒ deny. The Direction B ruling/action_item
+     * transitions (approve / reject / defer / accept / complete) are
+     * untouched: they keep precheck() and the self-approval block intact.
+     */
     public function view(User $user, Recommendation $rec): bool
     {
-        if (! $this->precheck($user, $rec)) {
+        // super_admin is handled in the engine (short-circuit in whyCan::step 1).
+        // null-org actor is handled in the engine (org_isolation_denied in step 2).
+
+        // Path 1: same-org RECOMMENDATIONS_VIEW via engine.
+        if (AccessDecision::can($user, Capability::RECOMMENDATIONS_VIEW, $rec)) {
+            return true;
+        }
+
+        // Path 2: cross-org cluster_tree widening — requires BOTH entitlements on actor.org.
+        if (! AccessDecision::can($user, Capability::RECOMMENDATIONS_VIEW)) {
+            return false;
+        }
+        if (! AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW)) {
             return false;
         }
 
-        return AccessDecision::can($user, Capability::RECOMMENDATIONS_VIEW, $rec);
+        return AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW, $rec);
     }
 
     public function create(User $user): bool

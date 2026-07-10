@@ -287,6 +287,17 @@ class Recommendation extends Model implements ScopeAware
      *   - otherwise: recommendations assigned to the user, OR recommendations whose
      *     meeting rolls up to a department the user's scoped roles grant
      *     (subtree included).
+     *
+     * Phase CFA-06 — Cluster tree read widening (READ ONLY):
+     *   - When the actor holds BOTH Capability::RECOMMENDATIONS_VIEW and
+     *     Capability::CLUSTER_TREE_VIEW, the org floor widens to
+     *     [actor.org] + descendants via Organization::descendantIds() before
+     *     the OR logic runs. Missing either grant ⇒ strict same-org (the
+     *     pre-CFA-06 behavior is preserved exactly).
+     *   - approve / reject / defer / accept / complete are unaffected — they
+     *     live in RecommendationController + RecommendationPolicy and keep
+     *     precheck() / self-approval block intact (Direction B integrity
+     *     preserved per CFA-00 owner decision).
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
@@ -302,7 +313,21 @@ class Recommendation extends Model implements ScopeAware
             return $query->whereRaw('1 = 0');
         }
 
-        $query->where('organization_id', $user->organization_id);
+        // Phase CFA-06 — Cluster widening at the org floor.
+        // Default: same-org only. With RECOMMENDATIONS_VIEW + CLUSTER_TREE_VIEW
+        // both held, the org floor widens to include descendants (read-only).
+        $orgId = (int) $user->organization_id;
+        $visibleOrgIds = [$orgId];
+        $hasRecView = AccessDecision::can($user, Capability::RECOMMENDATIONS_VIEW);
+        $hasClusterTreeView = AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW);
+        if ($hasRecView && $hasClusterTreeView) {
+            $org = Organization::query()->find($orgId);
+            if ($org instanceof Organization) {
+                $visibleOrgIds = array_values(array_unique(array_merge($visibleOrgIds, $org->descendantIds())));
+            }
+        }
+
+        $query->whereIn('organization_id', $visibleOrgIds);
 
         $scopes = AccessDecision::grantingScopes($user, Capability::RECOMMENDATIONS_VIEW);
         if (AccessDecision::grantsAtOrganization($user, Capability::RECOMMENDATIONS_VIEW)
