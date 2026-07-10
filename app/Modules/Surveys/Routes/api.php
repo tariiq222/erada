@@ -72,6 +72,20 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('engine_capability:'.Capability::SURVEYS_REVIEW_RESPONSES)
             ->name('surveys.export');
 
+        // Phase CFA-10 — Cluster aggregate stats (NEVER raw responses).
+        // Authz seam: SurveyResponsePolicy::viewStats() — two-path rescue
+        // (SURVEYS_VIEW + CLUSTER_TREE_VIEW). The raw response read paths
+        // above stay strict same-org + SURVEYS_REVIEW_RESPONSES.
+        Route::get('/{survey}/cluster-stats', [SurveyResponseController::class, 'clusterStats'])
+            ->name('surveys.cluster-stats');
+
+        // Phase CFA-10 — Cluster aggregate-only export (NEVER raw responses).
+        // Gated by SURVEYS_EXPORT + CLUSTER_TREE_VIEW rescue via the policy;
+        // re-checks SURVEYS_EXPORT inline to keep the export primitive
+        // distinct (mirrors the KPIS_EXPORT + CLUSTER_TREE_EXPORT pattern).
+        Route::get('/{survey}/cluster-export', [SurveyResponseController::class, 'clusterExport'])
+            ->name('surveys.cluster-export');
+
         // نسخ الاستبيان
         Route::get('/{survey}/revisions', [SurveyController::class, 'revisions'])
             ->name('surveys.revisions');
