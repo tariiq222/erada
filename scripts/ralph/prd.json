@@ -68,6 +68,8 @@
       "priority": 4,
       "passes": true,
       "branch": "phase-cfa-04-projects-cluster-widening",
+      "mergeCommit": "de9c0b8",
+      "pr": 14,
       "summary": "UserProjectScope::clusterVisibleOrgIds widening for view. ProjectPolicy::view two-path rescue. ProjectPolicy::update rescue for status / PDCA transitions via PROJECTS_EDIT + CLUSTER_TREE_MANAGE. SANITIZE ProjectResource show (strip or per-child gate the eager-loaded members / stakeholders / tasks / milestones / expenses / kpis / risks / comments / attachments / activity_log). NO project role/member assignment widening (CFA-00 decision).",
       "acceptanceCriteria": [
         "Parent org user with PROJECTS_VIEW + CLUSTER_TREE_VIEW sees child org projects in index",
@@ -91,6 +93,8 @@
       "priority": 5,
       "passes": true,
       "branch": "phase-cfa-05-risks-cluster-widening",
+      "mergeCommit": "60bf940",
+      "pr": 16,
       "summary": "UserRiskScope::clusterVisibleOrgIds widening. RiskPolicy::view rescue. RiskPolicy::reassess + changeStatus rescue via RISKS_REASSESS + RISKS_CHANGE_STATUS + CLUSTER_TREE_MANAGE. RiskDashboardController::export gated by RISKS_VIEW_REPORTS + CLUSTER_TREE_EXPORT.",
       "acceptanceCriteria": [
         "Parent org user with RISKS_VIEW + CLUSTER_TREE_VIEW sees child org risks",
@@ -108,6 +112,8 @@
       "priority": 6,
       "passes": true,
       "branch": "phase-cfa-06-meetings-cluster-widening",
+      "mergeCommit": "87a77ea",
+      "pr": 17,
       "summary": "UserMeetingScope::clusterVisibleOrgIds widening. MeetingPolicy::view + RecommendationPolicy::view rescue. MeetingPolicy::update rescue for start/complete/cancel via MEETINGS_EDIT + CLUSTER_TREE_MANAGE. RecommendationPolicy approve/reject/defer/accept/complete rescue. Direction R/B integrity preserved. Self-approval block preserved. Attendees + internal_comments sanitized for cluster read.",
       "acceptanceCriteria": [
         "Parent org user with MEETINGS_VIEW + CLUSTER_TREE_VIEW sees child org meetings",
@@ -128,7 +134,9 @@
       "id": "CFA-07",
       "title": "Users cluster limited directory (HIGH PII)",
       "priority": 7,
-      "passes": false,
+      "passes": true,
+      "mergeCommit": "d297fe7",
+      "pr": 18,
       "branch": "phase-cfa-07-users-cluster-directory-widening",
       "summary": "UserDirectoryResource with strict field whitelist (id, name, email, organization_id, department_id, job_title, is_active ONLY). UserPolicy::view rescue for directory endpoint. UserController::show returns sanitized directory shape for cluster actors (NEVER exposes password / tokens / 2FA / security fields / employee_personal_info / login_attempts). NO write widening. NO role assignment widening. STOP if any sensitive field leaks.",
       "acceptanceCriteria": [
@@ -151,10 +159,9 @@
       "id": "CFA-08",
       "title": "Tasks cluster read (DEFERRED — after CFA-09 OVR primitive)",
       "priority": 8,
-      "passes": false,
-      "dependsOn": [
-        "CFA-09"
-      ],
+      "passes": true,
+      "mergeCommit": "4f1f0a6",
+      "pr": 19,
       "branch": "phase-cfa-08-tasks-cluster-widening",
       "summary": "Add SensitivelyScoped marker to Task model so source_sensitivity='confidential' is engine-visible. UserTaskScope::clusterVisibleOrgIds widening. TaskPolicy::view rescue. PDCA transition writes via TASKS_EDIT + CLUSTER_TREE_MANAGE. Personal tasks (owner_id floor) bypass engine. Polymorphic source_type chain (Project / Department / Risk / IncidentReport / Recommendation / MeetingResolution / Kpi / Milestone). MUST follow CFA-09 because OVR source chain depends on OVR aggregate pattern.",
       "acceptanceCriteria": [
@@ -172,7 +179,9 @@
       "id": "CFA-09",
       "title": "OVR cluster aggregate reporting (NEVER raw)",
       "priority": 9,
-      "passes": false,
+      "passes": true,
+      "mergeCommit": "560a1f6",
+      "pr": 20,
       "branch": "phase-cfa-09-ovr-cluster-aggregate-reporting",
       "summary": "Build OvrClusterDashboardController (or extend OvrIncidentController::stats) returning COUNT / severity / status aggregates per descendant org. Gated by OVR_VIEW_STATISTICS + CLUSTER_TREE_VIEW. Raw incident read endpoints NEVER cluster-widen. IncidentReport::is_confidential SensitivelyScoped floor is FINAL.",
       "acceptanceCriteria": [
@@ -190,7 +199,9 @@
       "id": "CFA-10",
       "title": "Surveys aggregate reporting (NEVER raw responses)",
       "priority": 10,
-      "passes": false,
+      "passes": true,
+      "mergeCommit": "fead5f5",
+      "pr": 21,
       "branch": "phase-cfa-10-surveys-cluster-aggregate-reporting",
       "summary": "Build SurveyClusterDashboardController returning response COUNT / completion_rate / aggregate_score per descendant org. Gated by SURVEYS_VIEW + CLUSTER_TREE_VIEW. Raw response read endpoints NEVER cluster-widen. survey_responses.respondent_email + respondent_phone encryption upgrade is a SEPARATE migration story — out of CFA scope.",
       "acceptanceCriteria": [
@@ -207,7 +218,9 @@
       "id": "CFA-11",
       "title": "ActivityLog cluster audit role + IP/UA redaction upgrade",
       "priority": 11,
-      "passes": false,
+      "passes": true,
+      "mergeCommit": "7ee8641",
+      "pr": 22,
       "branch": "phase-cfa-11-activitylog-cluster-audit-role",
       "summary": "Tighten ActivityLogResource to redact top-level ip_address + user_agent to CIDR / hashed form. ActivityLogController::export gated by AUDIT_EXPORT + CLUSTER_TREE_EXPORT for cluster_auditor role only. Cluster audit role is SEPARATE from cluster PMO role. cross-module index risk (loggable polymorphic).",
       "acceptanceCriteria": [
