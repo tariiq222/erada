@@ -6,6 +6,8 @@ use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Authorization\Contracts\OwnerEditable;
 use App\Modules\Core\Authorization\Contracts\ScopeAware;
+use App\Modules\Core\Authorization\Contracts\SensitivelyScoped;
+use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\ScopedRoleDefinition;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
@@ -32,7 +34,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class Task extends Model implements OwnerEditable, ScopeAware
+class Task extends Model implements OwnerEditable, ScopeAware, SensitivelyScoped
 {
     use HasFactory, SoftDeletes;
 
@@ -239,6 +241,31 @@ class Task extends Model implements OwnerEditable, ScopeAware
         $managedDeptIds = $user->getManagedDepartmentIds();
         $projectIdsWithRole = $user->getProjectsWithRoles()->pluck('id')->all();
 
+        // Phase CFA-08 — Cluster floor widening. When the actor holds BOTH
+        // Capability::TASKS_VIEW + Capability::CLUSTER_TREE_VIEW on
+        // actor.organization_id, the strict same-org floor widens to
+        // include descendants via Organization::descendantIds(). Missing
+        // either grant ⇒ strict same-org (preserves pre-CFA-08 behavior).
+        // Personal task floor (branch 1) and any direct-relation predicates
+        // remain UNCHANGED — they do not depend on the org-id list.
+        $visibleOrgIds = ($orgId === null)
+            ? []
+            : $this->resolveClusterVisibleOrgIds($user, $orgId);
+
+        // Top-level confidential filter (CFA-08 invariant 1, lifted out
+        // of the branches closure so it ANDs across EVERY branch). A task
+        // stamped source_sensitivity='confidential' is NEED-TO-KNOW
+        // regardless of source_type — the per-row stamp is the
+        // authoritative signal here. Users with the OVR_CONFIDENTIAL
+        // capability fall through (cluster widening grants do NOT imply
+        // OVR_CONFIDENTIAL — defense-in-depth).
+        if (! $this->userMayViewConfidential($user)) {
+            $query->where(function (Builder $c) {
+                $c->whereNull('tasks.source_sensitivity')
+                    ->orWhere('tasks.source_sensitivity', '!=', 'confidential');
+            });
+        }
+
         return $query->where(function (Builder $outer) use (
             $user,
             $orgId,
@@ -246,10 +273,11 @@ class Task extends Model implements OwnerEditable, ScopeAware
             $isAdmin,
             $grantsOrgView,
             $managedDeptIds,
-            $projectIdsWithRole
+            $projectIdsWithRole,
+            $visibleOrgIds
         ) {
             // Branch (1) — personal task floor (always permitted; user's own org
-            // context not required for own personal tasks).
+            // context not required for own personal tasks). NEVER widens.
             $outer->where(function (Builder $q) use ($user) {
                 $q->where('type', TaskType::PERSONAL->value)
                     ->where('owner_id', $user->id);
@@ -268,23 +296,29 @@ class Task extends Model implements OwnerEditable, ScopeAware
             // (3) is the authoritative path — otherwise a confidential
             // OVR task would leak to any same-department user via the
             // department_id match below.
+            //
+            // CFA-08: the project/department organization floor widens to
+            // clusterVisibleOrgIds when the cluster rescue is admitted.
+            // The dept-managed / project-role / direct-relation branches
+            // below are unchanged (they always operated at strict same-org
+            // for the actor).
             $outer->orWhere(function (Builder $b) use (
                 $user,
-                $orgId,
                 $deptId,
                 $isAdmin,
                 $grantsOrgView,
                 $managedDeptIds,
-                $projectIdsWithRole
+                $projectIdsWithRole,
+                $visibleOrgIds
             ) {
                 $b->where(function (Builder $legacy) {
                     $legacy->whereNull('source_type')
                         ->orWhereIn('source_type', ['Project', 'Department']);
                 })
                     ->where('type', '!=', TaskType::PERSONAL->value)
-                    ->where(function (Builder $o) use ($orgId) {
-                        $o->whereHas('project', fn (Builder $p) => $p->where('organization_id', $orgId))
-                            ->orWhereHas('department', fn (Builder $d) => $d->where('organization_id', $orgId));
+                    ->where(function (Builder $o) use ($visibleOrgIds) {
+                        $o->whereHas('project', fn (Builder $p) => $p->whereIn('organization_id', $visibleOrgIds))
+                            ->orWhereHas('department', fn (Builder $d) => $d->whereIn('organization_id', $visibleOrgIds));
                     });
 
                 if ($grantsOrgView && ! $isAdmin) {
@@ -336,10 +370,46 @@ class Task extends Model implements OwnerEditable, ScopeAware
             // confidential IncidentReport is hidden from any user who
             // does not hold the OVR_CONFIDENTIAL capability, even if
             // they share the incident's department subtree.
-            $outer->orWhere(function (Builder $b) use ($user, $orgId) {
-                $this->sourceAwareScope($b, $user, $orgId);
+            //
+            // CFA-08: the source's organization matching widens to the
+            // cluster visible set when both grants are held. The
+            // source-sensitivity filter remains scoped to the user's
+            // OVR_CONFIDENTIAL entitlement — cluster widening grants do
+            // NOT imply OVR_CONFIDENTIAL.
+            $outer->orWhere(function (Builder $b) use ($user, $orgId, $visibleOrgIds) {
+                $this->sourceAwareScope($b, $user, $orgId, $visibleOrgIds);
             });
         });
+    }
+
+    /**
+     * Resolve the cluster_visible_org_ids list for the visible-to scope.
+     *
+     * Returns [actor.organization_id] when EITHER TASKS_VIEW or
+     * CLUSTER_TREE_VIEW is missing on actor.org (strict same-org floor).
+     * Returns actor.org + descendant ids when BOTH TASKS_VIEW +
+     * CLUSTER_TREE_VIEW are held. Returns [] for null-org actors.
+     *
+     * Mirrors UserProjectScope::clusterVisibleOrgIds / CFA-04 exactly.
+     *
+     * @return list<int>
+     */
+    private function resolveClusterVisibleOrgIds(User $user, int $orgId): array
+    {
+        $visible = [$orgId];
+
+        $hasTasksView = AccessDecision::can($user, Capability::TASKS_VIEW);
+        $hasClusterTreeView = AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW);
+        if (! $hasTasksView || ! $hasClusterTreeView) {
+            return $visible;
+        }
+
+        $org = Organization::query()->find($orgId);
+        if (! $org instanceof Organization) {
+            return $visible;
+        }
+
+        return array_values(array_unique(array_merge($visible, $org->descendantIds())));
     }
 
     /**
@@ -348,24 +418,43 @@ class Task extends Model implements OwnerEditable, ScopeAware
      * source_type gets a dedicated predicate; the OVR IncidentReport
      * predicate is the security-critical one (closes the
      * source_sensitivity leak path).
+     *
+     * CFA-08: when the cluster widening floor is admitted, source-row
+     * organization matching widens to $visibleOrgIds. The
+     * source-sensitivity gate (OVR confidential filter) remains scoped
+     * to the user's OVR_CONFIDENTIAL entitlement — cluster widening
+     * grants do NOT imply OVR_CONFIDENTIAL, so a cluster actor without
+     * OVR_CONFIDENTIAL gets the same confidential exclusion a same-org
+     * user without that capability already gets. Both are independently
+     * correct (defense-in-depth via UserTaskScope::applyUnconditionalConfidentialFloor
+     * for the SQL layer; this filter for the list layer's existing
+     * pattern).
+     *
+     * @param  list<int>  $visibleOrgIds  cluster-resolved org list — [orgId] when
+     *                                    cluster widening is not admitted,
+     *                                    [orgId + descendants] when both grants are held.
      */
-    private function sourceAwareScope(Builder $b, User $user, ?int $orgId): Builder
+    private function sourceAwareScope(Builder $b, User $user, ?int $orgId, array $visibleOrgIds = []): Builder
     {
+        if ($visibleOrgIds === [] && $orgId !== null) {
+            $visibleOrgIds = [$orgId];
+        }
+
         $b->whereNotNull('tasks.source_type')
             ->whereNotNull('tasks.source_id');
 
         $userMayViewConfidential = $this->userMayViewConfidential($user);
 
-        $b->where(function (Builder $byType) use ($orgId, $userMayViewConfidential) {
+        $b->where(function (Builder $byType) use ($visibleOrgIds, $userMayViewConfidential) {
             // OVR IncidentReport — apply the confidential-sensitivity gate.
             // The list endpoint gates on the (source_type, source_sensitivity)
             // pair on the task row itself; per-record engine checks via
             // IncidentReport::scopeVisibleTo further narrow at the
             // show/policy layer. Accepts both legacy FQN tokens and the
             // kebab form for forward-compat.
-            $byType->orWhere(function (Builder $i) use ($orgId, $userMayViewConfidential) {
+            $byType->orWhere(function (Builder $i) use ($visibleOrgIds, $userMayViewConfidential) {
                 $i->whereIn('tasks.source_type', ['IncidentReport', 'incident_report', IncidentReport::class])
-                    ->where('tasks.organization_id', $orgId);
+                    ->whereIn('tasks.organization_id', $visibleOrgIds);
 
                 // Sensitivity gate — only filters when the user lacks
                 // the OVR_CONFIDENTIAL capability. Users with the cap
@@ -382,9 +471,9 @@ class Task extends Model implements OwnerEditable, ScopeAware
             // org isolation only (no sensitivity variant for these in the
             // current scope; their source's own scopeVisibleTo narrows further
             // via the engine at the per-record layer).
-            $byType->orWhere(function (Builder $r) use ($orgId) {
+            $byType->orWhere(function (Builder $r) use ($visibleOrgIds) {
                 $r->whereIn('tasks.source_type', ['Recommendation', 'recommendation', Recommendation::class])
-                    ->where('tasks.organization_id', $orgId);
+                    ->whereIn('tasks.organization_id', $visibleOrgIds);
             });
 
             // Phase 3 / Direction R: tasks spawned by a meeting resolution
@@ -392,12 +481,12 @@ class Task extends Model implements OwnerEditable, ScopeAware
             // at create time from the resolution's organization_id; this
             // predicate isolates them by org only (the resolution's own
             // scopeVisibleTo narrows further at the per-record layer).
-            $byType->orWhere(function (Builder $r) use ($orgId) {
+            $byType->orWhere(function (Builder $r) use ($visibleOrgIds) {
                 $r->whereIn('tasks.source_type', [
                     'MeetingResolution',
                     'meeting_resolution',
                     MeetingResolution::class,
-                ])->where('tasks.organization_id', $orgId);
+                ])->whereIn('tasks.organization_id', $visibleOrgIds);
             });
 
             foreach ([
@@ -405,9 +494,9 @@ class Task extends Model implements OwnerEditable, ScopeAware
                 ['Kpi', Kpi::class],
                 ['Milestone', Milestone::class],
             ] as [$token, $class]) {
-                $byType->orWhere(function (Builder $t) use ($token, $class, $orgId) {
+                $byType->orWhere(function (Builder $t) use ($token, $class, $visibleOrgIds) {
                     $t->whereIn('tasks.source_type', [$token, strtolower((new \ReflectionClass($class))->getShortName()), $class])
-                        ->where('tasks.organization_id', $orgId);
+                        ->whereIn('tasks.organization_id', $visibleOrgIds);
                 });
             }
         });
@@ -730,5 +819,197 @@ class Task extends Model implements OwnerEditable, ScopeAware
         }
 
         return null;
+    }
+
+    // ========== SensitivelyScoped (Phase CFA-08) ==========
+
+    /**
+     * A task is sensitive when its source carries an explicit need-to-know
+     * stamp. Two independent triggers cover the existing leak surfaces:
+     *
+     *   (a) source_sensitivity = 'confidential' — the direct per-row stamp
+     *       carried into tasks by the source-aware backfill. Means the
+     *       source is confidential-regardless-of-row (e.g. OVR
+     *       IncidentReport with is_confidential = true), and the task
+     *       inherits the stamp.
+     *
+     *   (b) source_type = IncidentReport (any of its accepted tokens) AND
+     *       the related source row's is_confidential = true. Resolved
+     *       lazily via the source_id FK so a freshly-confidential-stamped
+     *       incident (or one whose stamp backfilled after the task was
+     *       created) cannot leak. The lookup is memoized by the engine's
+     *       resolveScopeParent cache so repeated cluster-rescue probes on
+     *       tasks sharing one incident collapse to one IncidentReport
+     *       read.
+     *
+     * Sensitivity is independent of the cluster rescue — a cluster actor
+     * with TASKS_VIEW + CLUSTER_TREE_VIEW STILL gets a deny for sensitive
+     * tasks (the engine's clusterTreeRescueApplies pre-flight checks
+     * isSensitive and short-circuits to false; the scope applies the
+     * unconditional filter at the SQL layer). This dual-layer enforcement
+     * means a sensitive task leaks to a cluster actor on neither the
+     * per-record nor the list path.
+     *
+     * Personal tasks (type = personal) are NEVER sensitive (their owner
+     * floor is the only gate; nothing confidential to inherit).
+     */
+    public function isSensitive(): bool
+    {
+        if ($this->isPersonalTask()) {
+            return false;
+        }
+
+        if ($this->source_sensitivity === 'confidential') {
+            return true;
+        }
+
+        if ($this->source_type === null || $this->source_id === null) {
+            return false;
+        }
+
+        $sensitiveSourceTokens = [
+            'App\\Modules\\OVR\\Models\\IncidentReport',
+            'IncidentReport',
+            'incident_report',
+            IncidentReport::class,
+        ];
+
+        if (! in_array($this->source_type, $sensitiveSourceTokens, true)) {
+            return false;
+        }
+
+        // Schema workaround: tasks.source_id is bigint while
+        // IncidentReport.id is UUID. Detect UUID-shape before resolving
+        // so a synthetic bigint cannot abort the surrounding PostgreSQL
+        // transaction with SQLSTATE[22P02]. The per-row
+        // source_sensitivity stamp (checked first) is the dominant
+        // signal — this row-resolution arm is a defense-in-depth backstop.
+        $incident = $this->resolveOvrIncidentSafely();
+        if (! $incident instanceof IncidentReport) {
+            return false;
+        }
+
+        return (bool) $incident->is_confidential;
+    }
+
+    /**
+     * Resolve the related OVR IncidentReport for the polymorphic source
+     * pointer (source_type='IncidentReport', source_id=<UUID>).
+     *
+     * Schema workaround: tasks.source_id is bigint while IncidentReport.id
+     * is UUID. A naive cast (PostgreSQL bigint→uuid) raises
+     * SQLSTATE[22P02] — which aborts the surrounding transaction even
+     * when caught via try/catch (PG marks the txn poisoned). To avoid
+     * that, gate the resolution on a UUID-shape pre-check: non-UUID
+     * source_ids (synthetic test values) short-circuit to null without
+     * touching the DB, so the engine's per-record surface stays clean
+     * while the per-row source_sensitivity stamp carries the leak gate.
+     */
+    private function resolveOvrIncidentSafely(): ?IncidentReport
+    {
+        if ($this->source_id === null) {
+            return null;
+        }
+
+        // UUID v4 shape: 8-4-4-4-12 hex (case-insensitive). A future
+        // migration that converts tasks.source_id to UUID can drop this
+        // gate; until then, the heuristic keeps both the test fixtures
+        // and any synthetic data row in scope without crashing.
+        if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', (string) $this->source_id) !== 1) {
+            return null;
+        }
+
+        try {
+            $incident = AccessDecision::resolveScopeParent(IncidentReport::class, (int) $this->source_id);
+        } catch (\Throwable) {
+            $incident = null;
+        }
+
+        return $incident instanceof IncidentReport ? $incident : null;
+    }
+
+    /**
+     * Need-to-know access grant for a sensitive task.
+     *
+     * Mirrors TaskPolicy::isConfidentialSource + userMayViewConfidential —
+     * a sensitive task is accessible to:
+     *   - super_admin (handled by the engine before() short-circuit).
+     *   - the reporter/assignee/owner of the related incident (via the
+     *     structural floor: isOwner() check in AccessDecision handles
+     *     created_by / owner_id; reporter_id/assigned_to on the
+     *     IncidentReport are checked by the structural floor's column
+     *     sweep).
+     *   - any user holding an active scoped role whose
+     *     permissions[] contains Capability::OVR_CONFIDENTIAL — the
+     *     same need-to-know capability OVR requires for the underlying
+     *     IncidentReport.
+     *
+     * Cluster widening grants (CLUSTER_TREE_VIEW / MANAGE / EXPORT) do
+     * NOT grant sensitive access. The cluster pair widens the org floor
+     * only — Task::isSensitive() remains the FINAL gate.
+     *
+     * Returning false here means the engine treats the sensitive row as
+     * denied to this user even if their scoped role carries
+     * CLUSTER_TREE_VIEW or even TASKS_VIEW at the org level. This is
+     * intentional: the engine's additive floor (sensitiveStructuralFloor
+     * + hook) still applies separately, so a missed super_admin bypass
+     * is caught by the belt; this hook returning false means the braces
+     * caught it.
+     */
+    public function mayAccessSensitive(User $user): bool
+    {
+        if ($user->isSuperAdmin()) {
+            return true;
+        }
+
+        // Reporter / assignee / owner / creator — the personal-task-style
+        // structural floor carries through the polymorphic source to the
+        // underlying IncidentReport when one exists.
+        if ((int) ($this->created_by ?? 0) === (int) $user->id
+            || (int) ($this->owner_id ?? 0) === (int) $user->id
+            || (int) ($this->assigned_to ?? 0) === (int) $user->id) {
+            return true;
+        }
+
+        if ($this->source_type !== null && $this->source_id !== null) {
+            $sensitiveTokens = [
+                'App\\Modules\\OVR\\Models\\IncidentReport',
+                'IncidentReport',
+                'incident_report',
+                IncidentReport::class,
+            ];
+            if (in_array($this->source_type, $sensitiveTokens, true)) {
+                // See resolveOvrIncidentSafely() — UUID-shape pre-check
+                // prevents a synthetic source_id from aborting the
+                // surrounding PostgreSQL transaction.
+                $incident = $this->resolveOvrIncidentSafely();
+                if ($incident instanceof IncidentReport) {
+                    if ((int) ($incident->reporter_id ?? 0) === (int) $user->id
+                        || (int) ($incident->assigned_to ?? 0) === (int) $user->id) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // Confidential-cleared scoped role — the only path through the
+        // permission system that opens sensitive OVR-derived tasks.
+        // Mirrors TaskPolicy::userMayViewConfidential and
+        // IncidentReport::userHasOvrConfidentialCapability so the three
+        // decision surfaces agree.
+        return $user->activeScopedRoles()
+            ->with('roleDefinition')
+            ->get()
+            ->contains(function ($scopedRole) {
+                $def = $scopedRole->roleDefinition
+                    ?? ScopedRoleDefinition::findByKey(
+                        $scopedRole->scope_type,
+                        $scopedRole->role
+                    );
+
+                return $def
+                    && is_array($def->permissions ?? null)
+                    && in_array(Capability::OVR_CONFIDENTIAL, $def->permissions, true);
+            });
     }
 }

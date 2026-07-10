@@ -4,6 +4,7 @@ namespace App\Modules\Tasks\Policies;
 
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Contracts\SensitivelyScoped;
 use App\Modules\Core\Models\User;
 use App\Modules\OVR\Models\IncidentReport;
 use App\Modules\Tasks\Models\Task;
@@ -35,21 +36,65 @@ class TaskPolicy
     public function view(User $user, Task $task): bool
     {
         if ($task->isPersonalTask()) {
+            // Personal tasks are owner-floor only — NEVER widen via the
+            // cluster rescue branch. The personal-task floor is the
+            // single source of truth (mirrors update/delete); CFA-00
+            // owner decision.
             return $this->isPersonalTaskOwner($user, $task);
         }
 
-        // Source-sensitivity gate — closes the OVR-confidential leak on
-        // the per-record (show) path. Task::scopeVisibleTo handles the
-        // list endpoint; this method must agree so a confidential task
-        // cannot be reached via /api/tasks/{id} even if the list is
-        // skipped. The contract: a task whose source is an OVR
-        // IncidentReport with source_sensitivity='confidential' is
-        // need-to-know, not department-broadcast.
+        // Phase CFA-08 — Cluster tree widening applies to view() only.
+        //
+        // Decision paths (mirrors ProjectPolicy::view / CFA-04):
+        //   1) TASKS_VIEW on task (same org): engine's same-org + role check.
+        //      The existing source-sensitivity confidential gate runs inside
+        //      AccessDecision::whyCan via Task::isSensitive() +
+        //      Task::mayAccessSensitive() (the SensitivelyScoped contract).
+        //   2) CLUSTER_TREE_VIEW on task (cluster ancestor): engine's rescue
+        //      branch verifies the ancestor walk + non-sensitive target. Only
+        //      fires if the actor holds Capability::TASKS_VIEW +
+        //      Capability::CLUSTER_TREE_VIEW on actor.organization_id —
+        //      two explicit checks before the rescue.
+        //
+        // Missing either capability ⇒ deny. The sensitive-target floor is
+        // preserved: a sensitive task (SensitivelyScoped + isSensitive=true)
+        // cannot reach the cluster rescue branch (engine pre-flight checks
+        // isSensitive first), so cluster actors do NOT see confidential
+        // OVR-sourced tasks even with both grants held.
+        // The Source-sensitivity gate below closes the OVR-confidential
+        // leak on the per-record (show) path. Task::scopeVisibleTo +
+        // UserTaskScope handle the list endpoint; this method agrees so a
+        // confidential task cannot be reached via /api/tasks/{id} even if
+        // the list is skipped.
         if ($this->isConfidentialSource($task) && ! $this->userMayViewConfidential($user)) {
             return false;
         }
 
-        return AccessDecision::can($user, Capability::TASKS_VIEW, $task);
+        // Path 1: same-org TASKS_VIEW via engine.
+        if (AccessDecision::can($user, Capability::TASKS_VIEW, $task)) {
+            return true;
+        }
+
+        // Path 2: cross-org cluster_tree widening — requires BOTH entitlements
+        // on actor.org. The engine's clusterTreeRescueApplies short-circuits
+        // on a sensitive target (cluster grant bypasses nothing), and the
+        // ancestor walk + scoped-role check runs inside
+        // crossOrgClusterTreeAdmitted. Returning false here on a sensitive
+        // target is the engine's structural answer — but we add an explicit
+        // isSensitive() deny above so the early return is documented and
+        // grep-able.
+        if ($task instanceof SensitivelyScoped && $task->isSensitive()) {
+            return false;
+        }
+
+        if (! AccessDecision::can($user, Capability::TASKS_VIEW)) {
+            return false;
+        }
+        if (! AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW)) {
+            return false;
+        }
+
+        return AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW, $task);
     }
 
     /**
@@ -138,14 +183,68 @@ class TaskPolicy
 
     /**
      * تغيير حالة المهمة — يرتبط بـ tasks.edit.
+     *
+     * Phase CFA-08 — Cluster tree widening applies to status / PDCA transitions
+     * ONLY (governance writes). Same shape as ProjectPolicy::updateStatus /
+     * CFA-04: same-org via engine TASKS_EDIT, cross-org via cluster rescue on
+     * Capability::CLUSTER_TREE_MANAGE.
+     *
+     * The controller (UpdateTaskStatusRequest::authorize) is the ONLY caller —
+     * the general update() flow continues to use update() and stays strict
+     * same-org per CFA-00 owner decision.
      */
     public function changeStatus(User $user, Task $task): bool
     {
         if ($task->isPersonalTask()) {
+            // Personal tasks (owner_id floor) NEVER widen via cluster —
+            // the personal-task floor is owner-only.
             return $task->owner_id === $user->id;
         }
 
-        return AccessDecision::can($user, Capability::TASKS_EDIT, $task);
+        return $this->clusterManagedChangeStatus($user, $task);
+    }
+
+    /**
+     * Two-path cluster_tree.manage rescue for status / PDCA transitions on
+     * Tasks (governance writes only).
+     *
+     * Mirrors ProjectPolicy::clusterManagedUpdate (CFA-04) and
+     * StrategyPolicy::clusterManagedUpdate (CFA-03):
+     *   - Path 1: same-org via engine TASKS_EDIT.
+     *   - Path 2: TASKS_EDIT + CLUSTER_TREE_MANAGE on actor.org + engine
+     *     rescue branch verifies ancestor walk + non-sensitive target.
+     *
+     * Both grants are required IN ADDITION TO the actor's authority on
+     * TASKS_EDIT — neither primitive implies the other. Sensitive-target
+     * floor preserved (SensitivelyScoped + isSensitive=true is final):
+     * cluster actors cannot transition status on confidential OVR-sourced
+     * tasks even with both cluster grants held.
+     */
+    private function clusterManagedChangeStatus(User $user, Task $task): bool
+    {
+        // Path 1: same-org via engine.
+        if (AccessDecision::can($user, Capability::TASKS_EDIT, $task)) {
+            return true;
+        }
+
+        // Path 2 pre-flight — explicit sensitive deny. The engine's
+        // clusterTreeRescueApplies also short-circuits on isSensitive=true;
+        // this explicit check makes the floor grep-able at the policy
+        // boundary and matches the ProjectResource / IncidentReportPolicy
+        // documentation contract.
+        if ($task instanceof SensitivelyScoped && $task->isSensitive()) {
+            return false;
+        }
+
+        // Path 2: cross-org rescue — both grants required on actor.org.
+        if (! AccessDecision::can($user, Capability::TASKS_EDIT)) {
+            return false;
+        }
+        if (! AccessDecision::can($user, Capability::CLUSTER_TREE_MANAGE)) {
+            return false;
+        }
+
+        return AccessDecision::can($user, Capability::CLUSTER_TREE_MANAGE, $task);
     }
 
     /**
