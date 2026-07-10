@@ -102,4 +102,30 @@ class SurveyResponsePolicy
         // Engine's rescue branch verifies ancestor walk + non-sensitive target.
         return AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW, $survey);
     }
+
+    public function exportStats(User $user, Survey $survey): bool
+    {
+        if ($user->isSuperAdmin()) {
+            return true;
+        }
+
+        if ($user->organization_id === null || $survey->organization_id === null) {
+            return false;
+        }
+
+        if (! AccessDecision::can($user, Capability::SURVEYS_EXPORT)) {
+            return false;
+        }
+
+        if (! AccessDecision::can($user, Capability::SURVEYS_VIEW)) {
+            return false;
+        }
+
+        if ((int) $user->organization_id === (int) $survey->organization_id) {
+            return AccessDecision::can($user, Capability::SURVEYS_VIEW, $survey);
+        }
+
+        return AccessDecision::can($user, Capability::CLUSTER_TREE_EXPORT)
+            && AccessDecision::can($user, Capability::CLUSTER_TREE_EXPORT, $survey);
+    }
 }

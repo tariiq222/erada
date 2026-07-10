@@ -209,18 +209,10 @@ class SurveyResponseController extends Controller
         abort_if($user === null, 401);
 
         abort_unless(
-            (new SurveyResponsePolicy)->viewStats($user, $survey),
+            (new SurveyResponsePolicy)->exportStats($user, $survey),
             403,
             'لا تملك صلاحية عرض إحصائيات الاستبيان'
         );
-
-        // Export primitive: SURVEYS_EXPORT is the export capability that
-        // pairs with CLUSTER_TREE_EXPORT for the cross-org widening. We
-        // also re-check SURVEYS_EXPORT explicitly to keep the export
-        // primitive as a distinct gate (KPIS_EXPORT mirrors this pattern).
-        if (! AccessDecision::can($user, Capability::SURVEYS_EXPORT)) {
-            abort(403, 'لا تملك صلاحية تصدير إحصائيات الاستبيانات');
-        }
 
         $format = strtolower((string) $request->query('format', 'csv'));
         if (! in_array($format, ['csv', 'json'], true)) {
@@ -228,7 +220,7 @@ class SurveyResponseController extends Controller
         }
 
         $scope = app(UserSurveyScope::class);
-        $visibleOrgIds = $scope->clusterVisibleOrgIds($user);
+        $visibleOrgIds = $scope->clusterExportVisibleOrgIds($user);
 
         $rows = $this->aggregateRowsForSurvey($survey, $visibleOrgIds);
 
@@ -280,41 +272,33 @@ class SurveyResponseController extends Controller
      */
     protected function aggregateRowsForSurvey(Survey $survey, array $visibleOrgIds): array
     {
-        // super_admin caller passes an empty list from the scope (the
-        // scope returns [] to signal "no filter at this layer"); in that
-        // case we enumerate every organization instead.
+        // Super admins pass an empty list to signal an unrestricted aggregate.
         $orgs = $visibleOrgIds === []
             ? Organization::query()->orderBy('id')->get()
             : Organization::query()->whereIn('id', $visibleOrgIds)->orderBy('id')->get();
 
         $rows = [];
         foreach ($orgs as $org) {
-            // All responses on any survey in this organization that shares
-            // the same survey_id? No — we narrow to the same canonical
-            // survey, regardless of org: aggregate stats for THIS survey
-            // across organizations. The cluster ancestor's surveys live
-            // in actor.org; descendant orgs may publish their own copies
-            // of the same code, but those have different `survey.id`s and
-            // are intentionally excluded so the aggregate shape stays
-            // stable per survey.id.
-            //
-            // For a child org that has its own copy of the survey (same
-            // code, different id), the descendant survey must be addressed
-            // directly via its own clusterStats call — not via this
-            // ancestor's aggregate.
+            // User respondents are attributed to their current organization.
+            // Anonymous or deleted respondents fall back to the survey owner.
             $responsesQuery = SurveyResponse::query()
-                ->where('survey_id', $survey->id);
+                ->leftJoin('users', 'users.id', '=', 'survey_responses.respondent_id')
+                ->where('survey_responses.survey_id', $survey->id)
+                ->whereRaw('COALESCE(users.organization_id, ?) = ?', [
+                    (int) $survey->organization_id,
+                    (int) $org->id,
+                ]);
 
             $total = (clone $responsesQuery)->count();
 
             $submitted = (clone $responsesQuery)
-                ->where('status', ResponseStatus::Submitted->value)
+                ->where('survey_responses.status', ResponseStatus::Submitted->value)
                 ->count();
 
             $meanCompletion = (float) (clone $responsesQuery)
-                ->where('status', ResponseStatus::Submitted->value)
-                ->whereNotNull('completion_time')
-                ->avg('completion_time');
+                ->where('survey_responses.status', ResponseStatus::Submitted->value)
+                ->whereNotNull('survey_responses.completion_time')
+                ->avg('survey_responses.completion_time');
 
             $completionRate = $total > 0
                 ? round(($submitted / $total) * 100, 2)

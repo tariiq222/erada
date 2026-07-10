@@ -13,6 +13,7 @@ use App\Modules\Surveys\Models\SurveyField;
 use App\Modules\Surveys\Models\SurveyResponse;
 use App\Modules\Surveys\Models\SurveySection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
@@ -90,11 +91,17 @@ class ClusterTreeSurveyStatsTest extends TestCase
         return $survey;
     }
 
-    private function makeResponse(Survey $survey, string $status, ?int $completionTime = null): SurveyResponse
-    {
+    private function makeResponse(
+        Survey $survey,
+        string $status,
+        ?int $completionTime = null,
+        ?Organization $respondentOrganization = null,
+    ): SurveyResponse {
         return SurveyResponse::create([
             'survey_id' => $survey->id,
-            'respondent_id' => User::factory()->create(['organization_id' => $survey->organization_id])->id,
+            'respondent_id' => User::factory()->create([
+                'organization_id' => $respondentOrganization?->id ?? $survey->organization_id,
+            ])->id,
             'respondent_name' => null,
             'respondent_email' => null,
             'status' => $status,
@@ -182,6 +189,54 @@ class ClusterTreeSurveyStatsTest extends TestCase
         $this->assertContains($this->hospital->id, $orgIds);
         // Sibling / unrelated orgs MUST NOT appear.
         $this->assertNotContains($this->otherOrg->id, $orgIds);
+    }
+
+    public function test_aggregate_rows_are_attributed_to_the_respondent_organization(): void
+    {
+        $this->makeResponse($this->clusterSurvey, ResponseStatus::Submitted->value, 120, $this->hospital);
+        $this->makeResponse($this->clusterSurvey, ResponseStatus::Submitted->value, 240, $this->hospital);
+
+        $user = User::factory()->create(['organization_id' => $this->cluster->id, 'is_active' => true]);
+        $this->grantEngineCapability($user, [Capability::SURVEYS_VIEW, Capability::CLUSTER_TREE_VIEW]);
+
+        $rows = $this->actingAs($user, 'sanctum')
+            ->getJson("/api/surveys/{$this->clusterSurvey->id}/cluster-stats")
+            ->assertOk()
+            ->json('aggregates');
+
+        $clusterRow = collect($rows)->firstWhere('organization_id', $this->cluster->id);
+        $hospitalRow = collect($rows)->firstWhere('organization_id', $this->hospital->id);
+
+        $this->assertSame(0, $clusterRow['response_count']);
+        $this->assertSame(2, $hospitalRow['response_count']);
+        $this->assertSame(2, $hospitalRow['submitted_count']);
+    }
+
+    public function test_cluster_export_uses_export_pair_not_the_stats_pair(): void
+    {
+        $this->makeResponse($this->clusterSurvey, ResponseStatus::Submitted->value, 60, $this->hospital);
+        $actor = User::factory()->create(['organization_id' => $this->cluster->id, 'is_active' => true]);
+        $this->grantEngineCapability($actor, [
+            Capability::SURVEYS_VIEW,
+            Capability::SURVEYS_EXPORT,
+        ]);
+
+        $sameOrgExport = $this->actingAs($actor, 'sanctum')
+            ->getJson("/api/surveys/{$this->clusterSurvey->id}/cluster-export?format=csv")
+            ->assertOk();
+        $sameOrgContent = Storage::disk('local')->get('exports/'.$sameOrgExport->json('filename'));
+        $this->assertStringNotContainsString((string) $this->hospital->id, $sameOrgContent);
+
+        $this->grantEngineCapability($actor, [
+            Capability::SURVEYS_VIEW,
+            Capability::SURVEYS_EXPORT,
+            Capability::CLUSTER_TREE_EXPORT,
+        ]);
+        $clusterExport = $this->actingAs($actor, 'sanctum')
+            ->getJson("/api/surveys/{$this->clusterSurvey->id}/cluster-export?format=csv")
+            ->assertOk();
+        $clusterContent = Storage::disk('local')->get('exports/'.$clusterExport->json('filename'));
+        $this->assertStringContainsString((string) $this->hospital->id, $clusterContent);
     }
 
     // ──────────────────────────────────────────────────────────────

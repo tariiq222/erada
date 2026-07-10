@@ -80,9 +80,10 @@ Route::middleware('auth:sanctum')->group(function () {
             ->name('surveys.cluster-stats');
 
         // Phase CFA-10 — Cluster aggregate-only export (NEVER raw responses).
-        // Gated by SURVEYS_EXPORT + CLUSTER_TREE_VIEW rescue via the policy;
-        // re-checks SURVEYS_EXPORT inline to keep the export primitive
-        // distinct (mirrors the KPIS_EXPORT + CLUSTER_TREE_EXPORT pattern).
+        // Aggregate export requires SURVEYS_VIEW + SURVEYS_EXPORT on the
+        // actor's organization. Cross-org widening additionally requires the
+        // distinct CLUSTER_TREE_EXPORT primitive; raw response export stays
+        // on its separate strict endpoint above.
         Route::get('/{survey}/cluster-export', [SurveyResponseController::class, 'clusterExport'])
             ->name('surveys.cluster-export');
 

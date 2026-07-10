@@ -125,6 +125,35 @@ class UserSurveyScope
      */
     public function clusterVisibleOrgIds(User $actor): array
     {
+        return $this->clusterVisibleOrgIdsFor(
+            $actor,
+            Capability::SURVEYS_VIEW,
+            Capability::CLUSTER_TREE_VIEW
+        );
+    }
+
+    /**
+     * Visible organizations for aggregate-only exports.
+     *
+     * SURVEYS_EXPORT permits the actor's own organization; the export expands
+     * to descendants only with CLUSTER_TREE_EXPORT.
+     *
+     * @return list<int>
+     */
+    public function clusterExportVisibleOrgIds(User $actor): array
+    {
+        return $this->clusterVisibleOrgIdsFor(
+            $actor,
+            Capability::SURVEYS_EXPORT,
+            Capability::CLUSTER_TREE_EXPORT
+        );
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function clusterVisibleOrgIdsFor(User $actor, string $moduleCapability, string $clusterCapability): array
+    {
         if ($actor->isSuperAdmin()) {
             // super_admin caller is responsible for handling their own list
             // (typically: every organization). This scope stays conservative
@@ -138,10 +167,10 @@ class UserSurveyScope
 
         $orgId = (int) $actor->organization_id;
 
-        $hasSurveysView = AccessDecision::can($actor, Capability::SURVEYS_VIEW);
-        $hasClusterTreeView = AccessDecision::can($actor, Capability::CLUSTER_TREE_VIEW);
+        $hasModuleCapability = AccessDecision::can($actor, $moduleCapability);
+        $hasClusterCapability = AccessDecision::can($actor, $clusterCapability);
 
-        if (! $hasSurveysView || ! $hasClusterTreeView) {
+        if (! $hasModuleCapability || ! $hasClusterCapability) {
             return [$orgId];
         }
 
