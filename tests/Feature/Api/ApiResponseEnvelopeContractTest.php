@@ -141,7 +141,8 @@ class ApiResponseEnvelopeContractTest extends TestCase
             ->assertJsonPath('success', true)
             ->assertJsonPath('data.0.id', $activityLog->id)
             ->assertJsonPath('data.0.old_values.token', '[REDACTED]')
-            ->assertJsonMissingPath('data.0.ip_address')
+            ->assertJsonPath('data.0.ip_address', '203.0.113.0/24')
+            ->assertJsonPath('data.0.user_agent', 'other')
             ->assertJsonMissingPath('data.0.user.email');
 
         $this->actingAs($user, 'sanctum')
@@ -150,7 +151,8 @@ class ApiResponseEnvelopeContractTest extends TestCase
             ->assertJsonPath('success', true)
             ->assertJsonPath('data.id', $activityLog->id)
             ->assertJsonPath('data.new_values.reporter_email', '[REDACTED]')
-            ->assertJsonMissingPath('data.user_agent');
+            ->assertJsonPath('data.ip_address', '203.0.113.0/24')
+            ->assertJsonPath('data.user_agent', 'other');
 
         $exportResponse = $this->actingAs($user, 'sanctum')
             ->get('/api/activity-logs/export?format=json&action=privacy_probe');
@@ -162,7 +164,8 @@ class ApiResponseEnvelopeContractTest extends TestCase
         $this->assertSame(1, $payload['count']);
         $this->assertSame($activityLog->id, $payload['logs'][0]['id']);
         $this->assertSame('[REDACTED]', $payload['logs'][0]['old_values']['patient_name']);
-        $this->assertArrayNotHasKey('ip_address', $payload['logs'][0]);
+        $this->assertSame('203.0.113.0/24', $payload['logs'][0]['ip_address']);
+        $this->assertSame('other', $payload['logs'][0]['user_agent']);
         $this->assertStringNotContainsString('reporter@example.test', $exportResponse->streamedContent());
     }
 

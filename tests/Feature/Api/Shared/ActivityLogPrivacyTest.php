@@ -212,7 +212,8 @@ class ActivityLogPrivacyTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('data.old_values.token', '[REDACTED]')
             ->assertJsonPath('data.new_values.patient_file_number', '[REDACTED]')
-            ->assertJsonMissingPath('data.ip_address')
+            ->assertJsonPath('data.ip_address', '203.0.113.0/24')
+            ->assertJsonPath('data.user_agent', 'other')
             ->assertJsonMissingPath('data.user.email');
 
         $this->assertSafeActivityLogPayload($response->getContent());
