@@ -137,6 +137,10 @@ class UserOrganizationScope
     {
         return ! $actor->isSuperAdmin()
             && $actor->organization_id !== null
+            && Organization::query()
+                ->whereKey($actor->organization_id)
+                ->where('type', Organization::TYPE_CLUSTER)
+                ->exists()
             && AccessDecision::can($actor, Capability::USERS_VIEW)
             && AccessDecision::can($actor, Capability::CLUSTER_TREE_VIEW);
     }
@@ -166,7 +170,7 @@ class UserOrganizationScope
         }
 
         $org = Organization::query()->find($orgId);
-        if (! $org instanceof Organization) {
+        if (! $org instanceof Organization || ! $org->isCluster()) {
             return $visible;
         }
 
