@@ -66,4 +66,6 @@ for id in CFA-04 CFA-05 CFA-06; do
     assert_eq "true" "$(jq -r --arg id "$id" '.userStories[] | select(.id == $id) | .passes' "$RALPH_DIR/prd.json")" "$id must match merged main state"
 done
 
+assert_eq "CFA-09" "$(jq -r '.userStories[] | select(.id == "CFA-08") | .dependsOn[]' "$RALPH_DIR/prd.json")" "CFA-08 dependency metadata must be preserved"
+
 echo "PASS: Ralph control flow"

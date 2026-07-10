@@ -162,6 +162,9 @@
       "passes": true,
       "mergeCommit": "4f1f0a6",
       "pr": 19,
+      "dependsOn": [
+        "CFA-09"
+      ],
       "branch": "phase-cfa-08-tasks-cluster-widening",
       "summary": "Add SensitivelyScoped marker to Task model so source_sensitivity='confidential' is engine-visible. UserTaskScope::clusterVisibleOrgIds widening. TaskPolicy::view rescue. PDCA transition writes via TASKS_EDIT + CLUSTER_TREE_MANAGE. Personal tasks (owner_id floor) bypass engine. Polymorphic source_type chain (Project / Department / Risk / IncidentReport / Recommendation / MeetingResolution / Kpi / Milestone). MUST follow CFA-09 because OVR source chain depends on OVR aggregate pattern.",
       "acceptanceCriteria": [
