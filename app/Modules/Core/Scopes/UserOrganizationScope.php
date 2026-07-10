@@ -2,6 +2,9 @@
 
 namespace App\Modules\Core\Scopes;
 
+use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -81,5 +84,96 @@ class UserOrganizationScope
         $ids = array_values(array_unique(array_filter(array_merge($managed, $own))));
 
         return $ids;
+    }
+
+    /**
+     * Phase CFA-07 (HIGH PII) - Cluster limited-directory widening scope.
+     *
+     * Used by the UserController::list (and similar directory endpoints)
+     * to widen the org floor to descendant organizations for actors who
+     * hold Capability::USERS_VIEW + Capability::CLUSTER_TREE_VIEW on
+     * actor.organization_id. Distinct from `applyToUsers` because:
+     *
+     *   - it does NOT apply the dept-subtree narrowing (a cluster directory
+     *     is intentionally org-wide within the cluster),
+     *   - it widens ONLY when the actor holds BOTH capabilities
+     *     (otherwise it returns the same-org filter, no widening),
+     *   - it is opt-in: callers invoke `applyToUsersClusterDirectory`
+     *     explicitly to opt into the cluster shape; the default
+     *     `applyToUsers` keeps its pre-CFA-07 behavior byte-identical
+     *     for backwards compatibility with the admin / user-management
+     *     endpoints that MUST NOT widen.
+     *
+     * STOP CONDITIONS per CFA-00 owner decision:
+     *   - NEVER return UserResource via this widening - only the
+     *     UserDirectoryResource (which the controller routes to).
+     *   - NEVER apply this scope to write endpoints (store / update /
+     *     destroy / role assignment).
+     *
+     * @param  Builder<User>  $query
+     */
+    public function applyToUsersClusterDirectory(Builder $query, User $actor): Builder
+    {
+        if ($actor->isSuperAdmin()) {
+            return $query;
+        }
+
+        if ($actor->organization_id === null) {
+            return $query->whereRaw('false');
+        }
+
+        $visibleOrgIds = $this->clusterVisibleOrgIds($actor);
+
+        return $query->whereIn('users.organization_id', $visibleOrgIds);
+    }
+
+    /**
+     * Whether the actor may opt into the sanitized cluster directory.
+     *
+     * Super admins keep the existing unrestricted list response. For every
+     * other actor, both capabilities and an organization are mandatory.
+     */
+    public function canViewClusterDirectory(User $actor): bool
+    {
+        return ! $actor->isSuperAdmin()
+            && $actor->organization_id !== null
+            && Organization::query()
+                ->whereKey($actor->organization_id)
+                ->where('type', Organization::TYPE_CLUSTER)
+                ->exists()
+            && AccessDecision::can($actor, Capability::USERS_VIEW)
+            && AccessDecision::can($actor, Capability::CLUSTER_TREE_VIEW);
+    }
+
+    /**
+     * Cluster visible organization ids (Phase CFA-07, read-only).
+     *
+     * Returns [actor.org] unless the actor holds both required capabilities;
+     * paired actors receive [actor.org, ...descendants].
+     *
+     * Mirrors UserKpiScope::clusterVisibleOrgIds pattern: same one-directional
+     * walk from actor.org toward descendants, same dependency on
+     * AccessDecision::can() for the two-path check.
+     *
+     * @return list<int>
+     */
+    private function clusterVisibleOrgIds(User $actor): array
+    {
+        $orgId = (int) $actor->organization_id;
+        $visible = [$orgId];
+
+        $hasModuleCap = AccessDecision::can($actor, Capability::USERS_VIEW);
+        $hasClusterTreeCap = AccessDecision::can($actor, Capability::CLUSTER_TREE_VIEW);
+
+        if (! $hasModuleCap || ! $hasClusterTreeCap) {
+            return $visible;
+        }
+
+        $org = Organization::query()->find($orgId);
+        if (! $org instanceof Organization || ! $org->isCluster()) {
+            return $visible;
+        }
+
+        return array_values(array_unique(array_merge($visible, $org->descendantIds())));
     }
 }
