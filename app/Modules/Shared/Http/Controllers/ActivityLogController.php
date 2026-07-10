@@ -5,6 +5,7 @@ namespace App\Modules\Shared\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Models\User;
 use App\Modules\Shared\Http\Resources\ActivityLogResource;
 use App\Modules\Shared\Http\Responses\ApiResponse;
 use App\Modules\Shared\Models\ActivityLog;
@@ -52,8 +53,16 @@ class ActivityLogController extends Controller
         $perPage = min((int) $request->query('per_page', 25), 100);
         $logs = $query->paginate($perPage);
 
+        $actor = $request->user();
+
         return ApiResponse::success([
-            'data' => ActivityLogResource::collection($logs->getCollection())->resolve($request),
+            // Phase 1B — dual serializer: per-row cross-org widening
+            // emits the minimal envelope; same-org / super_admin keeps
+            // the full redacted shape. The same Membership rules
+            // (UserActivityLogScope) already filtered which rows the
+            // actor can see; the resource just decides what surface to
+            // project for each one.
+            'data' => $logs->getCollection()->map(fn (ActivityLog $log) => $this->resourceForActor($log, $actor)->resolve($request))->all(),
             'meta' => [
                 'current_page' => $logs->currentPage(),
                 'last_page' => $logs->lastPage(),
@@ -87,7 +96,12 @@ class ActivityLogController extends Controller
         $activityLog->load(['user:id,name']);
 
         return ApiResponse::success([
-            'data' => (new ActivityLogResource($activityLog))->resolve(request()),
+            // Phase 1B — same dual shape selection on show. The
+            // controller decides once per request whether the row is
+            // in the actor's org (full redacted detail) or a descendant
+            // org reached via the cluster rescue branch (minimal
+            // envelope).
+            'data' => $this->resourceForActor($activityLog, $user)->resolve(request()),
         ]);
     }
 
@@ -201,17 +215,43 @@ class ActivityLogController extends Controller
     private function exportJson($logs): StreamedResponse
     {
         $filename = 'activity-log-'.now()->format('Ymd-His').'.json';
+        $actor = request()->user();
+        $request = request();
 
-        return response()->streamDownload(function () use ($logs) {
+        return response()->streamDownload(function () use ($logs, $actor, $request) {
             echo json_encode([
                 'success' => true,
                 'exported_at' => now()->toIso8601String(),
                 'count' => $logs->count(),
-                'logs' => ActivityLogResource::collection($logs)->resolve(request()),
+                // Phase 1B — dual shape parity with the show / index
+                // endpoints. The JSON export picks the same per-row
+                // resource variant.
+                'logs' => $logs->map(fn (ActivityLog $log) => $this->resourceForActor($log, $actor)->resolve($request))->all(),
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         }, $filename, [
             'Content-Type' => 'application/json; charset=UTF-8',
         ]);
+    }
+
+    /**
+     * Phase 1B — pick the right resource variant for a row.
+     *
+     * Same-org / super_admin → full redacted audit detail.
+     * Cross-org cluster row → minimal envelope (no description / reason
+     * / old_values / new_values / metadata). The resource itself
+     * enforces the column suppression.
+     */
+    private function resourceForActor(ActivityLog $log, ?User $actor): ActivityLogResource
+    {
+        $isCrossOrg = $actor !== null
+            && ! $actor->isSuperAdmin()
+            && $log->organization_id !== null
+            && $actor->organization_id !== null
+            && (int) $log->organization_id !== (int) $actor->organization_id;
+
+        return $isCrossOrg
+            ? ActivityLogResource::forClusterCrossOrg($log)
+            : new ActivityLogResource($log);
     }
 
     private function buildExportQuery(Request $request)
