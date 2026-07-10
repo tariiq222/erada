@@ -45,7 +45,8 @@ Route::middleware('auth:sanctum')->prefix('ovr')->group(function () {
     Route::get('/incidents/export', [IncidentReportController::class, 'export'])
         ->name('ovr.incidents.export');
     // Phase CFA-09 — cluster aggregate export (NEVER raw). Gated by
-    // IncidentReportPolicy::exportsAggregates (OVR_EXPORT + CLUSTER_TREE_EXPORT).
+    // IncidentReportPolicy::exportsAggregates. OVR_EXPORT permits same-org
+    // aggregates; CLUSTER_TREE_EXPORT additionally widens to descendants.
     Route::get('/incidents/cluster-export', [IncidentReportController::class, 'clusterExport'])
         ->name('ovr.incidents.cluster-export');
     Route::get('/incidents/{report}', [IncidentReportController::class, 'show'])

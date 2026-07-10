@@ -760,15 +760,15 @@ class IncidentReportController extends Controller
     /**
      * Phase CFA-09 — Cluster aggregate export (NEVER raw).
      *
-     * Writes AGGREGATE rows (one per descendant org) to CSV or PDF — never
-     * raw incident rows. The CSV row format is intentionally structured so a
+     * Writes AGGREGATE rows (one per visible org) to CSV or PDF — never raw
+     * incident rows. OVR_EXPORT permits the actor's own organization; adding
+     * CLUSTER_TREE_EXPORT widens the aggregate to descendants. The CSV row format is intentionally structured so a
      * downstream consumer cannot reconstruct individual incident records
      * from the export: report_number / patient_name / patient_file_number /
      * incident_description / reporter_name are NEVER included.
      *
-     * Gated by IncidentReportPolicy::exportsAggregates (OVR_EXPORT +
-     * CLUSTER_TREE_EXPORT). The existing /incidents/export endpoint stays
-     * strict same-org and unchanged.
+     * Gated by IncidentReportPolicy::exportsAggregates (OVR_EXPORT). The
+     * existing /incidents/export endpoint stays strict same-org and unchanged.
      */
     public function clusterExport(Request $request): StreamedResponse|Response
     {
@@ -820,38 +820,21 @@ class IncidentReportController extends Controller
         return response()->stream(function () use ($perOrg) {
             $out = fopen('php://output', 'w');
             fwrite($out, "\xEF\xBB\xBF");
-            fputcsv($out, [
-                'organization_id',
-                'organization_name',
-                'total',
-                'open',
-                'in_progress',
-                'resolved',
-                'closed',
-                'archived',
-                'rejected',
-                'low',
-                'medium',
-                'high',
-                'critical',
-            ]);
+            $statuses = ReportStatus::cases();
+            $severities = SeverityLevel::cases();
+
+            fputcsv($out, array_merge(
+                ['organization_id', 'organization_name', 'total'],
+                array_map(fn (ReportStatus $status) => $status->value, $statuses),
+                array_map(fn (SeverityLevel $severity) => $severity->value, $severities)
+            ));
 
             foreach ($perOrg as $row) {
-                fputcsv($out, [
-                    $row['organization_id'],
-                    $row['organization_name'],
-                    $row['total'],
-                    $row['by_status']['open'] ?? 0,
-                    $row['by_status']['in_progress'] ?? 0,
-                    $row['by_status']['resolved'] ?? 0,
-                    $row['by_status']['closed'] ?? 0,
-                    $row['by_status']['archived'] ?? 0,
-                    $row['by_status']['rejected'] ?? 0,
-                    $row['by_severity']['low'] ?? 0,
-                    $row['by_severity']['medium'] ?? 0,
-                    $row['by_severity']['high'] ?? 0,
-                    $row['by_severity']['critical'] ?? 0,
-                ]);
+                fputcsv($out, array_merge(
+                    [$row['organization_id'], $row['organization_name'], $row['total']],
+                    array_map(fn (ReportStatus $status) => $row['by_status'][$status->value] ?? 0, $statuses),
+                    array_map(fn (SeverityLevel $severity) => $row['by_severity'][$severity->value] ?? 0, $severities)
+                ));
             }
 
             fclose($out);
@@ -868,6 +851,8 @@ class IncidentReportController extends Controller
         $pdf = Pdf::loadView('ovr.export-cluster-pdf', [
             'perOrg' => $perOrg,
             'generatedAt' => now()->format('Y-m-d H:i'),
+            'statuses' => ReportStatus::cases(),
+            'severities' => SeverityLevel::cases(),
         ])->setPaper('a4', 'landscape');
 
         return $pdf->download($filename);

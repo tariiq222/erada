@@ -33,14 +33,12 @@
             <tr>
                 <th>المؤسسة</th>
                 <th>الإجمالي</th>
-                <th>جديد</th>
-                <th>قيد المعالجة</th>
-                <th>محلول</th>
-                <th>مغلق</th>
-                <th>منخفض</th>
-                <th>متوسط</th>
-                <th>عالٍ</th>
-                <th>حرج</th>
+                @foreach ($statuses as $status)
+                    <th>{{ $status->label() }}</th>
+                @endforeach
+                @foreach ($severities as $severity)
+                    <th>{{ $severity->label() }}</th>
+                @endforeach
             </tr>
         </thead>
         <tbody>
@@ -48,14 +46,12 @@
                 <tr>
                     <td>{{ $row['organization_name'] ?? ('#'.$row['organization_id']) }}</td>
                     <td>{{ $row['total'] }}</td>
-                    <td>{{ $row['by_status']['new'] ?? 0 }}</td>
-                    <td>{{ $row['by_status']['in_progress'] ?? 0 }}</td>
-                    <td>{{ $row['by_status']['resolved'] ?? 0 }}</td>
-                    <td>{{ $row['by_status']['closed'] ?? 0 }}</td>
-                    <td>{{ $row['by_severity']['low'] ?? 0 }}</td>
-                    <td>{{ $row['by_severity']['medium'] ?? 0 }}</td>
-                    <td>{{ $row['by_severity']['high'] ?? 0 }}</td>
-                    <td>{{ $row['by_severity']['critical'] ?? 0 }}</td>
+                    @foreach ($statuses as $status)
+                        <td>{{ $row['by_status'][$status->value] ?? 0 }}</td>
+                    @endforeach
+                    @foreach ($severities as $severity)
+                        <td>{{ $row['by_severity'][$severity->value] ?? 0 }}</td>
+                    @endforeach
                 </tr>
             @endforeach
         </tbody>

@@ -226,9 +226,9 @@ class IncidentReportPolicy
      * incident rows. Decoupled from `export()` on purpose:
      *   - `export()` keeps strict same-org + raw incident stream
      *     (existing /incidents/export endpoint).
-     *   - `exportsAggregates()` widens across descendants when the actor holds
-     *     BOTH Capability::OVR_EXPORT + Capability::CLUSTER_TREE_EXPORT on
-     *     actor.organization_id.
+     *   - `exportsAggregates()` admits Capability::OVR_EXPORT. The query stays
+     *     same-org unless the actor additionally holds
+     *     Capability::CLUSTER_TREE_EXPORT on actor.organization_id.
      *
      * Mirrors the CFA-02 KPI export pattern: a user with only the read pair
      * (OVR_VIEW_STATISTICS + CLUSTER_TREE_VIEW) can read aggregate stats via
