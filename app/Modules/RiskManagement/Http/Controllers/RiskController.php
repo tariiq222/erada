@@ -320,9 +320,13 @@ class RiskController extends Controller
 
     public function show(Risk $risk): JsonResponse
     {
-        // Per-record, engine-aware view (department subtree / governing / direct).
+        // Phase CFA-05 — Policy-driven two-path view covers same-org AND
+        // cluster_tree rescue. Replacing the inline assertSameOrganization()
+        // call so cluster rescue on RISKS_VIEW + CLUSTER_TREE_VIEW can fire
+        // (assertSameOrganization would otherwise cancel the rescue by
+        // re-asserting strict equality). Engine still gates null-org actors
+        // inside AccessDecision::can(), so cross-tenant reads remain blocked.
         $this->authorize('view', $risk);
-        $this->assertSameOrganization($risk);
 
         $risk->load([
             'department:id,name',
@@ -375,8 +379,12 @@ class RiskController extends Controller
 
     public function changeStatus(ChangeRiskStatusRequest $request, Risk $risk): JsonResponse
     {
-        $this->authorizeRisk('changeStatus');
-        $this->assertSameOrganization($risk);
+        // Phase CFA-05 — Policy-driven two-path changeStatus (cluster rescue
+        // via RISKS_CHANGE_STATUS + CLUSTER_TREE_MANAGE). Replacing the prior
+        // authorizeRisk('changeStatus') (flat) + assertSameOrganization pair
+        // so the cluster widening takes effect; the policy already enforces
+        // same-org via the engine when no cluster grants are held.
+        $this->authorize('changeStatus', $risk);
 
         $change = $this->lifecycle->changeStatus(
             $risk,

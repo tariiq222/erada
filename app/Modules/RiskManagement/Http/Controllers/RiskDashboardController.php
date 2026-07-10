@@ -5,11 +5,14 @@ namespace App\Modules\RiskManagement\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Models\Organization;
+use App\Modules\Core\Models\User;
 use App\Modules\RiskManagement\Enums\RiskActionStatus;
 use App\Modules\RiskManagement\Enums\RiskStatus;
 use App\Modules\RiskManagement\Models\Risk;
 use App\Modules\RiskManagement\Models\RiskAction;
 use App\Modules\RiskManagement\Services\RiskExportService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -21,33 +24,100 @@ class RiskDashboardController extends Controller
         protected RiskExportService $exporter
     ) {}
 
+    /**
+     * Phase CFA-05 — Reports gate widens via cluster_tree.
+     *
+     * Decision paths:
+     *  1) RISKS_VIEW_REPORTS on actor (engine same-org): the prior CFA-00
+     *     behavior — grants access to actor.org's risk reports/dashboards.
+     *  2) RISKS_VIEW_REPORTS + CLUSTER_TREE_EXPORT on actor (engine rescue
+     *     branch): grants access to risk reports/dashboards across
+     *     descendant organizations. The two-path is matched on the dashboard
+     *     and export endpoints here; the underlying queries use
+     *     clusterExportOrgIds() to widen the org filter.
+     */
     private function authorizeReports(): void
     {
         $user = auth()->user();
-        if (! AccessDecision::can($user, Capability::RISKS_VIEW_REPORTS)) {
+
+        // Path 1: same-org via RISKS_VIEW_REPORTS.
+        if (AccessDecision::can($user, Capability::RISKS_VIEW_REPORTS)) {
+            return;
+        }
+
+        // Path 2: cross-org via RISKS_VIEW_REPORTS + CLUSTER_TREE_EXPORT rescue.
+        // We do not need the third-path engine rescue here because the
+        // org-filter widening below (clusterExportOrgIds) is the primary
+        // cross-org mechanism for the dashboard / export endpoints. The
+        // CLUSTER_TREE_EXPORT gate below pairs the two grants; if either is
+        // missing the actor stays same-org only.
+        $hasReports = AccessDecision::can($user, Capability::RISKS_VIEW_REPORTS);
+        $hasClusterTreeExport = AccessDecision::can($user, Capability::CLUSTER_TREE_EXPORT);
+
+        if (! $hasReports || ! $hasClusterTreeExport) {
             abort(403, 'ليس لديك صلاحية الوصول');
         }
     }
 
-    private function orgFilter(): callable
+    /**
+     * Phase CFA-05 — Org floor for the dashboard/export endpoints.
+     *
+     * Returns the list of organization ids the actor may query for the
+     * dashboard/aggregate/export surfaces under CFA-05's cluster_export
+     * widening.
+     *
+     *   - Default: [actor.organization_id] only (strict same-org) when
+     *     EITHER RISKS_VIEW_REPORTS or CLUSTER_TREE_EXPORT is missing on
+     *     actor.org. Preserves the pre-CFA-05 same-org behavior for users
+     *     who do not hold both grants.
+     *
+     *   - Widening: when the actor holds BOTH RISKS_VIEW_REPORTS +
+     *     CLUSTER_TREE_EXPORT on actor.organization_id, descendant
+     *     organizations (via parent_id BFS) are added to the list.
+     *
+     * super_admin is short-circuited to a no-op filter; null-org actors
+     * fail closed at the empty list. The dashboard / export endpoints
+     * use this helper to widen the org filter, mirroring the CFA-04
+     * UserProjectScope::clusterVisibleOrgIds pattern.
+     *
+     * @return array<int, callable(Builder): void>
+     */
+    private function clusterExportOrgIds(User $user, ?int $overrideOrgId = null): array
     {
-        $user = auth()->user();
-        if ($user?->isSuperAdmin()) {
-            return fn ($q) => $q;
+        if ($user->isSuperAdmin()) {
+            return [fn ($q) => $q];
         }
-        if ($user?->organization_id === null) {
+
+        $orgId = $overrideOrgId ?? $user->organization_id;
+
+        if ($orgId === null) {
             abort(403, 'ليس لديك صلاحية الوصول لهذا العنصر');
         }
 
-        return fn ($q) => $q->where('organization_id', $user->organization_id);
+        $visible = [(int) $orgId];
+
+        $hasReports = AccessDecision::can($user, Capability::RISKS_VIEW_REPORTS);
+        $hasClusterTreeExport = AccessDecision::can($user, Capability::CLUSTER_TREE_EXPORT);
+
+        if ($hasReports && $hasClusterTreeExport) {
+            $org = Organization::query()->find($orgId);
+            if ($org instanceof Organization) {
+                $visible = array_values(array_unique(array_merge($visible, $org->descendantIds())));
+            }
+        }
+
+        return [fn ($q) => $q->whereIn('organization_id', $visible)];
     }
 
     public function dashboard(Request $request): JsonResponse
     {
         $this->authorizeReports();
 
+        $user = $request->user();
+        [$filter] = $this->clusterExportOrgIds($user);
+
         $query = Risk::query();
-        $this->orgFilter()($query);
+        $filter($query);
 
         $byStatus = (clone $query)
             ->selectRaw('status, COUNT(*) as count')
@@ -60,7 +130,7 @@ class RiskDashboardController extends Controller
             ->pluck('count', 'current_level');
 
         $overdueActionsCount = RiskAction::query()
-            ->whereHas('risk', fn ($q) => $this->orgFilter()($q))
+            ->whereHas('risk', fn ($q) => $filter($q))
             ->whereNotIn('status', [
                 RiskActionStatus::Completed->value,
                 RiskActionStatus::Cancelled->value,
@@ -95,9 +165,12 @@ class RiskDashboardController extends Controller
     {
         $this->authorizeReports();
 
+        $user = $request->user();
+        [$filter] = $this->clusterExportOrgIds($user);
+
         $query = Risk::query()
             ->whereNotIn('status', [RiskStatus::Closed->value, RiskStatus::Accepted->value]);
-        $this->orgFilter()($query);
+        $filter($query);
 
         $rows = $query
             ->selectRaw('current_likelihood, current_impact, COUNT(*) as count')
@@ -134,8 +207,11 @@ class RiskDashboardController extends Controller
     {
         $this->authorizeReports();
 
+        $user = $request->user();
+        [$filter] = $this->clusterExportOrgIds($user);
+
         $query = Risk::query()->orderBy('code');
-        $this->orgFilter()($query);
+        $filter($query);
         $query->limit(10000); // حد أعلى معقول
 
         return $this->exporter->streamCsv($query, 'risks-'.now()->format('Ymd-His').'.csv');
@@ -145,8 +221,11 @@ class RiskDashboardController extends Controller
     {
         $this->authorizeReports();
 
+        $user = $request->user();
+        [$filter] = $this->clusterExportOrgIds($user);
+
         $query = Risk::query()->orderBy('code');
-        $this->orgFilter()($query);
+        $filter($query);
         $query->limit(10000); // حد أعلى معقول
 
         return $this->exporter->downloadPdf($query, 'risks-'.now()->format('Ymd-His').'.pdf');
