@@ -11,7 +11,10 @@ You are an autonomous coding agent working on the **Erada PMO** project
    project-wide conventions, authz architecture, multi-tenancy rules, and quality commands.
 4. Check you're on the correct branch from PRD `branchName`. If not, check it out
    (do NOT create from main unless `git status` is clean — see LR-008).
-5. Pick the **highest priority** user story where `passes: false`.
+5. Run `scripts/ralph/select-next-story.sh scripts/ralph/prd.json` and implement
+   exactly the JSON story it returns. Never select a story by priority alone:
+   `dependsOn` must be satisfied first. Exit with a stop report if the selector
+   exits 3 because pending stories are dependency-blocked.
 6. Implement that single user story.
 7. Run quality checks (see `Quality Requirements` below).
 8. Update nearby `CLAUDE.md` files if you discover reusable patterns.
@@ -25,11 +28,24 @@ You are an autonomous coding agent working on the **Erada PMO** project
 12. Append your progress to `progress.txt`.
 13. **Continue to the next story.** Do NOT stop at "READY TO MERGE".
 
+Stories with `autoMergeEligible: false` are the exception to steps 10-13:
+push and open the PR, then emit the stop report and `<promise>STOP</promise>`.
+Do not merge, mark the story passed, or start another story until Tariq reviews
+and merges it.
+
 ## Progress Report Format
 
 APPEND to `scripts/ralph/progress.txt` (never replace):
 
 ```
+
+End every stop report with this exact machine-readable line:
+
+```text
+<promise>STOP</promise>
+```
+
+The wrapper exits 2 when it sees this line. Never emit it for ordinary progress.
 ## [Date/Time] - [Story ID]
 - What was implemented
 - Files changed
