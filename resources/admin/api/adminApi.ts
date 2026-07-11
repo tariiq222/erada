@@ -19,6 +19,7 @@ import type {
 } from '@admin/model/admin';
 
 type QueryValue = string | number | boolean | null | undefined;
+type DepartmentPage = { data: DepartmentSummary[]; current_page?: number; last_page?: number; per_page?: number; total?: number };
 
 function queryString(params?: Record<string, QueryValue>): string {
   if (!params) return '';
@@ -78,7 +79,18 @@ export const adminApi = {
       api.get<{ data: AccessSummary }>(`/admin/scoped-roles/user/${userId}/access-summary`),
   },
   departments: {
-    summary: () => api.get<{ data: DepartmentSummary[] }>('/admin/departments?per_page=100'),
+    summary: async (organizationId: number) => {
+      const data: DepartmentSummary[] = [];
+      let page = 1;
+      let lastPage = 1;
+      do {
+        const response = await api.get<DepartmentPage>(`/admin/departments${queryString({ organization_id: organizationId, per_page: 100, page })}`);
+        data.push(...response.data);
+        lastPage = response.last_page ?? 1;
+        page += 1;
+      } while (page <= lastPage);
+      return { data };
+    },
   },
   governance: {
     list: () => api.get<{ data: GovernanceRule[] }>('/admin/governance-rules'),

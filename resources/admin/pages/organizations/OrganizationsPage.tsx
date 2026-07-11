@@ -67,7 +67,7 @@ export function OrganizationsPage() {
                 <tr key={row.id} className="border-b">
                   <td className="p-2 font-medium">{row.name}</td><td className="p-2 font-mono text-xs">{row.code}</td>
                   <td className="p-2"><Badge variant={row.is_active ? 'success' : 'default'}>{t(row.is_active ? 'common.active' : 'common.inactive')}</Badge></td>
-                  <td className="p-2 text-end"><div className="flex justify-end gap-2"><Link to={`/organizations/${row.id}/edit`}>{t('common.edit')}</Link>{!row.children_count && <Button size="sm" variant="danger" onClick={() => void remove(row)}>{t('common.delete')}</Button>}</div></td>
+                  <td className="p-2 text-end"><div className="flex justify-end gap-2"><Link to={`/organizations/${row.id}`}>{t('common.view')}</Link><Link to={`/organizations/${row.id}/edit`}>{t('common.edit')}</Link>{!row.children_count && <Button size="sm" variant="danger" onClick={() => void remove(row)}>{t('common.delete')}</Button>}</div></td>
                 </tr>
               ))}</tbody>
             </table>

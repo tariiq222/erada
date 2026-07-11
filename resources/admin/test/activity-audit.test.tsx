@@ -107,6 +107,34 @@ describe('admin activity and audit contracts', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Export forbidden');
   });
 
+  it('downloads a successful activity export and releases the blob URL', async () => {
+    apiGet.mockResolvedValue({ data: [], meta: { current_page: 1, last_page: 1, per_page: 25, total: 0 } });
+    const blob = new Blob(['audit'], { type: 'text/csv' });
+    apiBlob.mockResolvedValue(blob);
+    const createObjectURL = vi.fn(() => 'blob:activity-export');
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
+    let downloadedFilename = '';
+    const click = vi.spyOn(window.HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+      downloadedFilename = this.download;
+    });
+    const user = userEvent.setup();
+    setPath('/activity-logs');
+
+    render(<AdminRouter />);
+
+    await screen.findByText(i18n.t('admin.activityLogs.empty'));
+    await user.click(screen.getByRole('button', { name: 'CSV' }));
+
+    await waitFor(() => expect(apiBlob).toHaveBeenCalledWith('/admin/activity-logs/export?format=csv'));
+    expect(createObjectURL).toHaveBeenCalledWith(blob);
+    expect(click).toHaveBeenCalledOnce();
+    expect(downloadedFilename).toMatch(/^activity-log-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:activity-export');
+    click.mockRestore();
+  });
+
   it('filters scoped-role audit and paginates from backend metadata', async () => {
     apiGet
       .mockResolvedValueOnce({

@@ -285,6 +285,9 @@ class ActivityLogController extends Controller
         if ($to = $request->query('to')) {
             $query->where('created_at', '<=', $to);
         }
+        if ($search = $request->query('search')) {
+            $query->where('description', 'ilike', "%{$search}%");
+        }
 
         return $query;
     }

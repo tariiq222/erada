@@ -53,6 +53,7 @@ export function AdminRouter() {
             <Route path="/access/governance" element={<GovernanceRulesPage />} />
             <Route path="/roles" element={<RolesPage />} />
             <Route path="/roles/new" element={<RoleForm />} />
+            <Route path="/roles/governing-departments" element={<Navigate to="/access/governance" replace />} />
             <Route path="/roles/:roleId" element={<RoleForm />} />
             <Route path="/roles/:roleId/edit" element={<RoleForm />} />
             <Route path="/users/*" element={<ProtectedPagePlaceholder titleKey="admin.users.title" />} />

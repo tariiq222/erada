@@ -123,6 +123,7 @@ describe('admin organization contracts', () => {
     render(<AdminRouter />);
 
     expect(await screen.findByText('North Health Cluster')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: i18n.t('common.view') })).toHaveAttribute('href', '/organizations/7');
     await user.click(screen.getByRole('button', { name: i18n.t('common.delete') }));
 
     expect(confirm).toHaveBeenCalledWith(i18n.t('admin.organizations.confirmDelete'));
@@ -182,6 +183,8 @@ describe('admin organization contracts', () => {
     render(<AdminRouter />);
 
     expect(await screen.findByText('North Health Cluster')).toBeInTheDocument();
+    expect(screen.getAllByText(i18n.t('admin.organizationDetails.users')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(i18n.t('admin.organizationDetails.projects')).length).toBeGreaterThan(0);
     expect(screen.getByText('12')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: i18n.t('common.save_changes') })).not.toBeInTheDocument();
   });

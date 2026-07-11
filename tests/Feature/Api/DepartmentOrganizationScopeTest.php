@@ -359,6 +359,55 @@ class DepartmentOrganizationScopeTest extends TestCase
         $this->assertCount(7, $data); // deptA + deptB + 2 + 3
     }
 
+    public function test_super_admin_can_filter_admin_index_by_explicit_organization(): void
+    {
+        Department::factory()->count(2)->create([
+            'organization_id' => $this->orgA->id,
+            'level' => 4,
+        ]);
+        Department::factory()->count(3)->create([
+            'organization_id' => $this->orgB->id,
+            'level' => 4,
+        ]);
+
+        $response = $this->actingAs($this->superAdmin, 'sanctum')
+            ->getJson("/api/admin/departments?organization_id={$this->orgA->id}&per_page=2");
+
+        $response->assertOk()
+            ->assertJsonPath('total', 3)
+            ->assertJsonPath('per_page', 2)
+            ->assertJsonPath('last_page', 2);
+
+        foreach ($response->json('data') as $department) {
+            $this->assertSame($this->orgA->id, $department['organization_id']);
+            $this->assertNotSame($this->deptB->id, $department['id']);
+        }
+    }
+
+    public function test_non_super_admin_cannot_override_organization_with_query(): void
+    {
+        $response = $this->actingAs($this->adminA, 'sanctum')
+            ->getJson("/api/hr/departments?organization_id={$this->orgB->id}");
+
+        $response->assertOk();
+        foreach ($response->json('data') as $department) {
+            $this->assertSame($this->orgA->id, $department['organization_id']);
+        }
+    }
+
+    public function test_super_admin_organization_filter_must_be_numeric_and_exist(): void
+    {
+        $this->actingAs($this->superAdmin, 'sanctum')
+            ->getJson('/api/admin/departments?organization_id=not-a-number')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['organization_id']);
+
+        $this->actingAs($this->superAdmin, 'sanctum')
+            ->getJson('/api/admin/departments?organization_id=999999')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['organization_id']);
+    }
+
     // ========== SC5: Same-org positive control ==========
 
     public function test_admin_can_crud_in_same_org(): void

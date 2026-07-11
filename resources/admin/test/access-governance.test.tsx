@@ -19,7 +19,8 @@ const authState = {
     job_title: null,
     is_active: true,
     roles: ['super_admin'],
-  } satisfies User,
+    organization_id: 17,
+  } satisfies User & { organization_id: number },
   isLoading: false,
   isAuthenticated: true,
 };
@@ -91,7 +92,7 @@ describe('admin role and governance contracts', () => {
     await adminApi.roles.delete(12);
     await adminApi.users.summary();
     await adminApi.access.summary(9);
-    await adminApi.departments.summary();
+    await adminApi.departments.summary(17);
     await adminApi.governance.list();
     await adminApi.governance.update({ resource_type: 'project', governing_unit_id: 3 });
 
@@ -102,7 +103,7 @@ describe('admin role and governance contracts', () => {
     expect(apiDelete).toHaveBeenCalledWith('/admin/roles/12');
     expect(apiGet).toHaveBeenCalledWith('/admin/users?per_page=100');
     expect(apiGet).toHaveBeenCalledWith('/admin/scoped-roles/user/9/access-summary');
-    expect(apiGet).toHaveBeenCalledWith('/admin/departments?per_page=100');
+    expect(apiGet).toHaveBeenCalledWith('/admin/departments?organization_id=17&per_page=100&page=1');
     expect(apiGet).toHaveBeenCalledWith('/admin/governance-rules');
     expect(apiPut).toHaveBeenNthCalledWith(2, '/admin/governance-rules', {
       resource_type: 'project',
@@ -113,7 +114,7 @@ describe('admin role and governance contracts', () => {
   it('creates a role with exact capability and reach fields', async () => {
     apiGet
       .mockResolvedValueOnce({ data: { groups: [{ key: 'projects', label: 'Projects', store: 'engine', abilities: [{ id: 'projects.view', label: 'View projects' }] }] } })
-      .mockResolvedValueOnce({ scopes: [{ key: 'organization', label: 'Organization' }], definitions: {} });
+      .mockResolvedValueOnce({ data: [], meta: { total: 0 } });
     apiPost.mockResolvedValue({ data: role });
     const user = userEvent.setup();
     setPath('/roles/new');
@@ -126,7 +127,9 @@ describe('admin role and governance contracts', () => {
     await user.type(screen.getByLabelText(i18n.t('admin.roles.fields.name')), 'project_controller');
     await user.type(screen.getByLabelText(i18n.t('admin.roles.fields.labelEn')), 'Project Controller');
     await user.click(screen.getByRole('checkbox', { name: 'View projects' }));
-    await user.selectOptions(screen.getByLabelText('Projects reach'), 'department');
+    expect(screen.queryByLabelText(i18n.t('admin.roles.fields.scope'))).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: i18n.t('admin.roles.reach.department') })).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText(`Projects ${i18n.t('admin.roles.reach.label')}`), 'department');
     await user.click(screen.getByRole('button', { name: i18n.t('common.create') }));
 
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/admin/roles', {
@@ -170,7 +173,7 @@ describe('admin role and governance contracts', () => {
     await user.click(within(row).getByRole('button', { name: i18n.t('admin.access.members.viewAccess') }));
 
     expect(await screen.findByText('Risk Reviewer')).toBeInTheDocument();
-    expect(screen.getByText(/risks/)).toHaveTextContent('department');
+    expect(screen.getByText(/risks/)).toHaveTextContent(i18n.t('admin.roles.reach.department'));
     expect(apiGet).toHaveBeenLastCalledWith('/admin/scoped-roles/user/9/access-summary');
   });
 
@@ -184,9 +187,11 @@ describe('admin role and governance contracts', () => {
 
     render(<AdminRouter />);
 
-    await user.selectOptions(await screen.findByLabelText('Projects'), '3');
+    const selection = await screen.findByLabelText('Projects');
+    await user.selectOptions(selection, '3');
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Forbidden department');
+    expect(selection).toHaveValue('');
     expect(apiPut).toHaveBeenCalledWith('/admin/governance-rules', {
       resource_type: 'project',
       governing_unit_id: 3,
@@ -208,5 +213,51 @@ describe('admin role and governance contracts', () => {
 
     const systemRow = screen.getByRole('row', { name: /Viewer/ });
     expect(within(systemRow).queryByRole('button', { name: i18n.t('common.delete') })).not.toBeInTheDocument();
+  });
+
+  it('does not send scope_type when editing an organization role', async () => {
+    apiGet
+      .mockResolvedValueOnce({ data: { groups: [] } })
+      .mockResolvedValueOnce({ data: role });
+    apiPut.mockResolvedValue({ data: role });
+    const user = userEvent.setup();
+    setPath('/roles/12/edit');
+
+    render(<AdminRouter />);
+
+    const label = await screen.findByLabelText(i18n.t('admin.roles.fields.labelEn'));
+    await user.clear(label);
+    await user.type(label, 'Updated Controller');
+    await user.click(screen.getByRole('button', { name: i18n.t('common.save_changes') }));
+
+    expect(apiPut).toHaveBeenCalledWith('/admin/roles/12', expect.not.objectContaining({ scope_type: expect.anything() }));
+  });
+
+  it('preserves the governing-departments bookmark as a governance redirect', async () => {
+    apiGet.mockImplementation((path) => {
+      if (path === '/admin/roles/abilities') return Promise.resolve({ data: { groups: [] } });
+      if (path === '/admin/roles/scope-options') return Promise.resolve({ scopes: [{ key: 'organization', label: 'Organization' }] });
+      if (path === '/admin/governance-rules') return Promise.resolve({ data: [] });
+      if (path.startsWith('/admin/departments?')) return Promise.resolve({ data: [], current_page: 1, last_page: 1, per_page: 100, total: 0 });
+      return Promise.resolve({ data: role });
+    });
+    setPath('/roles/governing-departments');
+
+    render(<AdminRouter />);
+
+    await waitFor(() => expect(window.location.pathname).toBe('/access/governance'));
+    expect(await screen.findByRole('heading', { name: i18n.t('admin.access.tabs.governance') })).toBeInTheDocument();
+  });
+
+  it('loads every department page for the actor organization', async () => {
+    apiGet
+      .mockResolvedValueOnce({ data: [{ id: 1, name: 'First Unit' }], current_page: 1, last_page: 2, per_page: 100, total: 2 })
+      .mockResolvedValueOnce({ data: [{ id: 2, name: 'Second Unit' }], current_page: 2, last_page: 2, per_page: 100, total: 2 });
+
+    const result = await adminApi.departments.summary(17);
+
+    expect(apiGet).toHaveBeenNthCalledWith(1, '/admin/departments?organization_id=17&per_page=100&page=1');
+    expect(apiGet).toHaveBeenNthCalledWith(2, '/admin/departments?organization_id=17&per_page=100&page=2');
+    expect(result.data.map((unit) => unit.name)).toEqual(['First Unit', 'Second Unit']);
   });
 });

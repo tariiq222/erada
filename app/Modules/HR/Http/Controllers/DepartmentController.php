@@ -30,14 +30,17 @@ class DepartmentController extends Controller
             return response()->json(['message' => 'المستخدم لا ينتمي لمؤسسة'], 403);
         }
 
-        // The org switcher in the SPA persists X-Organization-Id in localStorage;
-        // a stale or invalid value there previously hid every row from the
-        // super-admin SPA even though the org chart (which bypasses the header)
-        // rendered fine. Mirror the tree() super-admin branch: drop the header
-        // for super_admins and trust their own organization_id, so the table
-        // view can never diverge from the chart view.
+        // The canonical admin surface sends an explicit organization filter.
+        // Super-admins may select any existing organization, but stale headers
+        // remain ignored. Non-super users continue resolving only their active
+        // organization and cannot widen tenancy through this query parameter.
         if ($user->isSuperAdmin()) {
-            $resolvedOrg = null;
+            $validated = $request->validate([
+                'organization_id' => ['nullable', 'integer', 'exists:organizations,id'],
+            ]);
+            $resolvedOrg = isset($validated['organization_id'])
+                ? (int) $validated['organization_id']
+                : null;
         } else {
             $requestedOrg = (int) $request->header('X-Organization-Id') ?: null;
             $resolvedOrg = $user->resolveActiveOrganizationId($requestedOrg);
