@@ -18,6 +18,7 @@ const ROOT = process.cwd();
 const SCAN_DIRS = [
 	path.join(ROOT, "resources/js/pages"),
 	path.join(ROOT, "resources/js/widgets"),
+	path.join(ROOT, "resources/admin"),
 ];
 const EXTS = new Set([".ts", ".tsx", ".js", ".jsx"]);
 

@@ -9,7 +9,7 @@ import testingLibrary from 'eslint-plugin-testing-library';
 export default [
   js.configs.recommended,
   {
-    files: ['resources/js/**/*.{ts,tsx,js,jsx}'],
+    files: ['resources/{js,admin}/**/*.{ts,tsx,js,jsx}'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -32,6 +32,7 @@ export default [
         clearTimeout: 'readonly',
         setInterval: 'readonly',
         clearInterval: 'readonly',
+        requestAnimationFrame: 'readonly',
         confirm: 'readonly',
         alert: 'readonly',
         prompt: 'readonly',
@@ -174,6 +175,19 @@ export default [
 
       // تعطيل قاعدة no-unused-vars الأساسية لصالح TypeScript
       'no-unused-vars': 'off',
+    },
+  },
+  {
+    files: ['resources/admin/**/*.{ts,tsx,js,jsx}'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          {
+            group: ['@app', '@app/*', '@pages', '@pages/*', '@widgets', '@widgets/*', '@features', '@features/*'],
+            message: 'The independent admin application cannot import operational application layers.',
+          },
+        ],
+      }],
     },
   },
   {

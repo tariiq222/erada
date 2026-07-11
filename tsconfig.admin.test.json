@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.admin.json",
+  "compilerOptions": {
+    "types": ["vitest/globals", "@testing-library/jest-dom"]
+  },
+  "include": [
+    "resources/admin/**/*.{test,spec}.{ts,tsx}",
+    "resources/admin/**/*.d.ts"
+  ],
+  "exclude": ["node_modules"]
+}

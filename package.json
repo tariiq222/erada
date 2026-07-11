@@ -4,6 +4,12 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
+        "admin:dev": "vite --config vite.admin.config.ts",
+        "admin:typecheck": "tsc -p tsconfig.admin.json --noEmit",
+        "admin:lint": "eslint resources/admin --max-warnings 0 && node scripts/check-admin-boundaries.mjs",
+        "admin:test": "vitest run --config vitest.admin.config.ts",
+        "admin:build": "npm run admin:typecheck && npm run admin:lint && vite build --config vite.admin.config.ts",
+        "admin:quality": "npm run admin:typecheck && npm run admin:lint && npm run admin:test && npm run admin:build",
         "build": "npm run typecheck && npm run lint && vite build",
         "build:fast": "vite build",
         "preview": "vite preview",
