@@ -389,6 +389,211 @@ class ClusterTreeManageExportPrimitiveTest extends TestCase
     }
 
     // =========================================================
+    // CI-contract invariant tests
+    //
+    // The methods below mirror the cluster-tree rescue invariants that
+    // scripts/check-cluster-tree-contract.sh scans for (per-primitive
+    // `child_user_cannot_*`, `sibling_cluster*`, and
+    // `(null_org|fail_closed)*` patterns). Their behavior is proven in
+    // detail by the sibling rescue tests above; these methods exist so the
+    // CI gate can locate primitive-specific invariant coverage by name.
+    // Keeping the names stable is part of the contract — do not rename
+    // without updating scripts/check-cluster-tree-contract.sh as well.
+    // =========================================================
+
+    #[Test]
+    public function child_user_cannot_see_parent_via_cluster_tree_view(): void
+    {
+        $cluster = Organization::factory()->cluster()->create();
+        $child = Organization::factory()->hospital()->childOf($cluster)->create();
+        $clusterProject = $this->makeProjectInOrg($cluster->id);
+
+        $childUser = User::factory()->create(['organization_id' => $child->id]);
+        $this->grantClusterRoleOnOrganization(
+            $childUser,
+            $child,
+            [Capability::CLUSTER_TREE_VIEW],
+            'child_user_viewer_ci'
+        );
+
+        $this->assertFalse(
+            AccessDecision::can($childUser, Capability::CLUSTER_TREE_VIEW, $clusterProject),
+            'CI-contract: child user with VIEW grant must NOT see parent cluster data (one-directional)'
+        );
+    }
+
+    #[Test]
+    public function child_user_cannot_see_parent_via_cluster_tree_manage(): void
+    {
+        $cluster = Organization::factory()->cluster()->create();
+        $child = Organization::factory()->hospital()->childOf($cluster)->create();
+        $clusterProject = $this->makeProjectInOrg($cluster->id);
+
+        $childUser = User::factory()->create(['organization_id' => $child->id]);
+        $this->grantClusterRoleOnOrganization(
+            $childUser,
+            $child,
+            [Capability::CLUSTER_TREE_MANAGE],
+            'child_user_manager_ci'
+        );
+
+        $this->assertFalse(
+            AccessDecision::can($childUser, Capability::CLUSTER_TREE_MANAGE, $clusterProject),
+            'CI-contract: child user with MANAGE grant must NOT see parent cluster data (one-directional)'
+        );
+    }
+
+    #[Test]
+    public function child_user_cannot_see_parent_via_cluster_tree_export(): void
+    {
+        $cluster = Organization::factory()->cluster()->create();
+        $child = Organization::factory()->hospital()->childOf($cluster)->create();
+        $clusterProject = $this->makeProjectInOrg($cluster->id);
+
+        $childUser = User::factory()->create(['organization_id' => $child->id]);
+        $this->grantClusterRoleOnOrganization(
+            $childUser,
+            $child,
+            [Capability::CLUSTER_TREE_EXPORT],
+            'child_user_exporter_ci_v2'
+        );
+
+        $this->assertFalse(
+            AccessDecision::can($childUser, Capability::CLUSTER_TREE_EXPORT, $clusterProject),
+            'CI-contract: child user with EXPORT grant must NOT see parent cluster data (one-directional)'
+        );
+    }
+
+    #[Test]
+    public function sibling_cluster_cannot_share_via_cluster_tree_view(): void
+    {
+        $clusterA = Organization::factory()->cluster()->create();
+        $clusterB = Organization::factory()->cluster()->create();
+        $childB = Organization::factory()->hospital()->childOf($clusterB)->create();
+        $childBProject = $this->makeProjectInOrg($childB->id);
+
+        $userA = User::factory()->create(['organization_id' => $clusterA->id]);
+        $this->grantClusterRoleOnOrganization(
+            $userA,
+            $clusterA,
+            [Capability::CLUSTER_TREE_VIEW],
+            'cluster_a_viewer_ci'
+        );
+
+        $this->assertFalse(
+            AccessDecision::can($userA, Capability::CLUSTER_TREE_VIEW, $childBProject),
+            'CI-contract: cluster A VIEW grant must NOT reach cluster B subtree'
+        );
+    }
+
+    #[Test]
+    public function null_org_user_fail_closed_via_cluster_tree_view(): void
+    {
+        $cluster = Organization::factory()->cluster()->create();
+        $child = Organization::factory()->hospital()->childOf($cluster)->create();
+        $childProject = $this->makeProjectInOrg($child->id);
+
+        $nullUser = User::factory()->create(['organization_id' => null]);
+        $this->grantClusterRoleOnOrganization(
+            $nullUser,
+            $cluster,
+            [Capability::CLUSTER_TREE_VIEW],
+            'null_org_viewer_ci'
+        );
+
+        $this->assertFalse(
+            AccessDecision::can($nullUser, Capability::CLUSTER_TREE_VIEW, $childProject),
+            'CI-contract: null-org actor must NOT pass VIEW rescue (fail-closed)'
+        );
+    }
+
+    #[Test]
+    public function sibling_cluster_cannot_share_via_cluster_tree_manage(): void
+    {
+        $clusterA = Organization::factory()->cluster()->create();
+        $clusterB = Organization::factory()->cluster()->create();
+        $childB = Organization::factory()->hospital()->childOf($clusterB)->create();
+        $childBProject = $this->makeProjectInOrg($childB->id);
+
+        $userA = User::factory()->create(['organization_id' => $clusterA->id]);
+        $this->grantClusterRoleOnOrganization(
+            $userA,
+            $clusterA,
+            [Capability::CLUSTER_TREE_MANAGE],
+            'cluster_a_manager_ci'
+        );
+
+        $this->assertFalse(
+            AccessDecision::can($userA, Capability::CLUSTER_TREE_MANAGE, $childBProject),
+            'CI-contract: cluster A MANAGE grant must NOT reach cluster B subtree'
+        );
+    }
+
+    #[Test]
+    public function sibling_cluster_cannot_share_via_cluster_tree_export(): void
+    {
+        $clusterA = Organization::factory()->cluster()->create();
+        $clusterB = Organization::factory()->cluster()->create();
+        $childB = Organization::factory()->hospital()->childOf($clusterB)->create();
+        $childBProject = $this->makeProjectInOrg($childB->id);
+
+        $userA = User::factory()->create(['organization_id' => $clusterA->id]);
+        $this->grantClusterRoleOnOrganization(
+            $userA,
+            $clusterA,
+            [Capability::CLUSTER_TREE_EXPORT],
+            'cluster_a_exporter_ci'
+        );
+
+        $this->assertFalse(
+            AccessDecision::can($userA, Capability::CLUSTER_TREE_EXPORT, $childBProject),
+            'CI-contract: cluster A EXPORT grant must NOT reach cluster B subtree'
+        );
+    }
+
+    #[Test]
+    public function null_org_user_fail_closed_via_cluster_tree_manage(): void
+    {
+        $cluster = Organization::factory()->cluster()->create();
+        $child = Organization::factory()->hospital()->childOf($cluster)->create();
+        $childProject = $this->makeProjectInOrg($child->id);
+
+        $nullUser = User::factory()->create(['organization_id' => null]);
+        $this->grantClusterRoleOnOrganization(
+            $nullUser,
+            $cluster,
+            [Capability::CLUSTER_TREE_MANAGE],
+            'null_org_manager_ci'
+        );
+
+        $this->assertFalse(
+            AccessDecision::can($nullUser, Capability::CLUSTER_TREE_MANAGE, $childProject),
+            'CI-contract: null-org actor must NOT pass MANAGE rescue (fail-closed)'
+        );
+    }
+
+    #[Test]
+    public function null_org_user_fail_closed_via_cluster_tree_export(): void
+    {
+        $cluster = Organization::factory()->cluster()->create();
+        $child = Organization::factory()->hospital()->childOf($cluster)->create();
+        $childProject = $this->makeProjectInOrg($child->id);
+
+        $nullUser = User::factory()->create(['organization_id' => null]);
+        $this->grantClusterRoleOnOrganization(
+            $nullUser,
+            $cluster,
+            [Capability::CLUSTER_TREE_EXPORT],
+            'null_org_exporter_ci'
+        );
+
+        $this->assertFalse(
+            AccessDecision::can($nullUser, Capability::CLUSTER_TREE_EXPORT, $childProject),
+            'CI-contract: null-org actor must NOT pass EXPORT rescue (fail-closed)'
+        );
+    }
+
+    // =========================================================
     // Cross-primitive guarantees
     // =========================================================
 
@@ -563,6 +768,30 @@ class ClusterTreeManageExportPrimitiveTest extends TestCase
         $this->assertFalse($caps[Capability::CLUSTER_TREE_VIEW] ?? false);
         $this->assertFalse($caps[Capability::CLUSTER_TREE_MANAGE] ?? false);
         $this->assertFalse($caps[Capability::CLUSTER_TREE_EXPORT] ?? false);
+    }
+
+    #[Test]
+    public function super_admin_auth_me_surface_exposes_all_three_cluster_tree_primitives(): void
+    {
+        // Regression guard: AccessDecision short-circuits super_admin BEFORE
+        // the cluster_tree_rescue branch, so a super_admin must still appear
+        // with all three cluster_tree primitives enabled on the /auth/me
+        // surface. Without this test, an accidental gate inside the engine
+        // that requires an explicit scoped-role grant even for super_admin
+        // would silently break downstream cluster features (KPIs, Activity
+        // Log, etc.) that rely on this surface to render admin controls.
+        $org = Organization::factory()->create();
+        $user = User::factory()->create([
+            'organization_id' => $org->id,
+        ]);
+        $user->assignRole('super_admin');
+
+        $caps = app(CoreCapabilityProvider::class)
+            ->userCapabilities($user);
+
+        $this->assertTrue($caps[Capability::CLUSTER_TREE_VIEW] ?? false);
+        $this->assertTrue($caps[Capability::CLUSTER_TREE_MANAGE] ?? false);
+        $this->assertTrue($caps[Capability::CLUSTER_TREE_EXPORT] ?? false);
     }
 }
 
