@@ -132,10 +132,6 @@ export interface OverviewCounts {
       total: number;
     };
   };
-  registrations: {
-    pending: number;
-    avg_pending_age_days: number | null;
-  };
   generated_at: string;
 }
 
@@ -161,7 +157,9 @@ export interface AuditRecentResponse {
   data: AuditRecentRow[];
   meta: {
     current_page: number;
+    last_page: number;
     per_page: number;
+    total: number;
     limit: number;
     returned: number;
   };

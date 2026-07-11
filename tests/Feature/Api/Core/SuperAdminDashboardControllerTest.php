@@ -173,6 +173,8 @@ class SuperAdminDashboardControllerTest extends TestCase
             ->assertJsonPath('data.login_attempts.last_24h.successful', $baselineSuccessfulLogins + 3)
             ->assertJsonPath('data.login_attempts.last_24h.failed', $baselineFailedLogins + 2)
             ->assertJsonPath('data.login_attempts.last_24h.total', $baselineLoginAttemptsLast24h + 5);
+
+        $this->assertArrayNotHasKey('registrations', $response->json('data'));
     }
 
     public function test_overview_does_not_leak_module_content(): void
@@ -330,10 +332,15 @@ class SuperAdminDashboardControllerTest extends TestCase
 
         $response = $this->actingAs($superAdmin, 'sanctum')
             ->getJson('/api/admin/audit/recent?per_page=10&page=2')
-            ->assertStatus(200);
+            ->assertStatus(200)
+            ->assertJsonStructure([
+                'data',
+                'meta' => ['current_page', 'last_page', 'per_page', 'total', 'limit', 'returned'],
+            ]);
 
         // hard ceiling still applies, but client-requested pagination honoured.
         $items = $response->json('data');
         $this->assertCount(10, $items);
+        $this->assertArrayNotHasKey('email', $response->json('data.0.actor'));
     }
 }

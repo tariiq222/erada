@@ -232,11 +232,11 @@ class SuperAdminDashboardController extends Controller
         $perPage = max(1, min($perPage, self::AUDIT_RECENT_HARD_LIMIT));
         $page = max(1, (int) $request->query('page', 1));
 
-        $rows = ActivityLog::query()
+        $paginator = ActivityLog::query()
             ->orderByDesc('created_at')
             ->orderByDesc('id') // deterministic tie-breaker: ts is second-precision
-            ->forPage($page, $perPage)
-            ->get();
+            ->paginate($perPage, ['*'], 'page', $page);
+        $rows = $paginator->getCollection();
 
         // Build a minimal set of user_id -> display label for actor/target
         // names. One query, no N+1 (LR-104).
@@ -248,7 +248,7 @@ class SuperAdminDashboardController extends Controller
 
         $userMap = User::query()
             ->whereIn('id', $userIds)
-            ->get(['id', 'name', 'email'])
+            ->get(['id', 'name'])
             ->keyBy('id');
 
         $data = $rows->map(function (ActivityLog $log) use ($userMap) {
@@ -262,7 +262,6 @@ class SuperAdminDashboardController extends Controller
                 'actor' => $actor ? [
                     'id' => (int) $actor->id,
                     'name' => $actor->name,
-                    'email' => $actor->email,
                 ] : null,
                 'target_user' => $target ? [
                     'id' => (int) $target->id,
@@ -279,8 +278,10 @@ class SuperAdminDashboardController extends Controller
         return response()->json([
             'data' => $data,
             'meta' => [
-                'current_page' => $page,
-                'per_page' => $perPage,
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
                 'limit' => self::AUDIT_RECENT_HARD_LIMIT,
                 'returned' => count($data),
             ],

@@ -107,11 +107,6 @@ const OverviewPage: React.FC = () => {
           value: '–',
           tone: 'success',
         },
-        {
-          label: t('admin.overview.kpi.pending_registrations'),
-          value: '–',
-          tone: 'danger',
-        },
       ];
     }
     return [
@@ -139,11 +134,6 @@ const OverviewPage: React.FC = () => {
         label: t('admin.overview.kpi.two_factor_coverage'),
         value: `${formatNumber(data.users.two_factor_coverage.percent)}%`,
         tone: 'success',
-      },
-      {
-        label: t('admin.overview.kpi.pending_registrations'),
-        value: formatNumber(data.registrations.pending),
-        tone: data.registrations.pending > 0 ? 'danger' : 'neutral',
       },
     ];
   }, [data, t]);
@@ -205,16 +195,6 @@ const OverviewPage: React.FC = () => {
               </dt>
               <dd className="font-medium text-[var(--text-primary)]">
                 {data ? formatNumber(data.users.two_factor_coverage.enabled) : '–'}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-2 border-b border-[var(--border-default)] pb-2">
-              <dt className="text-[var(--text-tertiary)]">
-                {t('admin.overview.fields.avg_pending_age_days')}
-              </dt>
-              <dd className="font-medium text-[var(--text-primary)]">
-                {data?.registrations.avg_pending_age_days == null
-                  ? '–'
-                  : formatNumber(data.registrations.avg_pending_age_days)}
               </dd>
             </div>
           </dl>

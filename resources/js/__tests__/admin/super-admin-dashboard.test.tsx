@@ -13,6 +13,9 @@ const superAdminDashboardApiMock = {
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string, vars?: Record<string, unknown>) => {
+    if (key === 'common.of') {
+      return `${key}:${String(vars?.current)}|${String(vars?.last)}`;
+    }
     if (vars && typeof vars === 'object') {
       const parts: string[] = [];
       const keys = Object.keys(vars);
@@ -56,7 +59,6 @@ describe('super admin overview page', () => {
           two_factor_coverage: { enabled: 11, active_users: 22, percent: 50 },
         },
         login_attempts: { last_24h: { successful: 100, failed: 5, total: 105 } },
-        registrations: { pending: 2, avg_pending_age_days: 1.2 },
         generated_at: '2026-07-03T08:00:00Z',
       },
     });
@@ -75,6 +77,8 @@ describe('super admin overview page', () => {
     expect(
       screen.getAllByText('admin.overview.kpi.two_factor_coverage').length,
     ).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('admin.overview.kpi.pending_registrations')).not.toBeInTheDocument();
+    expect(screen.queryByText('admin.overview.fields.avg_pending_age_days')).not.toBeInTheDocument();
   });
 
   it('navigates when a quick link is clicked', async () => {
@@ -84,7 +88,6 @@ describe('super admin overview page', () => {
         organizations: { active: 1, total: 1 },
         users: { active: 1, total: 1, two_factor_coverage: { enabled: 0, active_users: 1, percent: 0 } },
         login_attempts: { last_24h: { successful: 0, failed: 0, total: 0 } },
-        registrations: { pending: 0, avg_pending_age_days: null },
         generated_at: '2026-07-03T08:00:00Z',
       },
     });
@@ -117,7 +120,6 @@ describe('super admin overview page', () => {
         organizations: { active: 1, total: 1 },
         users: { active: 1, total: 1, two_factor_coverage: { enabled: 0, active_users: 1, percent: 0 } },
         login_attempts: { last_24h: { successful: 0, failed: 0, total: 0 } },
-        registrations: { pending: 0, avg_pending_age_days: null },
         generated_at: '2026-07-03T08:00:00Z',
       },
     });
@@ -241,7 +243,7 @@ describe('super admin audit recent page', () => {
             id: 1000 + i,
             action: 'login',
             description: `Event ${i}`,
-            actor: { id: 1, name: 'Admin', email: 'a@example.test' },
+            actor: { id: 1, name: 'Admin' },
             target_user: null,
             scope_type: null,
             scope_id: null,
@@ -249,7 +251,7 @@ describe('super admin audit recent page', () => {
             ip_address: '127.0.0.1',
             created_at: '2026-07-03T07:5' + (i % 6) + ':00Z',
           })),
-          meta: { current_page: 1, per_page: 50, limit: 50, returned: 50 },
+          meta: { current_page: 1, last_page: 2, per_page: 50, total: 55, limit: 50, returned: 50 },
         };
       }
       return {
@@ -257,7 +259,7 @@ describe('super admin audit recent page', () => {
           id: 2000 + i,
           action: 'role_assigned',
           description: `Page 2 event ${i}`,
-          actor: { id: 1, name: 'Admin', email: 'a@example.test' },
+          actor: { id: 1, name: 'Admin' },
           target_user: { id: 2, name: 'Bob' },
           scope_type: 'project',
           scope_id: 9,
@@ -265,7 +267,7 @@ describe('super admin audit recent page', () => {
           ip_address: '127.0.0.1',
           created_at: '2026-07-03T06:5' + (i % 6) + ':00Z',
         })),
-        meta: { current_page: 2, per_page: 50, limit: 50, returned: 5 },
+        meta: { current_page: 2, last_page: 2, per_page: 50, total: 55, limit: 50, returned: 5 },
       };
     });
 
@@ -277,6 +279,7 @@ describe('super admin audit recent page', () => {
 
     await screen.findByTestId('audit-recent-card');
     expect(await screen.findAllByTestId('audit-recent-row')).toHaveLength(50);
+    expect(screen.getByTestId('audit-recent-page-indicator')).toHaveTextContent('common.of:1|2');
 
     // Wait until the API was definitely called once (initial mount settled).
     await waitFor(() =>
@@ -301,7 +304,7 @@ describe('super admin audit recent page', () => {
   it('renders empty state when there are no events', async () => {
     superAdminDashboardApiMock.auditRecent.mockResolvedValue({
       data: [],
-      meta: { current_page: 1, per_page: 50, limit: 50, returned: 0 },
+      meta: { current_page: 1, last_page: 1, per_page: 50, total: 0, limit: 50, returned: 0 },
     });
     const { default: AuditRecent } = await import(
       '@pages/admin/audit-recent/AuditRecent'

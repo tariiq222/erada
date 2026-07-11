@@ -72,10 +72,7 @@ const AuditRecentPage: React.FC = () => {
     void fetchData(page);
   }, [fetchData, page]);
 
-  const lastPage = useMemo(() => {
-    if (!meta) return 1;
-    return Math.max(1, Math.ceil(meta.returned / meta.per_page));
-  }, [meta]);
+  const lastPage = useMemo(() => meta?.last_page ?? 1, [meta]);
 
   return (
     <div className="p-6 space-y-6">
@@ -182,7 +179,7 @@ const AuditRecentPage: React.FC = () => {
                 <Button
                   variant="secondary"
                   onClick={() => setPage((p) => p + 1)}
-                  disabled={loading || data.length < perPage}
+                  disabled={loading || page >= lastPage}
                   data-testid="audit-recent-next"
                 >
                   {t('common.next')}

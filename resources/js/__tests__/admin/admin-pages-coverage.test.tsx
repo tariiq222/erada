@@ -8,6 +8,9 @@ const navigateMock = vi.fn();
 const organizationsApiMock = {
   list: vi.fn(),
 };
+const scopeTypesApiMock = {
+  list: vi.fn(),
+};
 const rolesApiMock = {
   list: vi.fn(),
 };
@@ -29,6 +32,7 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('@entities/admin', () => ({
   organizationsApi: organizationsApiMock,
+  scopeTypesApi: scopeTypesApiMock,
 }));
 
 vi.mock('@entities/role', () => ({
@@ -43,6 +47,7 @@ describe('admin pages coverage', () => {
   beforeEach(() => {
     navigateMock.mockReset();
     organizationsApiMock.list.mockReset();
+    scopeTypesApiMock.list.mockReset();
     rolesApiMock.list.mockReset();
     scopedRolesApiMock.auditLogs.mockReset();
     Element.prototype.scrollIntoView = vi.fn();
@@ -85,6 +90,16 @@ describe('admin pages coverage', () => {
     rerender(<OrganizationsList />);
     await userEvent.click(screen.getByText('common.search'));
     expect(await screen.findByText('organization failure')).toBeInTheDocument();
+  });
+
+  it('does not expose a scope-type create action without a real form', async () => {
+    scopeTypesApiMock.list.mockResolvedValue({ data: [] });
+    const { default: ScopeTypesList } = await import('@pages/admin/scope-types/ScopeTypesList');
+
+    render(<ScopeTypesList />);
+
+    expect(await screen.findByText('admin.scopeTypes.empty')).toBeInTheDocument();
+    expect(screen.queryByText('admin.scopeTypes.add')).not.toBeInTheDocument();
   });
 
   it('loads roles and filters system and custom roles', async () => {

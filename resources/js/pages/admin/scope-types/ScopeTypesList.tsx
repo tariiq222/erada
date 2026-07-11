@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
 import { scopeTypesApi, ScopeType } from '@entities/admin';
 import { Card } from '@shared/ui/Card';
 import { Button } from '@shared/ui/Button';
@@ -8,12 +7,10 @@ import { Input } from '@shared/ui/Input';
 import { Badge } from '@shared/ui/Badge';
 import { PageHeader } from '@shared/ui/PageHeader';
 import { Alert } from '@shared/ui/Alert';
-import {IconSearch, IconPlus, IconTag, IconLoader} from '@tabler/icons-react';
+import {IconSearch, IconTag, IconLoader} from '@tabler/icons-react';
 
 export const ScopeTypesList: React.FC = () => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
-
   const [data, setData] = useState<ScopeType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,12 +41,6 @@ export const ScopeTypesList: React.FC = () => {
         iconTone="admin"
         title={t('admin.scopeTypes.title')}
         subtitle={t('admin.scopeTypes.subtitle')}
-        actions={
-          <Button onClick={() => navigate('/admin/scope-types/new')}>
-            <IconPlus className="w-4 h-4 me-2" />
-            {t('admin.scopeTypes.add')}
-          </Button>
-        }
       />
 
       {error && (
