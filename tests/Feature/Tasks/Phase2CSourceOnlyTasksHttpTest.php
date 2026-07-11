@@ -8,6 +8,7 @@ use App\Modules\Core\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
@@ -74,9 +75,7 @@ class Phase2CSourceOnlyTasksHttpTest extends TestCase
         yield 'OVR normal' => ['IncidentReport', 'cfa_phase2c_ovr_normal', false];
     }
 
-    /**
-     * @dataProvider sourceTypesProvider
-     */
+    #[DataProvider('sourceTypesProvider')]
     public function test_cluster_actor_show_source_only_task_applies_cross_org_shape(string $sourceType, string $actionKey, bool $confidential): void
     {
         // Cluster_auditor SHOW on a child org's source-only task.
