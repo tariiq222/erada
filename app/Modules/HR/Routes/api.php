@@ -67,4 +67,18 @@ Route::middleware('auth:sanctum')->group(function () {
             ->get('/certificates/{certificate}/download', [EmployeeCertificateController::class, 'download'])
             ->name('hr.certificates.download');
     });
+
+    Route::prefix('admin/departments')
+        ->middleware(['role:super_admin', 'engine_capability:'.Capability::DEPARTMENTS_VIEW])
+        ->group(function () {
+            Route::get('/list', [DepartmentController::class, 'list']);
+            Route::get('/tree', [DepartmentController::class, 'tree']);
+            Route::get('/hierarchy', [DepartmentController::class, 'hierarchy']);
+            Route::get('/allowed-levels', [DepartmentController::class, 'allowedLevels']);
+            Route::get('/', [DepartmentController::class, 'index']);
+            Route::post('/', [DepartmentController::class, 'store']);
+            Route::get('/{department}', [DepartmentController::class, 'show']);
+            Route::match(['put', 'patch'], '/{department}', [DepartmentController::class, 'update']);
+            Route::delete('/{department}', [DepartmentController::class, 'destroy']);
+        });
 });

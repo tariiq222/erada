@@ -231,5 +231,60 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/overview', [SuperAdminDashboardController::class, 'overview']);
         Route::get('/security/alerts', [SuperAdminDashboardController::class, 'securityAlerts']);
         Route::get('/audit/recent', [SuperAdminDashboardController::class, 'auditRecent']);
+
+        Route::prefix('organizations')->group(function () {
+            Route::get('/', [OrganizationController::class, 'index']);
+            Route::post('/', [OrganizationController::class, 'store'])->middleware(['idempotency']);
+            Route::get('/{organization}', [OrganizationController::class, 'show']);
+            Route::put('/{organization}', [OrganizationController::class, 'update'])->middleware(['idempotency']);
+            Route::patch('/{organization}', [OrganizationController::class, 'update'])->middleware(['idempotency']);
+            Route::delete('/{organization}', [OrganizationController::class, 'destroy'])->middleware(['throttle:delete']);
+        });
+
+        Route::prefix('scope-types')->group(function () {
+            Route::get('/', [ScopeTypeController::class, 'index']);
+            Route::post('/', [ScopeTypeController::class, 'store'])->middleware(['idempotency']);
+            Route::get('/{scopeType}', [ScopeTypeController::class, 'show']);
+            Route::put('/{scopeType}', [ScopeTypeController::class, 'update'])->middleware(['idempotency']);
+            Route::patch('/{scopeType}', [ScopeTypeController::class, 'update'])->middleware(['idempotency']);
+            Route::delete('/{scopeType}', [ScopeTypeController::class, 'destroy'])->middleware(['throttle:delete']);
+        });
+
+        Route::prefix('roles')->group(function () {
+            Route::get('/', [RoleController::class, 'index']);
+            Route::get('/permissions', [RoleController::class, 'permissions']);
+            Route::get('/abilities', [RoleController::class, 'abilities']);
+            Route::get('/scope-options', [RoleController::class, 'scopeOptions']);
+            Route::post('/', [RoleController::class, 'store'])->middleware(['idempotency']);
+            Route::get('/{roleDefinition}', [RoleController::class, 'show']);
+            Route::put('/{roleDefinition}', [RoleController::class, 'update'])->middleware(['idempotency']);
+            Route::delete('/{roleDefinition}', [RoleController::class, 'destroy']);
+            Route::post('/assign', [RoleController::class, 'assignToUser'])->middleware('idempotency');
+        });
+
+        Route::prefix('governance-rules')->group(function () {
+            Route::get('/', [GovernanceRulesController::class, 'index']);
+            Route::match(['put', 'patch'], '/', [GovernanceRulesController::class, 'update']);
+        });
+
+        Route::get('/users/list', [UserController::class, 'list']);
+        Route::get('/users/stats', [UserController::class, 'stats']);
+        Route::get('/users', [UserController::class, 'index']);
+        Route::get('/users/{user}', [UserController::class, 'show']);
+        Route::get('/users/{user}/security', [AuthController::class, 'getSecurityStatus']);
+        Route::middleware(['throttle:admin', 'idempotency'])->group(function () {
+            Route::post('/users', [UserController::class, 'store']);
+            Route::put('/users/{user}', [UserController::class, 'update']);
+            Route::patch('/users/{user}', [UserController::class, 'update']);
+            Route::post('/users/{user}/unlock', [AuthController::class, 'unlockAccount']);
+        });
+        Route::delete('/users/{user}', [UserController::class, 'destroy'])
+            ->middleware('throttle:delete');
+
+        Route::prefix('scoped-roles')->group(function () {
+            Route::get('/user/{user}', [ScopedRoleController::class, 'userScopedRoles']);
+            Route::get('/user/{user}/access-summary', [ScopedRoleController::class, 'accessSummary']);
+            Route::get('/audit-logs', [ScopedRoleController::class, 'auditLogs']);
+        });
     });
 });

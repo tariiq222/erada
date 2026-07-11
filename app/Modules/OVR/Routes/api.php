@@ -109,3 +109,18 @@ Route::middleware('auth:sanctum')->prefix('ovr')->group(function () {
         ->middleware(['throttle:30,1', 'engine_capability:ovr.manage_types'])
         ->name('ovr.categories.reportable-types.store');
 });
+
+Route::middleware(['auth:sanctum', 'role:super_admin'])->prefix('admin/incident-types')->group(function () {
+    Route::get('/', [IncidentTypeController::class, 'index'])
+        ->middleware(['throttle:60,1', 'engine_capability:ovr.view']);
+    Route::get('/list', [IncidentTypeController::class, 'list'])
+        ->middleware(['throttle:60,1', 'engine_capability:ovr.view']);
+    Route::post('/', [IncidentTypeController::class, 'store'])
+        ->middleware(['throttle:30,1', 'engine_capability:ovr.manage_types']);
+    Route::put('/{type}', [IncidentTypeController::class, 'update'])
+        ->middleware(['throttle:30,1', 'engine_capability:ovr.manage_types']);
+    Route::delete('/{type}', [IncidentTypeController::class, 'destroy'])
+        ->middleware(['throttle:30,1', 'engine_capability:ovr.manage_types']);
+    Route::post('/{type}/reportable-types', [IncidentTypeController::class, 'storeReportableType'])
+        ->middleware(['throttle:30,1', 'engine_capability:ovr.manage_types']);
+});

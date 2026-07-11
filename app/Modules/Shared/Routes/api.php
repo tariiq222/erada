@@ -55,4 +55,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/export', [ActivityLogController::class, 'export']);
         Route::get('/{activityLog}', [ActivityLogController::class, 'show']);
     });
+
+    Route::prefix('admin/activity-logs')->middleware('role:super_admin')->group(function () {
+        Route::get('/', [ActivityLogController::class, 'index']);
+        Route::get('/export', [ActivityLogController::class, 'export']);
+        Route::get('/{activityLog}', [ActivityLogController::class, 'show']);
+    });
 });
