@@ -233,9 +233,8 @@ describe('super admin audit recent page', () => {
   it('caps at 50 events, renders rows, and supports pagination', async () => {
     const user = userEvent.setup();
     superAdminDashboardApiMock.auditRecent.mockImplementation(async (params) => {
-      // First call returns full 50 rows so the Next button is enabled. After the
-      // click, page=2 is requested and a short response is returned so the
-      // Next button then disables (returned < per_page).
+      // Both pages return a full 50 rows. Pagination controls must use the
+      // backend last_page value rather than infer page bounds from row count.
       const requestedPage = params?.page ?? 1;
       if (requestedPage === 1) {
         return {
@@ -255,7 +254,7 @@ describe('super admin audit recent page', () => {
         };
       }
       return {
-        data: Array.from({ length: 5 }, (_, i) => ({
+        data: Array.from({ length: 50 }, (_, i) => ({
           id: 2000 + i,
           action: 'role_assigned',
           description: `Page 2 event ${i}`,
@@ -267,7 +266,7 @@ describe('super admin audit recent page', () => {
           ip_address: '127.0.0.1',
           created_at: '2026-07-03T06:5' + (i % 6) + ':00Z',
         })),
-        meta: { current_page: 2, last_page: 2, per_page: 50, total: 55, limit: 50, returned: 5 },
+        meta: { current_page: 2, last_page: 2, per_page: 50, total: 100, limit: 50, returned: 50 },
       };
     });
 
@@ -288,11 +287,10 @@ describe('super admin audit recent page', () => {
 
     await user.click(screen.getByTestId('audit-recent-next'));
 
-    // After the click, the component must re-render with the shorter list and
-    // pass page=2 to the API. We assert by waiting for the row count to drop.
     await waitFor(() =>
-      expect(screen.getAllByTestId('audit-recent-row')).toHaveLength(5),
+      expect(screen.getByTestId('audit-recent-page-indicator')).toHaveTextContent('common.of:2|2'),
     );
+    expect(screen.getByTestId('audit-recent-next')).toBeDisabled();
 
     // And confirm the API was at least once invoked with page=2.
     const pageTwoCalls = superAdminDashboardApiMock.auditRecent.mock.calls.filter(

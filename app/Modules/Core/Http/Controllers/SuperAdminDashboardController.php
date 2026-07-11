@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\DB;
  *   GET /api/admin/overview
  *       Aggregated platform-wide counts: active orgs, active users,
  *       login attempts in the last 24h (successful vs. failed),
- *       pending registration requests.
+ *       and two-factor authentication coverage.
  *
  *   GET /api/admin/security/alerts
  *       Curated alert metadata from login_attempts and activity_logs
