@@ -61,6 +61,36 @@ class MigrationSafetyPreflightTest extends TestCase
         );
     }
 
+    public function test_preflight_honors_explicit_database_connection_environment(): void
+    {
+        $script = base_path('scripts/migration-safety-preflight.sh');
+
+        $this->assertFileExists($script);
+
+        // An explicit invalid port proves the script inherits the caller's
+        // DB_* environment instead of silently replacing it with the local
+        // testing default. CI exposes PostgreSQL on 5432 while local tests use
+        // 5433, so overriding the caller here would make the preflight inspect
+        // the wrong database.
+        $command = sprintf(
+            'MIGRATION_SAFETY_APP_ENV=testing DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_PORT=1 DB_DATABASE=iradah_pmo_test DB_USERNAME=iradah DB_PASSWORD=secret bash %s 2>&1',
+            escapeshellarg($script)
+        );
+
+        $output = [];
+        $exit = 0;
+        exec($command, $output, $exit);
+        $combined = implode("\n", $output);
+
+        $this->assertNotSame(0, $exit, 'an unreachable explicit DB connection must fail closed');
+        $this->assertStringContainsString('migrate:status failed', $combined);
+        $this->assertStringNotContainsString(
+            'destructive migration(s) pending',
+            $combined,
+            'connection failures must not be misreported as pending migrations'
+        );
+    }
+
     public function test_blocked_migration_count_matches_playbook_catalog(): void
     {
         // The blocked list inside the script must stay in sync with

@@ -97,26 +97,13 @@ fi
 #   Y_m_d_HXXXXX_migration_name ............... [N] Ran
 #   Y_m_d_HXXXXX_other_migration_name ......................... Pending
 #
-# When MIGRATION_SAFETY_APP_ENV=testing is set, we ALSO pin the DB
-# connection to the testing DB. Laravel's phpunit.xml overrides set
-# the test DB to 127.0.0.1:5433 / iradah_pmo_test; the artisan CLI on
-# its own reads .env (which points at the dev DB), so we override
-# the relevant DB_* env vars here. The script never reads or writes
-# secret material; it only configures which connection artisan uses
-# for the read-only `migrate:status` call.
+# When MIGRATION_SAFETY_APP_ENV is set, pass the Laravel environment through
+# while preserving the caller's DB_* variables. Local PHPUnit exposes its
+# test database on 5433, while GitHub Actions exposes PostgreSQL on 5432;
+# replacing the caller's connection here would inspect the wrong database.
 APP_ARGS=()
 if [[ -n "${MIGRATION_SAFETY_APP_ENV:-}" ]]; then
     APP_ARGS+=(--env="$MIGRATION_SAFETY_APP_ENV")
-    DB_ARGS=(
-        "DB_CONNECTION=pgsql"
-        "DB_HOST=127.0.0.1"
-        "DB_PORT=5433"
-        "DB_DATABASE=iradah_pmo_test"
-        "DB_USERNAME=iradah"
-        "DB_PASSWORD=secret"
-    )
-else
-    DB_ARGS=()
 fi
 
 # Capture via a temp file. $(...) inside `set -e` can drop stdout
@@ -124,12 +111,15 @@ fi
 # file keeps the contract deterministic.
 STATUS_TMP="$(mktemp -t preflight-status.XXXXXX)"
 trap 'rm -f "$STATUS_TMP"' EXIT
-env "${DB_ARGS[@]}" php "$ARTISAN" migrate:status "${APP_ARGS[@]}" >"$STATUS_TMP" 2>&1 || STATUS_EXIT=$?
+php "$ARTISAN" migrate:status "${APP_ARGS[@]}" >"$STATUS_TMP" 2>&1 || STATUS_EXIT=$?
 STATUS_EXIT="${STATUS_EXIT:-0}"
 STATUS_RAW="$(cat "$STATUS_TMP")"
 
-if [[ "$STATUS_EXIT" -ne 0 && -z "$STATUS_RAW" ]]; then
+if [[ "$STATUS_EXIT" -ne 0 ]]; then
     printf '%s✖%s migrate:status failed (exit %s) — unable to read migrations table.\n' "$RED" "$NC" "$STATUS_EXIT" >&2
+    if [[ -n "$STATUS_RAW" ]]; then
+        printf '%s\n' "$STATUS_RAW" >&2
+    fi
     printf '   Re-run with MIGRATION_SAFETY_BYPASS=1 only as an emergency override.\n' >&2
     exit 1
 fi
