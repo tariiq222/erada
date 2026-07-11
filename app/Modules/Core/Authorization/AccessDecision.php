@@ -409,6 +409,14 @@ class AccessDecision
             return static::trace(true, 'super_admin', 'super_admin bypasses all checks');
         }
 
+        // A non-super-admin without an organization must never receive a
+        // target-free grant through the legacy functional-role bridge. Target
+        // checks already fail closed through sameOrganization(); this closes the
+        // equivalent capability-only path before any Spatie role is consulted.
+        if ($target === null && $user->organization_id === null) {
+            return static::trace(false, 'organization_required', 'non-super-admin user has no organization context');
+        }
+
         // 1.6 Phase 9-D-B — cluster_tree rescue (BEFORE org_isolation_denied).
         //     كل شروط الفحص موجودة في helper واحد لتقليل التعقيد الإدراكي لـ whyCan.
         if ($target !== null
