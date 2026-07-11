@@ -4,7 +4,12 @@
     "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
   "include": [
-    "resources/admin/**/*.{test,spec}.{ts,tsx}",
+    "resources/admin/test/**/*.ts",
+    "resources/admin/test/**/*.tsx",
+    "resources/admin/**/*.test.ts",
+    "resources/admin/**/*.test.tsx",
+    "resources/admin/**/*.spec.ts",
+    "resources/admin/**/*.spec.tsx",
     "resources/admin/**/*.d.ts"
   ],
   "exclude": ["node_modules"]

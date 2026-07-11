@@ -28,5 +28,12 @@
     "esModuleInterop": true
   },
   "include": ["resources/admin/**/*"],
-  "exclude": ["node_modules", "resources/admin/**/*.{test,spec}.{ts,tsx}"]
+  "exclude": [
+    "node_modules",
+    "resources/admin/test/**/*",
+    "resources/admin/**/*.test.ts",
+    "resources/admin/**/*.test.tsx",
+    "resources/admin/**/*.spec.ts",
+    "resources/admin/**/*.spec.tsx"
+  ]
 }

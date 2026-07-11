@@ -9,6 +9,11 @@ const ROOT = process.cwd();
 const ADMIN_ROOT = path.join(ROOT, 'resources/admin');
 const SOURCE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx']);
 const FORBIDDEN_ALIASES = ['@app', '@pages', '@widgets', '@features'];
+const ALLOWED_ALIAS_ROOTS = new Map([
+  ['@admin', path.join(ROOT, 'resources/admin')],
+  ['@shared', path.join(ROOT, 'resources/js/shared')],
+  ['@entities', path.join(ROOT, 'resources/js/entities')],
+]);
 const FORBIDDEN_OPERATIONAL_ROOTS = [
   path.join(ROOT, 'resources/js/app'),
   path.join(ROOT, 'resources/js/pages'),
@@ -31,6 +36,13 @@ function isForbiddenImport(specifier, importer) {
     return true;
   }
 
+  for (const [alias, aliasRoot] of ALLOWED_ALIAS_ROOTS) {
+    if (matchesAlias(specifier, alias)) {
+      const suffix = specifier.slice(alias.length).replace(/^\//, '');
+      return !isWithin(path.resolve(aliasRoot, suffix), aliasRoot);
+    }
+  }
+
   if (!specifier.startsWith('.')) {
     return false;
   }
@@ -51,6 +63,26 @@ function runSelfTest() {
     true,
     'operational page imports must be rejected',
   );
+  assert.equal(
+    isForbiddenImport('@shared/../pages/admin/Overview', 'resources/admin/app/AdminApp.tsx'),
+    true,
+    'shared alias traversal into operational pages must be rejected',
+  );
+  assert.equal(
+    isForbiddenImport('@entities/../features/access-control', 'resources/admin/app/AdminApp.tsx'),
+    true,
+    'entities alias traversal into operational features must be rejected',
+  );
+  assert.equal(
+    isForbiddenImport('@admin/../../js/widgets/admin-shell', 'resources/admin/app/AdminApp.tsx'),
+    true,
+    'admin alias traversal into operational widgets must be rejected',
+  );
+  assert.deepEqual(
+    extractImports("const page = import(/* chunk */ '../../js/pages/admin/Overview');"),
+    ['../../js/pages/admin/Overview'],
+    'commented dynamic imports must be extracted',
+  );
   console.log('admin-boundaries:self-test — PASS');
 }
 
@@ -70,13 +102,92 @@ async function walk(directory) {
   return files;
 }
 
-function extractImports(source) {
-  const imports = [];
-  const pattern = /(?:import|export)\s+(?:[^'";]*?\s+from\s+)?["']([^"']+)["']|import\s*\(\s*["']([^"']+)["']\s*\)/g;
-  let match;
+function tokenize(source) {
+  const tokens = [];
+  let index = 0;
 
-  while ((match = pattern.exec(source)) !== null) {
-    imports.push(match[1] ?? match[2]);
+  while (index < source.length) {
+    const char = source[index];
+    const next = source[index + 1];
+
+    if (/\s/.test(char)) {
+      index += 1;
+      continue;
+    }
+
+    if (char === '/' && next === '/') {
+      index = source.indexOf('\n', index + 2);
+      if (index === -1) break;
+      continue;
+    }
+
+    if (char === '/' && next === '*') {
+      const commentEnd = source.indexOf('*/', index + 2);
+      index = commentEnd === -1 ? source.length : commentEnd + 2;
+      continue;
+    }
+
+    if (char === "'" || char === '"') {
+      const quote = char;
+      let value = '';
+      index += 1;
+      while (index < source.length && source[index] !== quote) {
+        if (source[index] === '\\' && index + 1 < source.length) {
+          value += source[index + 1];
+          index += 2;
+        } else {
+          value += source[index];
+          index += 1;
+        }
+      }
+      index += 1;
+      tokens.push({ type: 'string', value });
+      continue;
+    }
+
+    if (/[A-Za-z_$]/.test(char)) {
+      let end = index + 1;
+      while (end < source.length && /[A-Za-z0-9_$]/.test(source[end])) {
+        end += 1;
+      }
+      tokens.push({ type: 'identifier', value: source.slice(index, end) });
+      index = end;
+      continue;
+    }
+
+    tokens.push({ type: 'punctuation', value: char });
+    index += 1;
+  }
+
+  return tokens;
+}
+
+function extractImports(source) {
+  const tokens = tokenize(source);
+  const imports = [];
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token.type !== 'identifier' || (token.value !== 'import' && token.value !== 'export')) {
+      continue;
+    }
+
+    if (token.value === 'import' && tokens[index + 1]?.value === '(') {
+      const specifier = tokens[index + 2];
+      if (specifier?.type === 'string') {
+        imports.push(specifier.value);
+      }
+      continue;
+    }
+
+    for (let cursor = index + 1; cursor < tokens.length; cursor += 1) {
+      const candidate = tokens[cursor];
+      if (candidate.value === ';') break;
+      if (candidate.type === 'string') {
+        imports.push(candidate.value);
+        break;
+      }
+    }
   }
 
   return imports;
