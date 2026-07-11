@@ -37,7 +37,25 @@ export function Login() {
     setSubmitting(true);
 
     try {
-      await login(email, password);
+      const result = await login(email, password);
+
+      if (
+        result.requiresTwoFactor &&
+        result.pendingToken &&
+        result.userId
+      ) {
+        navigate('/verify-2fa', {
+          replace: true,
+          state: {
+            pendingToken: result.pendingToken,
+            userId: result.userId,
+            userName: result.userName,
+            returnTo,
+          },
+        });
+        return;
+      }
+
       navigate(returnTo, { replace: true });
     } catch (caught: unknown) {
       const message = caught instanceof Error ? caught.message : t('auth.login_failed');

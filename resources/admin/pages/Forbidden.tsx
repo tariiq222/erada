@@ -1,12 +1,14 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { IconLockAccess } from '@tabler/icons-react';
+import { useLocale } from '@shared/contexts/LocaleContext';
 
 export function Forbidden() {
   const { t } = useTranslation();
+  const { direction } = useLocale();
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[var(--surface-subtle)] p-6" dir="rtl">
+    <main className="flex min-h-screen items-center justify-center bg-[var(--surface-subtle)] p-6" dir={direction}>
       <section className="max-w-md text-center">
         <IconLockAccess className="mx-auto h-12 w-12 text-[var(--status-danger)]" aria-hidden="true" />
         <h1 className="mt-5 text-2xl font-bold text-[var(--text-primary)]">{t('ovr.api.access_denied')}</h1>

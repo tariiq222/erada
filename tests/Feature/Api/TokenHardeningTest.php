@@ -6,6 +6,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Services\TwoFactorService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
@@ -48,7 +49,7 @@ class TokenHardeningTest extends TestCase
         $this->assertTrue($this->getCookie($response, 'auth_token')->isHttpOnly());
     }
 
-    public function test_two_factor_verify_sets_cookie_without_returning_plain_text_token(): void
+    public function test_confirmed_two_factor_login_returns_an_expiring_ip_bound_challenge_without_authentication(): void
     {
         $user = User::factory()->create([
             'email' => 'token-2fa@example.com',
@@ -61,23 +62,68 @@ class TokenHardeningTest extends TestCase
         $twoFactorService->confirm($user, $twoFactorService->getCurrentOtp($user));
         $user->refresh();
 
-        // 2FA was removed from the login flow; a user with 2FA enabled now logs in
-        // directly via /api/login. The auth cookie is set on the login response
-        // itself — no second 2fa/verify call and no pending_token in the payload.
-        $response = $this->postJson('/api/login', [
-            'email' => 'token-2fa@example.com',
-            'password' => 'Password123!',
+        $response = $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.10'])
+            ->postJson('/api/login', [
+                'email' => 'token-2fa@example.com',
+                'password' => 'Password123!',
+            ]);
+
+        $response->assertOk()
+            ->assertCookieMissing('auth_token')
+            ->assertJsonPath('requires_2fa', true)
+            ->assertJsonStructure(['pending_token', 'user' => ['id', 'name']])
+            ->assertJsonMissingPath('token')
+            ->assertJsonMissingPath('plainTextToken');
+
+        $this->assertResponseHasNoBearerLikeToken($response->json());
+        $this->assertCount(0, $user->fresh()->tokens);
+
+        $pendingToken = $response->json('pending_token');
+        $this->assertIsString($pendingToken);
+        $this->assertGreaterThanOrEqual(40, strlen($pendingToken));
+        $this->assertSame([
+            'user_id' => $user->id,
+            'ip' => '203.0.113.10',
+        ], Cache::get('2fa_pending_'.$pendingToken));
+
+        $this->travel(6)->minutes();
+        $this->assertNull(Cache::get('2fa_pending_'.$pendingToken));
+    }
+
+    public function test_two_factor_challenge_verification_sets_an_http_only_cookie_without_returning_a_token(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'token-2fa-verify@example.com',
+            'password' => Hash::make('Password123!'),
+            'is_active' => true,
         ]);
+
+        $twoFactorService = app(TwoFactorService::class);
+        $twoFactorService->enable($user);
+        $twoFactorService->confirm($user, $twoFactorService->getCurrentOtp($user));
+        $user->refresh();
+
+        $challenge = $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.20'])
+            ->postJson('/api/login', [
+                'email' => 'token-2fa-verify@example.com',
+                'password' => 'Password123!',
+            ]);
+
+        $response = $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.20'])
+            ->postJson('/api/2fa/verify', [
+                'user_id' => $user->id,
+                'code' => $twoFactorService->getCurrentOtp($user),
+                'pending_token' => $challenge->json('pending_token'),
+            ]);
 
         $response->assertOk()
             ->assertCookie('auth_token')
             ->assertJsonMissingPath('token')
-            ->assertJsonMissingPath('plainTextToken')
-            ->assertJsonMissingPath('requires_2fa')
-            ->assertJsonMissingPath('pending_token');
+            ->assertJsonMissingPath('plainTextToken');
 
         $this->assertResponseHasNoBearerLikeToken($response->json());
         $this->assertTrue($this->getCookie($response, 'auth_token')->isHttpOnly());
+        $this->assertNull(Cache::get('2fa_pending_'.$challenge->json('pending_token')));
     }
 
     private function getCookie($response, string $name)

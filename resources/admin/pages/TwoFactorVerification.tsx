@@ -61,8 +61,7 @@ export function TwoFactorVerification() {
     setError('');
     setSubmitting(true);
     try {
-      const response = await twoFactorApi.verify(state.userId, code, state.pendingToken);
-      if (response.token) api.setToken(response.token);
+      await twoFactorApi.verify(state.userId, code, state.pendingToken);
       api.setAuthenticated(true);
       await refreshUser();
       navigate(returnTo, { replace: true });

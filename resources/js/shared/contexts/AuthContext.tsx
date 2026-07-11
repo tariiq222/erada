@@ -26,6 +26,8 @@ export interface AccessConfig {
 // نتيجة تسجيل الدخول
 export interface LoginResult {
 	success: boolean;
+	requiresTwoFactor?: boolean;
+	pendingToken?: string;
 	userId?: number;
 	userName?: string;
 }
@@ -76,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 	const isLoadingRef = useRef(false);
 	const hasAttemptedLoadRef = useRef(isInitialPublicPath);
 
-	const loadUser = useCallback(async () => {
+	const loadUser = useCallback(async (force = false) => {
 		const currentPath = window.location.pathname;
 
 		// منع الاستدعاءات المتزامنة
@@ -85,13 +87,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		}
 
 		// على الصفحات العامة، لا نحتاج لتحميل المستخدم أبداً
-		if (isPublicPath(currentPath)) {
+		if (isPublicPath(currentPath) && !force) {
 			hasAttemptedLoadRef.current = true;
 			return;
 		}
 
 		// إذا حاولنا التحميل مسبقاً (سواء نجح أو فشل)، لا نعيد المحاولة
-		if (hasAttemptedLoadRef.current) {
+		if (hasAttemptedLoadRef.current && !force) {
 			return;
 		}
 
@@ -123,11 +125,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 	): Promise<LoginResult> => {
 		const response = await authApi.login(email, password);
 
-		// الـ Token الآن يُرسل في HttpOnly Cookie من الخادم
-		// نحتفظ بـ setToken للتوافق مع الإصدارات السابقة فقط
-		if (response.token) {
-			api.setToken(response.token);
+		if (response.requires_2fa && response.pending_token) {
+			api.clearAuth();
+			setUser(null);
+
+			return {
+				success: false,
+				requiresTwoFactor: true,
+				pendingToken: response.pending_token,
+				userId: response.user.id,
+				userName: response.user.name,
+			};
 		}
+
 		api.setAuthenticated(true);
 		setUser(response.user as User);
 
@@ -145,7 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 	}, []);
 
 	const refreshUser = useCallback(async () => {
-		await loadUser();
+		await loadUser(true);
 	}, [loadUser]);
 
 	// التحقق من دور واحد

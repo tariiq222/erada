@@ -11,6 +11,8 @@ const authMocks = vi.hoisted(() => ({
   logout: vi.fn(),
   refreshUser: vi.fn(),
   verifyTwoFactor: vi.fn(),
+  setAuthenticated: vi.fn(),
+  setToken: vi.fn(),
 }));
 
 type AuthState = {
@@ -20,6 +22,7 @@ type AuthState = {
 };
 
 let authState: AuthState;
+let localeDirection: 'rtl' | 'ltr';
 
 vi.mock('@shared/contexts/AuthContext', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -33,7 +36,7 @@ vi.mock('@shared/contexts/AuthContext', () => ({
 
 vi.mock('@shared/contexts/LocaleContext', () => ({
   LocaleProvider: ({ children }: { children: React.ReactNode }) => children,
-  useLocale: () => ({ locale: 'ar', direction: 'rtl', setLocale: vi.fn() }),
+  useLocale: () => ({ locale: localeDirection === 'rtl' ? 'ar' : 'en', direction: localeDirection, setLocale: vi.fn() }),
 }));
 
 vi.mock('@shared/contexts/ThemeContext', () => ({
@@ -56,8 +59,8 @@ vi.mock('@shared/api/twoFactor', () => ({
 
 vi.mock('@shared/api/client', () => ({
   api: {
-    setAuthenticated: vi.fn(),
-    setToken: vi.fn(),
+    setAuthenticated: authMocks.setAuthenticated,
+    setToken: authMocks.setToken,
   },
 }));
 
@@ -83,6 +86,7 @@ describe('admin authentication routing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authState = { user: null, isLoading: false, isAuthenticated: false };
+    localeDirection = 'rtl';
     document.documentElement.lang = 'ar';
     document.documentElement.dir = 'rtl';
   });
@@ -147,6 +151,56 @@ describe('admin authentication routing', () => {
     expect(window.location.pathname).not.toBe('/dashboard');
   });
 
+  it('moves a two-factor login challenge to verification with the safe return state', async () => {
+    const user = userEvent.setup();
+    setPath('/login?returnTo=%2Fusers%2F9');
+    authMocks.login.mockResolvedValue({
+      success: false,
+      requiresTwoFactor: true,
+      pendingToken: 'opaque-pending-token',
+      userId: 9,
+      userName: 'Admin User',
+    });
+
+    render(<AdminRouter />);
+
+    await user.type(screen.getByLabelText(new RegExp(`^${i18n.t('auth.email_label')}`)), 'admin@example.test');
+    await user.type(screen.getByLabelText(new RegExp(`^${i18n.t('auth.password_label')}`)), 'secret-password');
+    await user.click(screen.getByRole('button', { name: i18n.t('auth.login_button') }));
+
+    await waitFor(() => expect(window.location.pathname).toBe('/verify-2fa'));
+    expect(window.history.state.usr).toEqual({
+      pendingToken: 'opaque-pending-token',
+      userId: 9,
+      userName: 'Admin User',
+      returnTo: '/users/9',
+    });
+  });
+
+  it('uses the active locale direction on forbidden and not-found pages', async () => {
+    localeDirection = 'ltr';
+    authState = {
+      user: asUser(['organization_admin']),
+      isLoading: false,
+      isAuthenticated: true,
+    };
+    setPath('/overview');
+
+    const forbiddenRender = render(<AdminRouter />);
+    expect((await screen.findByRole('heading', { name: i18n.t('ovr.api.access_denied') })).closest('main')).toHaveAttribute('dir', 'ltr');
+    forbiddenRender.unmount();
+
+    authState = {
+      user: asUser(['super_admin']),
+      isLoading: false,
+      isAuthenticated: true,
+    };
+    setPath('/missing-admin-page');
+    render(<AdminRouter />);
+
+    expect((await screen.findByRole('heading', { name: i18n.t('ovr.not_found') })).closest('section')).toHaveAttribute('dir', 'ltr');
+  });
+
   it.each(['https://evil.example/steal', '//evil.example/steal', '/dashboard']) (
     'falls back to overview for an unsafe login return target: %s',
     async (returnTo) => {
@@ -198,5 +252,7 @@ describe('admin authentication routing', () => {
 
     await waitFor(() => expect(window.location.pathname).toBe('/security/alerts'));
     expect(authMocks.verifyTwoFactor).toHaveBeenCalledWith(1, '123456', 'pending-token');
+    expect(authMocks.setAuthenticated).toHaveBeenCalledWith(true);
+    expect(authMocks.setToken).not.toHaveBeenCalled();
   });
 });

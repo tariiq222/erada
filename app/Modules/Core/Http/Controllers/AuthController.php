@@ -19,6 +19,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -172,6 +173,24 @@ class AuthController extends Controller
 
                 throw ValidationException::withMessages([
                     'email' => ['هذا الحساب غير مفعل.'],
+                ]);
+            }
+
+            if ($this->twoFactorService->isEnabled($user)) {
+                $pendingToken = Str::random(64);
+
+                Cache::put('2fa_pending_'.$pendingToken, [
+                    'user_id' => $user->id,
+                    'ip' => $ip,
+                ], now()->addMinutes(5));
+
+                return response()->json([
+                    'requires_2fa' => true,
+                    'pending_token' => $pendingToken,
+                    'user' => [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                    ],
                 ]);
             }
 

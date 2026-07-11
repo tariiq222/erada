@@ -57,6 +57,7 @@ import { AuthProvider, useAuth } from '@shared/contexts/AuthContext';
 
 // Test component to access context
 const TestConsumer: React.FC = () => {
+  const [loginResult, setLoginResult] = React.useState('none');
   const {
     user,
     isLoading,
@@ -76,7 +77,12 @@ const TestConsumer: React.FC = () => {
       <div data-testid="hasAdminRole">{hasRole('admin') ? 'yes' : 'no'}</div>
       <div data-testid="hasEditPermission">{hasPermission('projects.edit') ? 'yes' : 'no'}</div>
       <div data-testid="isSuperAdmin">{isSuperAdmin() ? 'yes' : 'no'}</div>
-      <button onClick={() => login('test@test.com', 'password')}>Login</button>
+      <div data-testid="loginResult">{loginResult}</div>
+      <button onClick={() => {
+        void login('test@test.com', 'password').then((result) => {
+          setLoginResult(result.requiresTwoFactor ? result.pendingToken || 'challenge' : 'success');
+        });
+      }}>Login</button>
       <button onClick={() => logout()}>Logout</button>
     </div>
   );
@@ -86,6 +92,7 @@ describe('AuthContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorageMock.clear();
+    window.history.replaceState({}, '', '/');
   });
 
   afterEach(() => {
@@ -175,11 +182,10 @@ describe('AuthContext', () => {
     });
   });
 
-  it('login sets user and token', async () => {
+  it('login sets the authenticated user from the HttpOnly-cookie response', async () => {
     // No token initially
     mockLogin.mockResolvedValue({
       user: { id: 1, name: 'Logged In User', email: 'user@test.com', roles: [], permissions: [] },
-      token: 'new-token',
     });
 
     render(
@@ -196,10 +202,69 @@ describe('AuthContext', () => {
 
     await waitFor(() => {
       expect(mockLogin).toHaveBeenCalledWith('test@test.com', 'password');
-      expect(mockSetToken).toHaveBeenCalledWith('new-token');
+      expect(mockSetToken).not.toHaveBeenCalled();
       expect(mockSetAuthenticated).toHaveBeenCalledWith(true);
       expect(screen.getByTestId('user')).toHaveTextContent('Logged In User');
     });
+  });
+
+  it('returns a two-factor challenge without authenticating the provider', async () => {
+    mockLogin.mockResolvedValue({
+      requires_2fa: true,
+      pending_token: 'opaque-pending-token',
+      user: { id: 7, name: 'Two Factor User', roles: [] },
+    });
+
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('ready');
+    });
+    await userEvent.click(screen.getByText('Login'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loginResult')).toHaveTextContent('opaque-pending-token');
+      expect(screen.getByTestId('authenticated')).toHaveTextContent('no');
+      expect(screen.getByTestId('user')).toHaveTextContent('null');
+      expect(mockSetAuthenticated).not.toHaveBeenCalledWith(true);
+      expect(mockSetToken).not.toHaveBeenCalled();
+    });
+  });
+
+  it('refreshUser forces a user request from the public two-factor route', async () => {
+    window.history.replaceState({}, '', '/verify-2fa');
+    mockGetUser.mockResolvedValue({
+      user: { id: 9, name: 'Verified User', roles: ['super_admin'] },
+    });
+
+    const RefreshConsumer = () => {
+      const { refreshUser, user } = useAuth();
+      return (
+        <div>
+          <span data-testid="refreshedUser">{user?.name || 'null'}</span>
+          <button onClick={() => void refreshUser()}>Refresh user</button>
+        </div>
+      );
+    };
+
+    render(
+      <AuthProvider>
+        <RefreshConsumer />
+      </AuthProvider>
+    );
+    await userEvent.click(screen.getByText('Refresh user'));
+
+    await waitFor(() => {
+      expect(mockGetUser).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId('refreshedUser')).toHaveTextContent('Verified User');
+      expect(mockSetAuthenticated).toHaveBeenCalledWith(true);
+    });
+
+    window.history.replaceState({}, '', '/');
   });
 
   it('logout clears user and token', async () => {
