@@ -163,6 +163,7 @@ class TokenHardeningTest extends TestCase
             '203.0.113.30'
         );
         $user->update(['is_active' => false]);
+        Cache::put('2fa_tries_'.$pendingToken, 2, now()->addMinutes(5));
 
         $response = $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.30'])
             ->postJson('/api/2fa/verify', [
@@ -175,7 +176,8 @@ class TokenHardeningTest extends TestCase
             ->assertCookieMissing('auth_token')
             ->assertJsonMissingPath('token');
         $this->assertCount(0, $user->fresh()->tokens);
-        $this->assertNotNull(Cache::get('2fa_pending_'.$pendingToken));
+        $this->assertNull(Cache::get('2fa_pending_'.$pendingToken));
+        $this->assertNull(Cache::get('2fa_tries_'.$pendingToken));
         $this->assertDatabaseMissing('login_attempts', [
             'email' => $user->email,
             'successful' => true,
@@ -196,6 +198,7 @@ class TokenHardeningTest extends TestCase
             'failed_login_attempts' => AuthSecurityService::MAX_FAILED_ATTEMPTS,
             'locked_until' => now()->addMinutes(10),
         ])->save();
+        Cache::put('2fa_tries_'.$pendingToken, 2, now()->addMinutes(5));
 
         $response = $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.40'])
             ->postJson('/api/2fa/verify', [
@@ -208,7 +211,8 @@ class TokenHardeningTest extends TestCase
             ->assertCookieMissing('auth_token')
             ->assertJsonMissingPath('token');
         $this->assertCount(0, $user->fresh()->tokens);
-        $this->assertNotNull(Cache::get('2fa_pending_'.$pendingToken));
+        $this->assertNull(Cache::get('2fa_pending_'.$pendingToken));
+        $this->assertNull(Cache::get('2fa_tries_'.$pendingToken));
         $this->assertDatabaseMissing('login_attempts', [
             'email' => $user->email,
             'successful' => true,

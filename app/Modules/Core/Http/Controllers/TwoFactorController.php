@@ -358,6 +358,9 @@ class TwoFactorController extends Controller
 
             $eligibility = $this->authSecurityService->canAttemptLogin($user->email, $request->ip());
             if (! $user->is_active || ! $eligibility['allowed']) {
+                cache()->forget('2fa_pending_'.$validated['pending_token']);
+                cache()->forget('2fa_tries_'.$validated['pending_token']);
+
                 return response()->json([
                     'message' => 'تعذر إكمال تسجيل الدخول',
                 ], 403);
