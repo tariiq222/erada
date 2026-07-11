@@ -4,7 +4,9 @@ namespace App\Modules\Core\Http\Requests;
 
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Rules\AssignableRoleKey;
+use App\Modules\HR\Models\Department;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
 /**
@@ -57,12 +59,21 @@ class StoreUserRequest extends FormRequest
      */
     public function rules(): array
     {
+        $actor = $this->user();
+        $targetOrganizationId = $actor?->isSuperAdmin()
+            ? ($this->input('organization_id') ?? $actor->organization_id)
+            : $actor?->organization_id;
+
         return [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', Password::defaults()],
             'organization_id' => ['nullable', 'exists:organizations,id'],
-            'department_id' => ['nullable', 'exists:departments,id'],
+            'department_id' => [
+                'nullable',
+                Rule::exists(Department::class, 'id')
+                    ->where(fn ($query) => $query->where('organization_id', $targetOrganizationId)),
+            ],
             'phone' => ['nullable', 'string', 'max:20'],
             'extension' => ['nullable', 'string', 'max:10'],
             'job_title' => ['nullable', 'string', 'max:255'],

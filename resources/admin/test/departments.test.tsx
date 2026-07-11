@@ -123,6 +123,48 @@ describe('admin department contracts', () => {
     expect(apiGet).toHaveBeenCalledWith('/admin/departments?organization_id=18&page=1&per_page=20');
   });
 
+  it('keeps the latest department rows when an older request resolves last', async () => {
+    let resolveNorth!: (value: unknown) => void;
+    apiGet.mockImplementation((path) => {
+      if (path === '/admin/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
+      if (path.includes('organization_id=17')) return new Promise((resolve) => { resolveNorth = resolve; });
+      if (path.includes('organization_id=18')) return Promise.resolve({ data: [{ ...department, id: 18, organization_id: 18, name: 'South Department' }], current_page: 1, last_page: 1, per_page: 20, total: 1 });
+      return Promise.resolve({ data: [] });
+    });
+    const actor = userEvent.setup();
+    setPath('/departments');
+    render(<AdminRouter />);
+
+    await actor.selectOptions(await screen.findByLabelText(i18n.t('admin.organizations.title')), '18');
+    const southRow = await screen.findByRole('row', { name: /South Department/ });
+    expect(within(southRow).getByRole('link', { name: i18n.t('common.view') })).toHaveAttribute('href', '/departments/18');
+
+    resolveNorth({ data: [{ ...department, id: 17, name: 'North Department' }], current_page: 1, last_page: 1, per_page: 20, total: 1 });
+    await waitFor(() => expect(screen.queryByText('North Department')).not.toBeInTheDocument());
+    expect(screen.getByText('South Department')).toBeInTheDocument();
+  });
+
+  it('does not let an older department-list failure replace a successful latest load', async () => {
+    let rejectNorth!: (reason: unknown) => void;
+    apiGet.mockImplementation((path) => {
+      if (path === '/admin/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
+      if (path.includes('organization_id=17')) return new Promise((_resolve, reject) => { rejectNorth = reject; });
+      if (path.includes('organization_id=18')) return Promise.resolve({ data: [{ ...department, id: 18, organization_id: 18, name: 'South Department' }], current_page: 1, last_page: 1, per_page: 20, total: 1 });
+      return Promise.resolve({ data: [] });
+    });
+    const actor = userEvent.setup();
+    setPath('/departments');
+    render(<AdminRouter />);
+
+    await actor.selectOptions(await screen.findByLabelText(i18n.t('admin.organizations.title')), '18');
+    expect(await screen.findByText('South Department')).toBeInTheDocument();
+    rejectNorth({ message: 'stale north failure' });
+
+    await waitFor(() => expect(screen.queryByText('stale north failure')).not.toBeInTheDocument());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('South Department')).toBeInTheDocument();
+  });
+
   it('scopes manager choices to the selected organization and preserves it after create', async () => {
     apiGet.mockImplementation((path) => {
       if (path === '/admin/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });

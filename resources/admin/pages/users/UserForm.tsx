@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { IconUser } from '@tabler/icons-react';
@@ -28,6 +28,20 @@ export function UserForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const departmentRequestGeneration = useRef(0);
+  const invalidateDepartmentRequests = useCallback(() => { departmentRequestGeneration.current++; }, []);
+
+  const loadDepartments = useCallback(async (organizationId: number | null) => {
+    const generation = ++departmentRequestGeneration.current;
+    setDepartments([]);
+    if (!organizationId) return;
+    try {
+      const response = await adminApi.departments.summary(organizationId);
+      if (generation === departmentRequestGeneration.current) setDepartments(response.data);
+    } catch (caught) {
+      if (generation === departmentRequestGeneration.current) setError(apiErrorMessage(caught, t('common.error')));
+    }
+  }, [t]);
 
   useEffect(() => {
     let active = true;
@@ -35,28 +49,28 @@ export function UserForm() {
       try {
         const organizationResponse = await adminApi.organizations.all();
         const roleResponse = await adminApi.roles.list();
-        let next = form;
+        let next: AdminUserInput = { ...empty, organization_id: (user as { organization_id?: number | null } | null)?.organization_id ?? null };
         if (editing) {
           const record = await adminApi.users.get(Number(userId));
           next = { name: record.name, email: record.email, password: '', organization_id: record.organization_id, department_id: record.department?.id ?? record.department_id ?? null, phone: record.phone, extension: record.extension, job_title: record.job_title, is_active: record.is_active, roles: (record.roles ?? []).filter((role) => role !== 'super_admin') };
           if (active) { setForm(next); setHasLockedSuperAdminRole((record.roles ?? []).includes('super_admin')); }
         }
-        const organizationId = next.organization_id;
-        const departmentResponse = organizationId ? await adminApi.departments.summary(organizationId) : { data: [] };
-        if (active) { setOrganizations(organizationResponse.data); setRoles(roleResponse.data.filter((role) => role.name !== 'super_admin')); setDepartments(departmentResponse.data); }
+        if (active) {
+          setOrganizations(organizationResponse.data);
+          setRoles(roleResponse.data.filter((role) => role.name !== 'super_admin'));
+          setLoading(false);
+          void loadDepartments(next.organization_id ?? null);
+        }
       } catch (caught) {
         if (active) setError(apiErrorMessage(caught, t('users.load_error')));
       } finally { if (active) setLoading(false); }
     })();
-    return () => { active = false; };
-    // Initial contract load; organization changes are handled explicitly.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editing, userId, t]);
+    return () => { active = false; invalidateDepartmentRequests(); };
+  }, [editing, invalidateDepartmentRequests, loadDepartments, t, user, userId]);
 
   const chooseOrganization = async (organizationId: number | null) => {
     setForm((current) => ({ ...current, organization_id: organizationId, department_id: null }));
-    try { setDepartments(organizationId ? (await adminApi.departments.summary(organizationId)).data : []); }
-    catch (caught) { setError(apiErrorMessage(caught, t('common.error'))); }
+    await loadDepartments(organizationId);
   };
 
   const submit = async (event: FormEvent) => {
