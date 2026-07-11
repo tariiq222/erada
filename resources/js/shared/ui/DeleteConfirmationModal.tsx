@@ -1,7 +1,8 @@
 import * as React from 'react';
 import {IconBasket, IconX, IconTrash} from '@tabler/icons-react';
 import { createPortal } from 'react-dom';
-import { Button } from '@shared/ui';
+// Phase 4C — direct leaf import (not via @shared/ui barrel).
+import { Button } from './Button';
 import { useFocusTrap } from '@shared/lib/hooks/useFocusTrap';
 
 export interface DeleteConfirmationModalProps<T> {

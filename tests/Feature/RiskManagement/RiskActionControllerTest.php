@@ -59,12 +59,15 @@ class RiskActionControllerTest extends TestCase
 
     public function test_store_creates_action_scoped_to_risk_organization_with_owner_structure(): void
     {
+        $foreignOrganization = Organization::factory()->create();
+
         $response = $this->actingAs($this->riskEditor, 'sanctum')
             ->postJson("/api/risk-management/risks/{$this->risk->id}/actions", [
                 'title' => 'Mitigate supplier delay',
                 'type' => RiskActionType::Preventive->value,
                 'description' => 'Follow up with supplier weekly',
                 'owner_id' => $this->actionOwner->id,
+                'organization_id' => $foreignOrganization->id,
                 'due_date' => now()->addDays(5)->toDateString(),
                 'status' => RiskActionStatus::InProgress->value,
             ]);

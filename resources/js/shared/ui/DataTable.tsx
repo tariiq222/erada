@@ -2,7 +2,12 @@ import * as React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@shared/lib/utils';
-import { Pagination } from '@shared/ui';
+// Phase 4C — direct leaf import (not via @shared/ui barrel). The
+// barrel re-exports DataTable and Pagination; importing Pagination
+// through it would route DataTable's chunk through the same chunk
+// as the barrel, creating a circular chunk shape on every code
+// split. Direct leaf imports keep the chunk graph acyclic.
+import { Pagination } from './Pagination';
 import {type LucideIcon} from '@tabler/icons-react';
 
 export interface DataTableColumn<T> {

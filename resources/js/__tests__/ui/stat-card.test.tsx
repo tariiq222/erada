@@ -3,8 +3,10 @@ import { render, screen } from '@testing-library/react';
 import React from 'react';
 import {IconLayoutKanban, IconUsers, IconSquareCheck, IconAlertTriangle, IconClock} from '@tabler/icons-react';
 
-// Mock UI components
-vi.mock('@shared/ui', () => ({
+// Phase 4C switched StatCard to import Card/CardContent from './Card' directly
+// (not via @shared/ui barrel) to avoid circular chunk shapes. Mock the leaf
+// path so the data-testid="card" wrapper is present in tests.
+vi.mock('@shared/ui/Card', () => ({
   Card: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="card">{children}</div>
   ),

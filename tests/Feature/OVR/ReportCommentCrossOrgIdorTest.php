@@ -228,4 +228,26 @@ class ReportCommentCrossOrgIdorTest extends TestCase
             'id' => $commentX->id,
         ]);
     }
+
+    /**
+     * Comment ownership must not bypass the parent report binding check.
+     */
+    public function test_comment_owner_cannot_delete_comment_through_sibling_report(): void
+    {
+        $reporter = $this->makeUser($this->organizationB, $this->departmentB);
+        $commentOwner = $this->makeUser($this->organizationB, $this->departmentB, 'viewer');
+        $reportX = $this->makeReport($reporter, $this->departmentB, $this->organizationB);
+        $reportY = $this->makeReport($reporter, $this->departmentB, $this->organizationB);
+        $commentX = $this->makeComment($reportX, $commentOwner);
+
+        $response = $this->actingAs($commentOwner, 'sanctum')
+            ->deleteJson($this->deleteUrl($reportY, $commentX));
+
+        $response->assertStatus(404);
+        $this->assertDatabaseHas('ovr_report_comments', [
+            'id' => $commentX->id,
+            'report_id' => $reportX->id,
+            'user_id' => $commentOwner->id,
+        ]);
+    }
 }

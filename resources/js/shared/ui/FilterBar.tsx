@@ -2,7 +2,8 @@ import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 import {IconSearch, IconX} from '@tabler/icons-react';
 import { cn } from '@shared/lib/utils';
-import { Input } from '@shared/ui';
+// Phase 4C — direct leaf import (not via @shared/ui barrel).
+import { Input } from './Input';
 
 export interface FilterBarProps {
   search: string;

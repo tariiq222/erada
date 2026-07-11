@@ -199,14 +199,33 @@ class ActivityLogPrivacyTest extends TestCase
         $this->getJson('/api/activity-logs')->assertStatus(401);
     }
 
-    public function test_activity_log_show_allows_same_org_user_without_audit_view_capability_using_redacted_resource(): void
+    public function test_activity_log_show_denies_same_org_user_without_audit_view_capability(): void
     {
+        // Phase 1A — closing the same-org disclosure. A same-org user
+        // who lacks AUDIT_VIEW is denied GET /api/activity-logs/{id}
+        // outright. (Pre-Phase-1, this returned 200 with a redacted
+        // shape; the closed contract now returns 403 before the row is
+        // even loaded.)
         $unprivileged = User::factory()->create([
             'organization_id' => $this->user->organization_id,
             'is_active' => true,
         ]);
 
-        $response = $this->actingAs($unprivileged, 'sanctum')
+        $this->actingAs($unprivileged, 'sanctum')
+            ->getJson("/api/activity-logs/{$this->activityLog->id}")
+            ->assertStatus(403);
+    }
+
+    public function test_activity_log_show_same_org_audit_user_sees_redacted_full_shape(): void
+    {
+        // Phase 1A — the same-org path now requires AUDIT_VIEW. A
+        // same-org user holding AUDIT_VIEW sees the full redacted
+        // resource (description / reason / old_values / new_values /
+        // metadata all populated, with the in-JSON key redaction
+        // preserved).
+        $user = $this->user; // already has AUDIT_VIEW granted in setUp()
+
+        $response = $this->actingAs($user, 'sanctum')
             ->getJson("/api/activity-logs/{$this->activityLog->id}");
 
         $response->assertOk()

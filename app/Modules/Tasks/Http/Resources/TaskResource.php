@@ -96,32 +96,46 @@ class TaskResource extends JsonResource
             'lessons_learned' => $isClusterRead ? null : $this->lessons_learned,
             'status_comment' => $isClusterRead ? null : $this->status_comment,
 
-            // العلاقات
+            // العلاقات — FK pointers are kept on cluster cross-org
+            // (stable routing keys), but the labeled sub-fields are
+            // stripped (Phase 2B). A cluster actor must not see
+            // project / department / milestone names or parent
+            // titles even though they have access to the task row at
+            // all. On cluster read the blocks fall through to id-only;
+            // same-org reads get the full subresource.
             'project_id' => $this->project_id,
-            'project' => $this->whenLoaded('project', fn () => [
-                'id' => $this->project->id,
-                'name' => $this->project->name,
-                'code' => $this->project->code,
-                'type' => $this->project->type,
-            ]),
+            'project' => $this->whenLoaded('project', fn () => $isClusterRead
+                ? ['id' => $this->project->id]
+                : [
+                    'id' => $this->project->id,
+                    'name' => $this->project->name,
+                    'code' => $this->project->code,
+                    'type' => $this->project->type,
+                ]),
 
             'department_id' => $this->department_id,
-            'department' => $this->whenLoaded('department', fn () => [
-                'id' => $this->department->id,
-                'name' => $this->department->name,
-            ]),
+            'department' => $this->whenLoaded('department', fn () => $isClusterRead
+                ? ['id' => $this->department->id]
+                : [
+                    'id' => $this->department->id,
+                    'name' => $this->department->name,
+                ]),
 
             'milestone_id' => $this->milestone_id,
-            'milestone' => $this->whenLoaded('milestone', fn () => [
-                'id' => $this->milestone->id,
-                'name' => $this->milestone->name,
-            ]),
+            'milestone' => $this->whenLoaded('milestone', fn () => $isClusterRead
+                ? ['id' => $this->milestone->id]
+                : [
+                    'id' => $this->milestone->id,
+                    'name' => $this->milestone->name,
+                ]),
 
             'parent_id' => $this->parent_id,
-            'parent' => $this->whenLoaded('parent', fn () => [
-                'id' => $this->parent->id,
-                'title' => $this->parent->title,
-            ]),
+            'parent' => $this->whenLoaded('parent', fn () => $isClusterRead
+                ? ['id' => $this->parent->id]
+                : [
+                    'id' => $this->parent->id,
+                    'title' => $this->parent->title,
+                ]),
 
             'assigned_to' => $this->assigned_to,
             'assignee' => $isClusterRead
@@ -148,21 +162,28 @@ class TaskResource extends JsonResource
             'source_id' => $this->source_id,
             'source_sensitivity' => $this->source_sensitivity,
 
-            // المهام الفرعية
+            // المهام الفرعية — array-of-records stripped on cluster read;
+            // counts (subtasks_count / has_subtasks / incomplete_subtasks_count)
+            // are also zeroed since they encode module business surface.
             'subtasks' => $isClusterRead
                 ? null
                 : $this->whenLoaded('subtasks', fn () => TaskResource::collection($this->subtasks)),
-            'subtasks_count' => $this->relationCount('subtasks'),
-            'has_subtasks' => $this->relationCount('subtasks') > 0,
-            'incomplete_subtasks_count' => $this->relationCount('incomplete_subtasks', 'subtasks', fn () => $this->subtasks()
-                ->whereNotIn('status', ['completed', 'cancelled'])
-                ->count()),
+            'subtasks_count' => $isClusterRead ? 0 : $this->relationCount('subtasks'),
+            'has_subtasks' => $isClusterRead ? false : $this->relationCount('subtasks') > 0,
+            'incomplete_subtasks_count' => $isClusterRead
+                ? 0
+                : $this->relationCount('incomplete_subtasks', 'subtasks', fn () => $this->subtasks()
+                    ->whereNotIn('status', ['completed', 'cancelled'])
+                    ->count()),
 
-            // التعليقات والمرفقات — counts preserved as metadata; the
-            // comment / attachment records themselves require a separate
-            // authorized read so the array-of-records surfaces are stripped.
-            'comments_count' => $this->relationCount('comments'),
-            'attachments_count' => $this->relationCount('attachments'),
+            // Phase 2B — comments and attachments counts are also zeroed
+            // on cluster cross-org. The records themselves require a
+            // separate authorized read so the array-of-records surfaces
+            // are already null; we extend that to the count metadata so
+            // the cluster actor cannot even infer collaboration density
+            // from numeric hints.
+            'comments_count' => $isClusterRead ? 0 : $this->relationCount('comments'),
+            'attachments_count' => $isClusterRead ? 0 : $this->relationCount('attachments'),
 
             // Per-record abilities — resolved through AccessDecision so the
             // frontend never re-derives scope-chain logic. Fall back to the

@@ -165,6 +165,10 @@ const ScopeTypesList = lazy(
 const ActivityLogsList = lazy(
 	() => import("./pages/admin/activity-logs/ActivityLogsList"),
 );
+// Phase 4A — the activity-log page is gated by AUDIT_VIEW
+// (engine capability alias `audit.view`) NOT super-admin. The
+// non-admin cluster_auditor role holds AUDIT_VIEW + CLUSTER_TREE_VIEW
+// and must be able to reach this page.
 const ScopedRoleAuditLogs = lazy(
 	() => import("./pages/admin/scoped-roles/ScopedRoleAuditLogs"),
 );
@@ -1270,9 +1274,16 @@ const App: React.FC = () => {
 														<Route
 															path="/admin/activity-logs"
 															element={
-																<RequireAdmin>
+																<RequirePermission
+																	config={{
+																		permissions: [
+																			"audit.view",
+																			"audit.export",
+																		],
+																	}}
+																>
 																	<ActivityLogsList />
-																</RequireAdmin>
+																</RequirePermission>
 															}
 														/>
 														{/* M1 Super Admin System Governance Console */}

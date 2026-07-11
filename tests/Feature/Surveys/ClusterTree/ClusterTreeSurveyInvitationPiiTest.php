@@ -263,14 +263,10 @@ class ClusterTreeSurveyInvitationPiiTest extends TestCase
             ->getJson("/api/surveys/{$this->clusterSurvey->id}/cluster-export?format=csv")
             ->assertStatus(200);
 
-        // Read the generated file from the local disk and assert it carries
-        // only aggregate columns — no respondent PII, no invitation email,
-        // no invitation token.
-        $body = $response->json();
-        $filename = $body['filename'] ?? null;
-        $this->assertNotNull($filename, 'cluster-export must return a filename');
-
-        $contents = Storage::disk('local')->get('exports/'.$filename);
+        // Phase 3B — endpoint is direct download; read the streamed
+        // body, not the storage layer (Phase 3B is the contract that
+        // no storage/app/private/exports residue survives the call).
+        $contents = $response->getContent();
         $this->assertIsString($contents);
 
         foreach ($this->forbiddenEmails as $email) {

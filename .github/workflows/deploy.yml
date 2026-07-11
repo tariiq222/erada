@@ -58,6 +58,20 @@ jobs:
           path: vendor
           key: composer-${{ hashFiles('composer.lock') }}
 
+      - name: Prepare Laravel runtime dirs
+        # RTL-D1: `composer install` triggers Laravel's `package:discover`
+        # post-autoload-dump, which boots Laravel and registers Blade directives
+        # via `app('blade.compiler')`. The Blade compiler constructor requires a
+        # valid `realpath(storage_path('framework/views'))`, which returns `false`
+        # on a fresh runner — aborting the install. Mirrors ci.yml CI-1 step.
+        run: |
+          mkdir -p storage/framework/views
+          mkdir -p storage/framework/cache
+          mkdir -p storage/framework/sessions
+          mkdir -p storage/logs
+          mkdir -p storage/fonts
+          mkdir -p bootstrap/cache
+
       - name: Install PHP dependencies
         run: composer install --prefer-dist --no-progress
 
@@ -74,7 +88,9 @@ jobs:
         run: npm run build
 
       - name: Copy env
-        run: cp .env.testing .env
+        # .env.testing is gitignored, so it is absent in fresh CI checkouts —
+        # fall back to the tracked .env.example. Same fallback pattern as ci.yml.
+        run: cp .env.testing .env 2>/dev/null || cp .env.example .env
 
       - name: Generate key
         run: php artisan key:generate
@@ -169,7 +185,7 @@ jobs:
   migrate:
     name: 🗄️ Run Migrations
     runs-on: ubuntu-latest
-    needs: test, backup
+    needs: [test, backup]
     if: ${{ github.event.inputs.skip_migrations != 'true' }}
 
     steps:

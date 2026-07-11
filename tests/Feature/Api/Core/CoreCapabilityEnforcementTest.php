@@ -158,7 +158,7 @@ class CoreCapabilityEnforcementTest extends TestCase
             ->assertStatus(200);
     }
 
-    public function test_activity_log_show_allows_same_org_user_without_audit_view_capability(): void
+    public function test_activity_log_show_denies_same_org_user_without_audit_view_capability(): void
     {
         $viewer = $this->makeUser('viewer');
 
@@ -175,7 +175,7 @@ class CoreCapabilityEnforcementTest extends TestCase
 
         $this->actingAs($viewer, 'sanctum')
             ->getJson("/api/activity-logs/{$log}")
-            ->assertStatus(200);
+            ->assertStatus(403);
     }
 
     // ========== audit.export — REACHABLE on /api/activity-logs/export ==========

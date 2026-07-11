@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\Organization;
+use App\Modules\Core\Models\User;
 use App\Modules\Surveys\Enums\ResponseStatus;
 use App\Modules\Surveys\Http\Controllers\Concerns\AuthorizesSurveyAccess;
 use App\Modules\Surveys\Http\Resources\SurveyResponseResource;
@@ -17,6 +18,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\Response;
 
 class SurveyResponseController extends Controller
 {
@@ -186,23 +188,26 @@ class SurveyResponseController extends Controller
     /**
      * Phase CFA-10 — Cluster aggregate-only export (NEVER raw responses).
      *
-     * Returns the same aggregate shape as clusterStats(), but serialized
-     * as CSV / JSON file. Gated by Capability::SURVEYS_EXPORT +
-     * Capability::CLUSTER_TREE_EXPORT on actor.org for cross-org widening
-     * (paired grant, like KPIS_EXPORT + CLUSTER_TREE_EXPORT). Same-org
-     * SURVEYS_EXPORT (without cluster_tree) returns the same-org aggregate
-     * row only.
+     * Returns the same aggregate shape as clusterStats() but as a
+     * DIRECT download response (CSV or JSON written straight to the
+     * response body). Phase 3B closes the persistent-artifact leak —
+     * pre-3B the endpoint called `Storage::disk('local')->put('exports/…', …)`
+     * and returned a JSON pointer to the on-disk file. The new
+     * contract:
+     *   - NO writes to storage/app/private/exports (or anywhere on
+     *     disk). The body goes directly to the wire.
+     *   - On serialization / build failure, return a non-success
+     *     JSON response (500) — never a partial body or a file pointer.
+     *   - The Content-Disposition / content-type headers carry the
+     *     same download semantics the pre-3B file pointer had.
      *
-     * Strict aggregate-only contract (NO raw widening, NO PII leaks):
-     *   - Only response_count / completion_rate / aggregate_score per org.
-     *   - NO respondent_email, NO respondent_phone, NO survey_invitations.email.
-     *   - NO public tracking token URLs.
-     *
-     * The raw response export endpoint (`GET /api/surveys/{survey}/export`)
-     * stays unchanged — it remains strict same-org + SURVEYS_REVIEW_RESPONSES
-     * and is never cluster-widened.
+     * Gating: Capability::SURVEYS_EXPORT (same-org) + Capability::
+     * CLUSTER_TREE_EXPORT (cross-org widening). Strict aggregate-only
+     * contract; no respondent_email / phone / invitation PII — the
+     * raw response export endpoint stays SURVEYS_REVIEW_RESPONSES +
+     * strict same-org.
      */
-    public function clusterExport(Request $request, Survey $survey): JsonResponse
+    public function clusterExport(Request $request, Survey $survey): Response
     {
         $user = $request->user();
 
@@ -222,16 +227,9 @@ class SurveyResponseController extends Controller
         $scope = app(UserSurveyScope::class);
         $visibleOrgIds = $scope->clusterExportVisibleOrgIds($user);
 
+        // Phase 3A — group by respondent_organization_id snapshot
+        // (post-Phase-3 the live users.organization_id join is gone).
         $rows = $this->aggregateRowsForSurvey($survey, $visibleOrgIds);
-
-        $payload = [
-            'survey_id' => $survey->id,
-            'survey_code' => $survey->code,
-            'survey_title' => $survey->title,
-            'cluster_root_org_id' => $user->organization_id,
-            'exported_at' => now()->toISOString(),
-            'aggregates' => $rows,
-        ];
 
         $filename = sprintf(
             'survey-%s-cluster-aggregate-%s.%s',
@@ -240,20 +238,88 @@ class SurveyResponseController extends Controller
             $format
         );
 
-        $path = 'exports/'.$filename;
+        try {
+            [$contentType, $body] = $format === 'json'
+                ? $this->buildAggregatesJson($survey, $rows, $user)
+                : $this->buildAggregatesCsv($rows);
+        } catch (\Throwable $e) {
+            // Phase 3B — non-success on serialization / build failure.
+            // We never claim a file was created (no filename in the
+            // error response) and never leak a partial body.
+            return response()->json([
+                'message' => 'فشل في إنشاء ملف التصدير',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
 
-        $body = $format === 'json'
-            ? json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
-            : $this->renderAggregatesCsv($rows);
-
-        Storage::disk('local')->put($path, $body);
-
-        return response()->json([
-            'message' => 'تم تصدير الإحصائيات بنجاح',
-            'filename' => basename($path),
-            'format' => $format,
-            'aggregate_rows' => count($rows),
+        return response($body, 200, [
+            'Content-Type' => $contentType,
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
         ]);
+    }
+
+    /**
+     * Build the aggregate rows as a CSV string. Aggregate-only:
+     * response_count / completion_rate / aggregate_score — no raw
+     * responses, no PII.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return array{0: string, 1: string} [content-type, body]
+     */
+    protected function buildAggregatesCsv(array $rows): array
+    {
+        $output = fopen('php://temp', 'r+');
+        // UTF-8 BOM so Excel renders Arabic organization names.
+        fwrite($output, chr(0xEF).chr(0xBB).chr(0xBF));
+        fputcsv($output, [
+            'organization_id',
+            'organization_name',
+            'response_count',
+            'submitted_count',
+            'completion_rate',
+            'aggregate_score',
+        ]);
+        foreach ($rows as $row) {
+            fputcsv($output, [
+                $row['organization_id'],
+                $row['organization_name'],
+                $row['response_count'],
+                $row['submitted_count'],
+                $row['completion_rate'],
+                $row['aggregate_score'],
+            ]);
+        }
+        rewind($output);
+        $body = stream_get_contents($output);
+        fclose($output);
+
+        return ['text/csv; charset=UTF-8', (string) $body];
+    }
+
+    /**
+     * Build the aggregate rows as a JSON string. Aggregate-only:
+     * response_count / completion_rate / aggregate_score per org —
+     * no raw responses, no PII.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return array{0: string, 1: string} [content-type, body]
+     */
+    protected function buildAggregatesJson(Survey $survey, array $rows, User $actor): array
+    {
+        $payload = [
+            'survey_id' => $survey->id,
+            'survey_code' => $survey->code,
+            'survey_title' => $survey->title,
+            'cluster_root_org_id' => $actor->organization_id,
+            'exported_at' => now()->toIso8601String(),
+            'aggregates' => $rows,
+        ];
+
+        return [
+            'application/json; charset=UTF-8',
+            json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT),
+        ];
     }
 
     /**
@@ -264,8 +330,13 @@ class SurveyResponseController extends Controller
      *   - completion_rate (percentage of submitted responses; 0..100)
      *   - aggregate_score (mean completion_time in seconds for submitted responses)
      *
-     * The query is grouped by organization and joined through the survey
-     * parent (survey_responses does not carry organization_id directly).
+     * The query is grouped by organization and joined through the
+     * respondent_organization_id STAMP stamped on the row at
+     * submission time (Phase 3A). The stamp is decoupled from the
+     * live users.organization_id relation — moving a respondent to a
+     * different org after submission does NOT re-attribute the
+     * historical response. The cluster aggregate stays stable as
+     * users churn.
      *
      * @param  list<int>  $visibleOrgIds  the descendant org ids the actor can see
      * @return list<array<string, mixed>>
@@ -279,15 +350,15 @@ class SurveyResponseController extends Controller
 
         $rows = [];
         foreach ($orgs as $org) {
-            // User respondents are attributed to their current organization.
-            // Anonymous or deleted respondents fall back to the survey owner.
+            // Phase 3A — group by the respondent_organization_id
+            // snapshot stamped at submission time, NOT the live
+            // users.organization_id relation. Identified respondents
+            // and anonymous / deleted respondents both surface under
+            // their stamped org (the legacy fallback attributes the
+            // latter to the survey's organization).
             $responsesQuery = SurveyResponse::query()
-                ->leftJoin('users', 'users.id', '=', 'survey_responses.respondent_id')
                 ->where('survey_responses.survey_id', $survey->id)
-                ->whereRaw('COALESCE(users.organization_id, ?) = ?', [
-                    (int) $survey->organization_id,
-                    (int) $org->id,
-                ]);
+                ->where('survey_responses.respondent_organization_id', (int) $org->id);
 
             $total = (clone $responsesQuery)->count();
 

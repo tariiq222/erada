@@ -22,6 +22,7 @@
 /storage/fonts/
 /storage/logs/
 /storage/app/private/comments/
+/storage/app/private/exports/
 /bootstrap/cache/*.php
 .phpactor.json
 .phpunit.result.cache

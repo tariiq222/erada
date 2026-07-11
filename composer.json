@@ -75,9 +75,11 @@
         "check-residual-hardening": [
             "@php artisan test --filter=StaticAnalysisResidualGuardTest"
         ],
+        "check-cluster-tree-contract": "bash scripts/check-cluster-tree-contract.sh",
         "ci": [
             "@check-task-model",
             "@check-residual-hardening",
+            "@check-cluster-tree-contract",
             "@test"
         ],
         "post-autoload-dump": [

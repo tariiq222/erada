@@ -90,6 +90,25 @@ export const surveysApi = {
   reviewResponse: (surveyId: number, responseId: number, data: { status: string; notes?: string }) =>
     api.post(`/surveys/${surveyId}/responses/${responseId}/review`, data),
 
+  // Cluster aggregate stats — same response surface as the BE
+  // `/api/surveys/{id}/cluster-stats` JSON envelope (Phase CFA-10 +
+  // Phase 3A grouping by respondent_organization_id snapshot).
+  // No raw responses are ever exposed.
+  getClusterStats: (surveyId: number) =>
+    api.get(`/surveys/${surveyId}/cluster-stats`),
+
+  // Phase 4D — cluster aggregate direct download.
+  //
+  // Returns the BE blob (CSV / JSON text/csv;charset=UTF-8 /
+  // application/json;charset=UTF-8 with Content-Disposition:
+  // attachment; filename="..."). The BE Phase 3B contract is
+  // strict: NO `storage/app/private/exports` writes happen on this
+  // path. The response is streamed directly to the wire; the FE
+  // pulls the responseType:'blob' shape via api.blob() and triggers
+  // the browser download via URL.createObjectURL.
+  downloadClusterExport: (surveyId: number, format: 'csv' | 'json' = 'csv') =>
+    api.blob(`/surveys/${surveyId}/cluster-export?format=${format}`),
+
   exportResponses: (surveyId: number) =>
     api.get(`/surveys/${surveyId}/export`),
 

@@ -667,4 +667,34 @@ class ProjectMembersStakeholdersRisksEndpointTest extends TestCase
             'role' => 'end_user',
         ]);
     }
+
+    public function test_stakeholder_from_sibling_project_cannot_be_updated_and_persists(): void
+    {
+        $actor = $this->makeUser($this->orgA, 'viewer');
+        $this->grantEngineCapability($actor, Capability::PROJECTS_EDIT);
+        $siblingProject = Project::factory()->create([
+            'organization_id' => $this->orgA->id,
+            'department_id' => $this->deptA->id,
+            'type' => 'development',
+            'status' => 'in_progress',
+        ]);
+        $stakeholder = Stakeholder::create([
+            'project_id' => $siblingProject->id,
+            'name' => 'Sibling stakeholder',
+            'role' => 'end_user',
+        ]);
+
+        $this->actingAs($actor, 'sanctum')
+            ->withHeader('X-Skip-Csrf', '1')
+            ->putJson("/api/projects/{$this->project->id}/stakeholders/{$stakeholder->id}", [
+                'role' => 'consultant',
+            ])
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('stakeholders', [
+            'id' => $stakeholder->id,
+            'project_id' => $siblingProject->id,
+            'role' => 'end_user',
+        ]);
+    }
 }

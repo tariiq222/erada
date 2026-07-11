@@ -2,6 +2,7 @@
 
 namespace App\Modules\Surveys\Models;
 
+use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\Surveys\Enums\ResponseStatus;
 use Database\Factories\SurveyResponseFactory;
@@ -9,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Log;
 
 class SurveyResponse extends Model
 {
@@ -19,11 +21,70 @@ class SurveyResponse extends Model
         return SurveyResponseFactory::new();
     }
 
+    /**
+     * Phase 3A — Phase 3A — snapshot the respondent_organization_id
+     * at create time, decoupled from the live users.organization_id
+     * relation. The cluster aggregate groups by the snapshot; once
+     * stamped the historical attribution survives user org moves
+     * and deletions.
+     *
+     * Order of resolution:
+     *   1. Caller-supplied respondent_organization_id (used by the
+     *      forward-only backfill migration — never by submission paths).
+     *   2. Respondent's current organization (users.organization_id
+     *      when respondent_id is set and the user still exists).
+     *   3. Survey's organization (fallback for anonymous / deleted
+     *      respondents — same contract the migration backfills with).
+     *   4. NULL (no org can be determined; the row is an edge case
+     *      the cluster aggregate ignores).
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (SurveyResponse $response): void {
+            if ($response->respondent_organization_id !== null) {
+                return;
+            }
+
+            // Path 2 — live respondent org (the typical authenticated
+            // submission path).
+            if ($response->respondent_id !== null) {
+                $respondent = User::query()->find($response->respondent_id);
+                if ($respondent !== null && $respondent->organization_id !== null) {
+                    $response->respondent_organization_id = (int) $respondent->organization_id;
+
+                    return;
+                }
+            }
+
+            // Path 3 — survey org fallback (anonymous / deleted
+            // respondents).
+            if ($response->survey_id !== null) {
+                $surveyOrg = \DB::table('surveys')
+                    ->where('id', $response->survey_id)
+                    ->value('organization_id');
+                if ($surveyOrg !== null) {
+                    $response->respondent_organization_id = (int) $surveyOrg;
+
+                    return;
+                }
+            }
+
+            // Path 4 — no org available. Log at warning so a
+            // stray NULL surfaces during review; the cluster
+            // aggregate simply skips the row.
+            Log::warning('SurveyResponse created without a stamped organization', [
+                'survey_id' => $response->survey_id,
+                'respondent_id' => $response->respondent_id,
+            ]);
+        });
+    }
+
     protected $fillable = [
         'survey_id',
         'survey_version_id',
         'respondent_type',
         'respondent_id',
+        'respondent_organization_id',
         'respondent_name',
         'respondent_email',
         'respondent_phone',

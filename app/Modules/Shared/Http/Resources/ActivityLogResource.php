@@ -2,6 +2,7 @@
 
 namespace App\Modules\Shared\Http\Resources;
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -29,7 +30,57 @@ class ActivityLogResource extends JsonResource
         'bot' => '/bot|crawler|spider|slurp/i',
     ];
 
+    /**
+     * Phase 1B — cluster cross-org surfaces a minimal audit envelope.
+     *
+     * For rows whose organization differs from the actor's, the free-form
+     * `description`, `reason`, `old_values`, `new_values`, and `metadata`
+     * columns carry module business content that is gated by ITS OWN
+     * module capability (projects.view, tasks.view, hr.view, ovr.view,
+     * …). Reading the audit row that *mentions* those changes must not
+     * surface the change itself.
+     *
+     * The polymorphism (loggable_type / loggable_id) stays — those are
+     * stable routing keys — but accessing the pointed-to record still
+     * goes through THAT module's policy.
+     *
+     * IP / UA redaction is MANDATORY for every actor regardless of
+     * capability (CFA-11). It is preserved in the minimal envelope.
+     */
+    private bool $minimalEnvelope = false;
+
+    /**
+     * Construct a resource that emits the cluster cross-org minimal
+     * envelope instead of the full redacted audit detail. Identifiers,
+     * action, model label/type, scope, coarse actor identity, timestamps,
+     * IP / UA CIDR / family, and the routing keys remain; the five
+     * sensitive free-text / change-log columns are returned as JSON
+     * `null` so the shape is stable for downstream consumers.
+     */
+    public static function forClusterCrossOrg(Model $log): self
+    {
+        $r = new self($log);
+        $r->minimalEnvelope = true;
+
+        return $r;
+    }
+
     public function toArray(Request $request): array
+    {
+        return $this->minimalEnvelope
+            ? $this->minimalAuditEnvelope()
+            : $this->fullAuditDetail();
+    }
+
+    /**
+     * Full redacted audit detail — same shape CFA-11 produced for every
+     * authorized reader. Same-org auditors get this after the universal
+     * secret / credential / network / direct-PII key redaction in
+     * `redact()`. Free-text fields (description, reason) are passed
+     * through verbatim; only the historical sensitive KEY names inside
+     * structured columns (old_values / new_values / metadata) are scrubbed.
+     */
+    private function fullAuditDetail(): array
     {
         return [
             'id' => $this->id,
@@ -47,18 +98,45 @@ class ActivityLogResource extends JsonResource
             'old_values' => $this->redact($this->old_values),
             'new_values' => $this->redact($this->new_values),
             'metadata' => $this->redact($this->metadata),
-            // Phase CFA-11 — IP/UA redaction upgrade.
-            //
-            // The raw ip_address / user_agent columns carry PII that is
-            // unsafe to expose in any JSON surface (including the JSON
-            // export). The in-JSON redaction below returns a coarse-grained
-            // /24 CIDR (IPv4) or /48 CIDR (IPv6) instead of the raw octet,
-            // and a browser family string for user_agent (no version, no
-            // OS details, no device fingerprint). Both fields stay
-            // MANDATORILY REDACTED for every actor regardless of
-            // capability — the cluster_auditor role does NOT widen this
-            // surface (auditing the existence of an action does not
-            // require the originating address).
+            // Phase CFA-11 — IP / UA redaction is mandatory for every
+            // actor; the cluster_auditor role does NOT widen this surface.
+            'ip_address' => $this->redactIpAddress($this->ip_address),
+            'user_agent' => $this->redactUserAgent($this->user_agent),
+            'user' => $this->whenLoaded('user', fn () => $this->user ? [
+                'id' => $this->user->id,
+                'name' => $this->user->name,
+            ] : null),
+            'created_at' => $this->created_at?->toIso8601String(),
+            'updated_at' => $this->updated_at?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * Minimal audit envelope for cluster cross-org. The same stable
+     * shape — every key is present so the frontend contract does not
+     * have to special-case — but the five sensitive columns are
+     * returned as JSON `null` instead of leaking the underlying
+     * structured / free-text content. IP / UA surface as the same
+     * CFA-11 CIDR / browser family.
+     */
+    private function minimalAuditEnvelope(): array
+    {
+        return [
+            'id' => $this->id,
+            'action' => $this->action,
+            'action_label' => $this->action_label,
+            'action_color' => $this->action_color,
+            'description' => null,
+            'model_label' => $this->model_label,
+            'loggable_type' => $this->loggable_type ? class_basename($this->loggable_type) : null,
+            'loggable_id' => $this->loggable_id,
+            'scope_type' => $this->scope_type,
+            'scope_id' => $this->scope_id,
+            'role' => $this->role,
+            'reason' => null,
+            'old_values' => null,
+            'new_values' => null,
+            'metadata' => null,
             'ip_address' => $this->redactIpAddress($this->ip_address),
             'user_agent' => $this->redactUserAgent($this->user_agent),
             'user' => $this->whenLoaded('user', fn () => $this->user ? [

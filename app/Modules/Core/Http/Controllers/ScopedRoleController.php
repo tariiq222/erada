@@ -309,19 +309,10 @@ class ScopedRoleController extends Controller
      */
     public function userScopedRoles(User $user): JsonResponse
     {
-        $currentUser = auth()->user();
-
-        // التحقق من الصلاحية
-        if (! $currentUser->isSuperAdmin() && $currentUser->id !== $user->id) {
-            if (! $currentUser->can('view_users')) {
-                return response()->json(['message' => 'غير مصرح'], 403);
-            }
-
-            // ✅ عزل المؤسسة: لا يمكن عرض أدوار مستخدم من مؤسسة أخرى
-            if ($user->organization_id !== $currentUser->organization_id) {
-                return response()->json(['message' => 'لا يمكن عرض أدوار مستخدم من مؤسسة أخرى'], 403);
-            }
-        }
+        // Authz delegates to UserPolicy::view, which routes through the engine
+        // USERS_VIEW capability, applies same-org isolation, and grants self +
+        // super_admin access (UserPolicy::before() + view()).
+        $this->authorize('view', $user);
 
         $roles = $user->getAllScopedRolesForDisplay();
 
@@ -358,13 +349,8 @@ class ScopedRoleController extends Controller
      */
     public function accessSummary(User $user): JsonResponse
     {
-        $currentUser = auth()->user();
-
-        if (! $currentUser->isSuperAdmin() && $currentUser->id !== $user->id) {
-            if (! $currentUser->can('view_users') || $user->organization_id !== $currentUser->organization_id) {
-                return response()->json(['message' => 'غير مصرح'], 403);
-            }
-        }
+        // Same authz seam as userScopedRoles — UserPolicy::view.
+        $this->authorize('view', $user);
 
         $scopedRoles = $user->activeScopedRoles()->with('roleDefinition')->get();
 
