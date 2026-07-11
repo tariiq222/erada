@@ -1,0 +1,31 @@
+FROM node:20-alpine AS build
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --ignore-scripts
+
+COPY eslint.config.js tsconfig.json tsconfig.admin.json tsconfig.node.json ./
+COPY vite.admin.config.ts ./
+COPY scripts/check-admin-boundaries.mjs scripts/check-admin-boundaries.mjs
+COPY resources/ resources/
+COPY lang/ lang/
+
+ARG VITE_OPERATIONAL_URL=http://localhost:8000
+ENV VITE_OPERATIONAL_URL=${VITE_OPERATIONAL_URL}
+
+RUN npm run admin:build
+
+FROM nginx:1.27-alpine AS runtime
+
+COPY --from=build /app/dist-admin/ /usr/share/nginx/html/
+COPY deploy/admin-nginx.conf.template /etc/nginx/admin.conf.template
+
+ENV BACKEND_URL=http://app
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost/healthz || exit 1
+
+CMD ["sh", "-c", "envsubst '$BACKEND_URL' < /etc/nginx/admin.conf.template > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'"]

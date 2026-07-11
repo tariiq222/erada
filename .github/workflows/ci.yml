@@ -288,6 +288,12 @@ jobs:
       - name: Install NPM dependencies
         run: npm ci
 
+      - name: Run independent admin quality gate
+        run: npm run admin:quality
+
+      - name: Build independent admin image
+        run: docker build -f Dockerfile.admin -t erada-admin:ci .
+
       - name: Run PHP Linter (Pint)
         run: ./vendor/bin/pint --test
 

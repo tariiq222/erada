@@ -90,6 +90,31 @@ services:
     profiles:
       - full  # Only start with: docker compose --profile full up
 
+  # Independent admin SPA with same-origin API/Sanctum proxying to Laravel.
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile.admin
+      args:
+        VITE_OPERATIONAL_URL: ${VITE_OPERATIONAL_URL:-http://localhost:8000}
+    container_name: erada-platform-admin
+    restart: unless-stopped
+    ports:
+      - "${ADMIN_PORT:-8080}:80"
+    environment:
+      BACKEND_URL: ${BACKEND_URL:-http://app}
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    profiles:
+      - full
+
   # Vite dev server (HMR for React frontend)
   vite:
     image: node:20-alpine

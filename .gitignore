@@ -9,6 +9,7 @@
 /vendor
 /node_modules
 /public/build
+/dist-admin
 /public/hot
 /public/storage
 /storage/*.key
