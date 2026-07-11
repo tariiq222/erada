@@ -322,3 +322,53 @@ Explicitly OUT (CFA-00 owner decision):
   another iteration after a hard-stop report.
 - Added a dependency-aware story selector and shell regression coverage.
 - CFA-07 through CFA-11 remain `passes: false` until review and merge.
+
+## 2026-07-10 — CFA batch reconciliation (post-CFA-11)
+
+Closed-out the CFA batch on `origin/main` (HEAD = 7ee8641):
+
+| Story | PR  | merge  | passes | notes |
+|-------|-----|--------|--------|-------|
+| CFA-01| #10 | 6f31319 | true | engine primitives |
+| CFA-02| #11 | 389cb16 | true | KPI export widening |
+| CFA-03| #12 | b6496bf | true | Strategy manage widening |
+| CFA-04| #14 | de9c0b8 | true | Projects widening |
+| CFA-05| #16 | 60bf940 | true | Risks widening |
+| CFA-06| #17 | 87a77ea | true | Meetings widening |
+| CFA-07| #18 | d297fe7 | true | Users directory (HIGH PII) |
+| CFA-08| #19 | 4f1f0a6 | true | Tasks widening (after CFA-09 OVR primitive) |
+| CFA-09| #20 | 560a1f6 | true | OVR aggregate (CRITICAL PII) |
+| CFA-10| #21 | fead5f5 | true | Surveys aggregate |
+| CFA-11| #22 | 7ee8641 | true | ActivityLog audit + IP/UA redaction |
+
+Plus the F-01 hard-stop enforcement: #23 (Ralph recovery, 59996ff).
+
+### PRD reconciliation
+- Set `passes: true` for CFA-07..11 (they were still `passes: false` even
+  though merged, so the next Ralph iteration would have re-run them
+  against the regressed branches without this fix).
+- Backfilled `mergeCommit` + `pr` for CFA-04..06 (didn't have them
+  before; CFA-01..03 already did).
+- CFA-08's `dependsOn: [CFA-09]` left in place — both are now passed, so
+  the dependency is satisfied and harmless.
+
+### Select-next-story behavior (next iteration)
+- Every userStory is `passes: true`. `select-next-story.sh
+  scripts/ralph/prd.json` returns no candidate.
+- Per `prd.json.completionSignal`, Ralph should emit
+  `<promise>COMPLETE</promise>` and the wrapper exits 0.
+- If a future CFA-NN is desired, add it as a new userStory entry with
+  `passes: false` and a clear scope summary — do NOT flip an existing
+  passed story back.
+
+### deploy.yml observation (Release Engineering, separate from Ralph scope)
+- All 70 historical runs of `.github/workflows/deploy.yml` on this repo
+  0s-failure at schedule time. Root cause is a repo bug, not infra:
+  `jobs.migrate` declares `needs: test, backup` (comma-separated scalar)
+  which GitHub Actions rejects as an invalid job ID. `actionlint`
+  reproduces it. **Production deployments are happening via the
+  Dokploy-side container boot path (`scripts/deploy.sh`); this workflow
+  has been dormant since the initial commit.**
+- Draft PR #24 (`repair/deploy-workflow-schema`) proposes the YAML list
+  fix + the same Laravel-runtime-dirs step `ci.yml` already carries.
+  Marked Draft for Tariq review; not merged, not auto-triggered.
