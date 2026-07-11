@@ -136,13 +136,13 @@ class ResourceAuthorizationGraphTest extends TestCase
         Organization::class,
     ];
 
-    private const GRAPH_DOC = __DIR__.'/../../../../docs/authz/resource-authorization-graph.md';
+    private const GRAPH_DOC = 'docs/authz/resource-authorization-graph.md';
 
     #[Test]
     public function test_graph_doc_exists(): void
     {
         $this->assertFileExists(
-            self::GRAPH_DOC,
+            base_path(self::GRAPH_DOC),
             'Resource Authorization Graph doc is missing. Phase 3 ships the contract; the doc lives at docs/authz/resource-authorization-graph.md.'
         );
     }
@@ -197,7 +197,7 @@ class ResourceAuthorizationGraphTest extends TestCase
     #[Test]
     public function test_graph_doc_lists_every_primary_resource(): void
     {
-        $doc = file_get_contents(self::GRAPH_DOC);
+        $doc = file_get_contents(base_path(self::GRAPH_DOC));
 
         foreach (self::PRIMARY_RESOURCES as $name => $row) {
             $this->assertStringContainsString(
@@ -215,7 +215,7 @@ class ResourceAuthorizationGraphTest extends TestCase
     #[Test]
     public function test_graph_doc_child_only_section_lists_child_only_primary_resources(): void
     {
-        $doc = file_get_contents(self::GRAPH_DOC);
+        $doc = file_get_contents(base_path(self::GRAPH_DOC));
 
         foreach (self::PRIMARY_RESOURCES as $name => $row) {
             if ($row['status'] !== 'child_only') {
@@ -261,7 +261,7 @@ class ResourceAuthorizationGraphTest extends TestCase
         // flowing through AccessDecision::can(). Use a precise regex so
         // resource names that happen to appear as a parent column do not
         // produce a false positive (e.g. "| Department | Organization |").
-        $doc = file_get_contents(self::GRAPH_DOC);
+        $doc = file_get_contents(base_path(self::GRAPH_DOC));
 
         foreach (self::ENGINE_INTERNAL_MODELS as $class) {
             $basename = class_basename($class);

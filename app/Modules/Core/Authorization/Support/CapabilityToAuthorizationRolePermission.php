@@ -23,10 +23,10 @@ use App\Modules\Surveys\Models\Survey;
 use App\Modules\Tasks\Models\Task;
 
 /**
- * CapabilityToAuthorizationRolePermission -- Phase 1 Task 1.2.1.
+ * CapabilityToAuthorizationRolePermission -- canonical authorization contract.
  *
  * Pure mapping from a legacy `Capability` constant (a flat `module.action`
- * string) to the (resource FQCN, action suffix) pair that the new
+ * string) to the (resource FQCN, action suffix) descriptor that the new
  * `authorization_role_permissions` pivot stores.
  *
  * The mapping has TWO sources:
@@ -85,7 +85,7 @@ final class CapabilityToAuthorizationRolePermission
     ];
 
     /**
-     * Resolve a Capability string to its (resource, action) seed-map pair.
+     * Resolve a Capability string to its canonical resource/action descriptor.
      *
      * @return array{resource: class-string, action: string}|null
      */
@@ -140,7 +140,7 @@ final class CapabilityToAuthorizationRolePermission
     }
 
     /**
-     * Resolve every Capability::all() entry into a (resource, action, capability)
+     * Resolve every Capability::all() entry into a canonical descriptor
      * triple. Used by the artisan seeder for the --apply + --dry-run paths.
      *
      * @return list<array{capability: string, resource: class-string, action: string}>
