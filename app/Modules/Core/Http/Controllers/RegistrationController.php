@@ -5,11 +5,10 @@ namespace App\Modules\Core\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\WelcomeNotification;
+use App\Modules\Core\Rules\DepartmentBelongsToOrganization;
 use App\Modules\Core\Rules\PhoneFormat;
-use App\Modules\Core\Services\OrganizationRegistrationInvitationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 
@@ -18,32 +17,29 @@ class RegistrationController extends Controller
     /**
      * Register a new user directly (no OTP verification required).
      */
-    public function register(Request $request, OrganizationRegistrationInvitationService $invitations): JsonResponse
+    public function register(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'confirmed', Password::min(8)],
-            'invite_token' => ['required', 'string', 'size:64'],
+            'department_id' => ['nullable', 'integer', 'exists:departments,id', new DepartmentBelongsToOrganization],
             'job_title' => ['nullable', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50', new PhoneFormat],
+            'organization_id' => ['nullable', 'integer', 'exists:organizations,id'],
         ]);
 
-        $user = DB::transaction(function () use ($validated, $invitations): User {
-            $invitation = $invitations->consume($validated['invite_token'], $validated['email']);
-
-            return User::create([
-                'name' => $validated['name'],
-                'email' => $validated['email'],
-                'password' => Hash::make($validated['password']),
-                'department_id' => $invitation->department_id,
-                'job_title' => $validated['job_title'] ?? null,
-                'phone' => $validated['phone'] ?? null,
-                'organization_id' => $invitation->organization_id,
-                'is_active' => true,
-                'registration_status' => 'approved',
-            ]);
-        });
+        $user = User::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => Hash::make($validated['password']),
+            'department_id' => $validated['department_id'] ?? null,
+            'job_title' => $validated['job_title'] ?? null,
+            'phone' => $validated['phone'] ?? null,
+            'organization_id' => $validated['organization_id'] ?? null,
+            'is_active' => true,
+            'registration_status' => 'approved',
+        ]);
 
         // email_verified_at is guarded (not mass-assignable); mark verified directly.
         $user->forceFill(['email_verified_at' => now()])->save();
