@@ -177,24 +177,51 @@ describe('admin role and governance contracts', () => {
     expect(apiGet).toHaveBeenLastCalledWith('/admin/scoped-roles/user/9/access-summary');
   });
 
-  it('saves governance with exact FormRequest fields and exposes errors', async () => {
+  it('serializes each governance rule save, rolls back failures, and clears the error on retry', async () => {
     apiGet
-      .mockResolvedValueOnce({ data: [{ resource_type: 'project', label: 'Projects', governing_unit_id: null, governing_unit_name: null, applies_to_children: true }] })
-      .mockResolvedValueOnce({ data: [{ id: 3, name: 'Portfolio Office' }] });
-    apiPut.mockRejectedValue({ message: 'Forbidden department' });
+      .mockResolvedValueOnce({ data: [
+        { resource_type: 'project', label: 'Projects', governing_unit_id: null, governing_unit_name: null, applies_to_children: true },
+        { resource_type: 'risk', label: 'Risks', governing_unit_id: null, governing_unit_name: null, applies_to_children: true },
+      ] })
+      .mockResolvedValueOnce({ data: [{ id: 3, name: 'Portfolio Office' }, { id: 4, name: 'Risk Office' }] });
+    let rejectFirst!: (reason?: unknown) => void;
+    apiPut
+      .mockImplementationOnce(() => new Promise((_, reject) => { rejectFirst = reject; }))
+      .mockResolvedValueOnce({ data: { resource_type: 'project', governing_unit_id: 4 } });
     const user = userEvent.setup();
     setPath('/access/governance');
 
     render(<AdminRouter />);
 
     const selection = await screen.findByLabelText('Projects');
+    const otherSelection = screen.getByLabelText('Risks');
     await user.selectOptions(selection, '3');
+    expect(selection).toBeDisabled();
+    expect(otherSelection).toBeEnabled();
+
+    await user.selectOptions(selection, '4');
+    expect(apiPut).toHaveBeenCalledTimes(1);
+    expect(selection).toHaveValue('3');
+
+    rejectFirst({ message: 'Forbidden department' });
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Forbidden department');
+    expect(selection).toBeEnabled();
     expect(selection).toHaveValue('');
     expect(apiPut).toHaveBeenCalledWith('/admin/governance-rules', {
       resource_type: 'project',
       governing_unit_id: 3,
+    });
+
+    await user.selectOptions(selection, '4');
+
+    await waitFor(() => expect(selection).toHaveValue('4'));
+    expect(selection).toBeEnabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(apiPut).toHaveBeenCalledTimes(2);
+    expect(apiPut).toHaveBeenLastCalledWith('/admin/governance-rules', {
+      resource_type: 'project',
+      governing_unit_id: 4,
     });
   });
 
