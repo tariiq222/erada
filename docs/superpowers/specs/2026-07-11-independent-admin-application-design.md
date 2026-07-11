@@ -1,7 +1,7 @@
 # Independent Admin Application Design
 
-**Date:** 2026-07-11  
-**Status:** Approved direction; implementation pending  
+**Date:** 2026-07-11
+**Status:** Approved direction; implementation pending
 **System:** Erada PMO
 
 ## Summary
