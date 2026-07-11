@@ -10,12 +10,20 @@ class AdminDeploymentContractTest extends TestCase
     {
         $dockerfile = $this->read('Dockerfile.admin');
 
-        $this->assertMatchesRegularExpression('/FROM node:20-alpine AS (?:build|builder)/', $dockerfile);
+        $this->assertStringContainsString(
+            'FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS build',
+            $dockerfile,
+        );
         $this->assertStringContainsString('npm run admin:build', $dockerfile);
         $this->assertStringContainsString('vite.admin.config.ts', $dockerfile);
         $this->assertStringContainsString('COPY lang/ lang/', $dockerfile);
         $this->assertStringContainsString('ARG VITE_OPERATIONAL_URL', $dockerfile);
-        $this->assertStringContainsString('FROM nginx:', $dockerfile);
+        $this->assertStringContainsString(
+            'FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 AS runtime',
+            $dockerfile,
+        );
+        $this->assertStringContainsString("find dist-admin -type f -name '*.map' -delete", $dockerfile);
+        $this->assertStringContainsString('rm -rf dist-admin/.vite', $dockerfile);
         $this->assertStringContainsString('COPY --from=build /app/dist-admin/ /usr/share/nginx/html/', $dockerfile);
         $this->assertStringNotContainsString('public/build', $dockerfile);
     }
@@ -28,6 +36,15 @@ class AdminDeploymentContractTest extends TestCase
         $this->assertMatchesRegularExpression('/location = \/index\.html\s*\{[^}]*Cache-Control "no-store, no-cache, must-revalidate";/s', $nginx);
         $this->assertStringContainsString('location /assets/ {', $nginx);
         $this->assertStringContainsString('Cache-Control "public, max-age=31536000, immutable";', $nginx);
+        $this->assertStringContainsString('location ^~ /.vite/ {', $nginx);
+        $this->assertStringContainsString('location ~* \.map$ {', $nginx);
+
+        $this->assertStringContainsString('map $http_x_forwarded_proto $upstream_forwarded_proto {', $nginx);
+        $this->assertStringContainsString('map $http_host $upstream_host {', $nginx);
+        $this->assertStringContainsString('~*^https$ https;', $nginx);
+        $this->assertStringContainsString('~*^http$ http;', $nginx);
+        $this->assertStringContainsString('default $scheme;', $nginx);
+        $this->assertStringContainsString('default $host;', $nginx);
 
         foreach (['/api/', '/sanctum/'] as $path) {
             $this->assertStringContainsString("location {$path} {", $nginx);
@@ -35,8 +52,9 @@ class AdminDeploymentContractTest extends TestCase
         $this->assertSame(2, substr_count($nginx, 'proxy_pass ${BACKEND_URL};'));
 
         foreach ([
-            'proxy_set_header Host $host;',
-            'proxy_set_header X-Forwarded-Proto $scheme;',
+            'proxy_set_header Host $upstream_host;',
+            'proxy_set_header X-Forwarded-Host $upstream_host;',
+            'proxy_set_header X-Forwarded-Proto $upstream_forwarded_proto;',
             'proxy_set_header X-Real-IP $remote_addr;',
             'proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;',
             'proxy_set_header Cookie $http_cookie;',
@@ -83,7 +101,8 @@ class AdminDeploymentContractTest extends TestCase
             'ADMIN_PORT=8080',
             'localhost:8080',
             '127.0.0.1:8080',
-            'SESSION_SECURE_COOKIE=true',
+            'SESSION_SECURE_COOKIE=false',
+            'Production HTTPS deployments must set SESSION_SECURE_COOKIE=true',
         ] as $setting) {
             $this->assertStringContainsString($setting, $environment);
         }
@@ -92,13 +111,20 @@ class AdminDeploymentContractTest extends TestCase
         $this->assertStringContainsString('127.0.0.1:8080', $sanctum);
     }
 
-    public function test_ci_blocks_on_admin_quality_and_builds_the_admin_image(): void
+    public function test_ci_and_deploy_workflows_block_on_admin_quality_and_image_build(): void
     {
         $ci = $this->read('.github/workflows/ci.yml');
+        $deploy = $this->read('.github/workflows/deploy.yml');
 
         $this->assertStringContainsString('run: npm run admin:quality', $ci);
         $this->assertStringContainsString('run: docker build -f Dockerfile.admin -t erada-admin:ci .', $ci);
         $this->assertStringNotContainsString("continue-on-error: true\n        run: npm run admin:quality", $ci);
+
+        $testJob = strstr($deploy, '  # Job 2:', true);
+        $this->assertIsString($testJob);
+        $this->assertStringContainsString('run: npm run admin:quality', $testJob);
+        $this->assertStringContainsString('run: docker build -f Dockerfile.admin -t erada-admin:deploy-check .', $testJob);
+        $this->assertStringNotContainsString('continue-on-error:', $testJob);
     }
 
     private function read(string $relativePath): string
