@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import ts from 'typescript';
 
 const ROOT = process.cwd();
 const ADMIN_ROOT = path.join(ROOT, 'resources/admin');
@@ -83,6 +84,24 @@ function runSelfTest() {
     ['../../js/pages/admin/Overview'],
     'commented dynamic imports must be extracted',
   );
+  assert.deepEqual(
+    extractImports("export const route = '@pages/example';"),
+    [],
+    'exported string values are not module specifiers',
+  );
+  const [escapedOperationalImport] = extractImports(
+    "import '\\u002e\\u002e/\\u002e\\u002e/js/pages/admin/Overview';",
+  );
+  assert.equal(
+    escapedOperationalImport,
+    '../../js/pages/admin/Overview',
+    'escaped import specifiers must be standards-decoded',
+  );
+  assert.equal(
+    isForbiddenImport(escapedOperationalImport, 'resources/admin/app/AdminApp.tsx'),
+    true,
+    'decoded operational imports must be rejected',
+  );
   console.log('admin-boundaries:self-test — PASS');
 }
 
@@ -102,94 +121,37 @@ async function walk(directory) {
   return files;
 }
 
-function tokenize(source) {
-  const tokens = [];
-  let index = 0;
-
-  while (index < source.length) {
-    const char = source[index];
-    const next = source[index + 1];
-
-    if (/\s/.test(char)) {
-      index += 1;
-      continue;
-    }
-
-    if (char === '/' && next === '/') {
-      index = source.indexOf('\n', index + 2);
-      if (index === -1) break;
-      continue;
-    }
-
-    if (char === '/' && next === '*') {
-      const commentEnd = source.indexOf('*/', index + 2);
-      index = commentEnd === -1 ? source.length : commentEnd + 2;
-      continue;
-    }
-
-    if (char === "'" || char === '"') {
-      const quote = char;
-      let value = '';
-      index += 1;
-      while (index < source.length && source[index] !== quote) {
-        if (source[index] === '\\' && index + 1 < source.length) {
-          value += source[index + 1];
-          index += 2;
-        } else {
-          value += source[index];
-          index += 1;
-        }
-      }
-      index += 1;
-      tokens.push({ type: 'string', value });
-      continue;
-    }
-
-    if (/[A-Za-z_$]/.test(char)) {
-      let end = index + 1;
-      while (end < source.length && /[A-Za-z0-9_$]/.test(source[end])) {
-        end += 1;
-      }
-      tokens.push({ type: 'identifier', value: source.slice(index, end) });
-      index = end;
-      continue;
-    }
-
-    tokens.push({ type: 'punctuation', value: char });
-    index += 1;
-  }
-
-  return tokens;
-}
-
 function extractImports(source) {
-  const tokens = tokenize(source);
+  const sourceFile = ts.createSourceFile(
+    'admin-boundary.tsx',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
   const imports = [];
 
-  for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
-    if (token.type !== 'identifier' || (token.value !== 'import' && token.value !== 'export')) {
-      continue;
-    }
-
-    if (token.value === 'import' && tokens[index + 1]?.value === '(') {
-      const specifier = tokens[index + 2];
-      if (specifier?.type === 'string') {
-        imports.push(specifier.value);
-      }
-      continue;
-    }
-
-    for (let cursor = index + 1; cursor < tokens.length; cursor += 1) {
-      const candidate = tokens[cursor];
-      if (candidate.value === ';') break;
-      if (candidate.type === 'string') {
-        imports.push(candidate.value);
-        break;
-      }
+  function collectModuleSpecifier(moduleSpecifier) {
+    if (moduleSpecifier && ts.isStringLiteralLike(moduleSpecifier)) {
+      imports.push(moduleSpecifier.text);
     }
   }
 
+  function visit(node) {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      collectModuleSpecifier(node.moduleSpecifier);
+    } else if (
+      ts.isCallExpression(node)
+      && node.expression.kind === ts.SyntaxKind.ImportKeyword
+      && node.arguments.length === 1
+    ) {
+      collectModuleSpecifier(node.arguments[0]);
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
   return imports;
 }
 
