@@ -59,6 +59,43 @@ vi.mock('@shared/api/twoFactor', () => ({
 
 vi.mock('@shared/api/client', () => ({
   api: {
+    get: vi.fn((path: string) => {
+      if (path === '/admin/overview') {
+        return Promise.resolve({
+          data: {
+            organizations: { active: 1, total: 1 },
+            users: { active: 1, total: 1, two_factor_coverage: { enabled: 1, active_users: 1, percent: 100 } },
+            login_attempts: { last_24h: { successful: 1, failed: 0, total: 1 } },
+            generated_at: '2026-07-12T00:00:00+03:00',
+          },
+        });
+      }
+      if (path === '/admin/security/alerts') {
+        return Promise.resolve({
+          data: {
+            windows: { minutes: 60, cutoff: '2026-07-11T23:00:00+03:00', repeated_failure_threshold: 3 },
+            failed_logins_repeated: [],
+            access_denied_events: [],
+            generated_at: '2026-07-12T00:00:00+03:00',
+          },
+        });
+      }
+      if (path === '/admin/organizations/42') {
+        return Promise.resolve({
+          data: {
+            id: 42,
+            name: 'Admin Route Organization',
+            code: 'ADMIN-42',
+            type: 'organization',
+            is_active: true,
+            children_count: 0,
+            users_count: 0,
+            projects_count: 0,
+          },
+        });
+      }
+      return Promise.reject(new Error(`Unexpected admin API path: ${path}`));
+    }),
     setAuthenticated: authMocks.setAuthenticated,
     setToken: authMocks.setToken,
   },
@@ -251,6 +288,7 @@ describe('admin authentication routing', () => {
     await user.click(screen.getByRole('button', { name: i18n.t('auth.verify') }));
 
     await waitFor(() => expect(window.location.pathname).toBe('/security/alerts'));
+    expect(await screen.findByText(i18n.t('admin.security_alerts.empty.title'))).toBeInTheDocument();
     expect(authMocks.verifyTwoFactor).toHaveBeenCalledWith(1, '123456', 'pending-token');
     expect(authMocks.setAuthenticated).toHaveBeenCalledWith(true);
     expect(authMocks.setToken).not.toHaveBeenCalled();

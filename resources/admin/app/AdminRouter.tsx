@@ -8,6 +8,16 @@ import { AdminLayout } from '@admin/widgets/admin-shell/AdminLayout';
 import { Overview } from '@admin/pages/overview/Overview';
 import { SecurityAlerts } from '@admin/pages/security-alerts/SecurityAlerts';
 import { AuditRecent } from '@admin/pages/audit-recent/AuditRecent';
+import { OrganizationsPage } from '@admin/pages/organizations/OrganizationsPage';
+import { OrganizationForm } from '@admin/pages/organizations/OrganizationForm';
+import { OrganizationDetails } from '@admin/pages/organizations/OrganizationDetails';
+import { RolesPage } from '@admin/pages/roles/RolesPage';
+import { RoleForm } from '@admin/pages/roles/RoleForm';
+import { AccessPage } from '@admin/pages/access/AccessPage';
+import { GovernanceRulesPage } from '@admin/pages/access/GovernanceRulesPage';
+import { ActivityLogsPage } from '@admin/pages/activity-logs/ActivityLogsPage';
+import { ScopedRoleAuditPage } from '@admin/pages/scoped-roles/ScopedRoleAuditPage';
+import { ScopeTypesPage } from '@admin/pages/scope-types/ScopeTypesPage';
 
 function ProtectedPagePlaceholder({ titleKey }: { titleKey: string }) {
   const { t } = useTranslation();
@@ -35,13 +45,20 @@ export function AdminRouter() {
             <Route path="/overview" element={<Overview />} />
             <Route path="/security/alerts" element={<SecurityAlerts />} />
             <Route path="/audit/recent" element={<AuditRecent />} />
-            <Route path="/organizations/*" element={<ProtectedPagePlaceholder titleKey="admin.organizations.title" />} />
-            <Route path="/access/*" element={<ProtectedPagePlaceholder titleKey="admin.access.title" />} />
-            <Route path="/roles/*" element={<ProtectedPagePlaceholder titleKey="admin.roles.title" />} />
+            <Route path="/organizations" element={<OrganizationsPage />} />
+            <Route path="/organizations/new" element={<OrganizationForm />} />
+            <Route path="/organizations/:organizationId" element={<OrganizationDetails />} />
+            <Route path="/organizations/:organizationId/edit" element={<OrganizationForm />} />
+            <Route path="/access" element={<AccessPage />} />
+            <Route path="/access/governance" element={<GovernanceRulesPage />} />
+            <Route path="/roles" element={<RolesPage />} />
+            <Route path="/roles/new" element={<RoleForm />} />
+            <Route path="/roles/:roleId" element={<RoleForm />} />
+            <Route path="/roles/:roleId/edit" element={<RoleForm />} />
             <Route path="/users/*" element={<ProtectedPagePlaceholder titleKey="admin.users.title" />} />
-            <Route path="/activity-logs/*" element={<ProtectedPagePlaceholder titleKey="admin.activityLogs.title" />} />
-            <Route path="/scoped-roles/audit-logs" element={<ProtectedPagePlaceholder titleKey="admin.scopedRolesAudit.title" />} />
-            <Route path="/scope-types/*" element={<ProtectedPagePlaceholder titleKey="admin.scopeTypes.title" />} />
+            <Route path="/activity-logs" element={<ActivityLogsPage />} />
+            <Route path="/scoped-roles/audit-logs" element={<ScopedRoleAuditPage />} />
+            <Route path="/scope-types" element={<ScopeTypesPage />} />
             <Route path="/departments/*" element={<ProtectedPagePlaceholder titleKey="admin.departments.title" />} />
             <Route path="/incident-types/*" element={<ProtectedPagePlaceholder titleKey="admin.incidentTypes.title" />} />
             <Route path="*" element={<NotFound />} />
