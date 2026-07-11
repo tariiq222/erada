@@ -1,3 +1,10 @@
+import { AdminProviders } from '@admin/app/AdminProviders';
+import { AdminRouter } from '@admin/app/AdminRouter';
+
 export function AdminApp() {
-  return <main id="admin-app" />;
+  return (
+    <AdminProviders>
+      <AdminRouter />
+    </AdminProviders>
+  );
 }
