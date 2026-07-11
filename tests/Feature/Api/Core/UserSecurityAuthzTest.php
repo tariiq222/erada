@@ -194,6 +194,56 @@ class UserSecurityAuthzTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_same_org_user_with_only_engine_users_view_can_access_scoped_roles(): void
+    {
+        // Engine-only USERS_VIEW (no Spatie 'view_users' permission on a
+        // viewer-role user). userScopedRoles must authorize through
+        // UserPolicy::view, not the legacy `$user->can('view_users')` check.
+        // RED for the legacy path: a viewer lacks Permission::VIEW_USERS, so
+        // `$user->can('view_users')` returns false => 403 (should be 200).
+        $viewer = $this->makeUser($this->orgA, null, 'viewer');
+        $this->grantEngineCapability($viewer, Capability::USERS_VIEW);
+        $target = $this->makeUser($this->orgA);
+
+        $this->actingAs($viewer, 'sanctum')
+            ->getJson("/api/scoped-roles/user/{$target->id}")
+            ->assertStatus(200)
+            ->assertJsonStructure(['data']);
+    }
+
+    public function test_same_org_user_with_only_engine_users_view_can_access_access_summary(): void
+    {
+        // accessSummary must authorize through UserPolicy::view (engine
+        // USERS_VIEW + same-org), not the legacy Spatie `view_users` check.
+        $viewer = $this->makeUser($this->orgA, null, 'viewer');
+        $this->grantEngineCapability($viewer, Capability::USERS_VIEW);
+        $target = $this->makeUser($this->orgA);
+
+        $this->actingAs($viewer, 'sanctum')
+            ->getJson("/api/scoped-roles/user/{$target->id}/access-summary")
+            ->assertStatus(200)
+            ->assertJsonStructure(['data' => ['functional_roles', 'scoped']]);
+    }
+
+    public function test_cluster_directory_grant_alone_does_not_widen_user_endpoints_cross_org(): void
+    {
+        // Holding CLUSTER_TREE_VIEW (cluster directory primitive) but NOT
+        // USERS_VIEW must not authorize cross-org reads on userScopedRoles
+        // or accessSummary. UserPolicy::view demands the module capability;
+        // viewDirectory() is the dedicated cluster seam, not wired here.
+        $actor = $this->makeUser($this->orgA, null, 'viewer');
+        $this->grantEngineCapability($actor, Capability::CLUSTER_TREE_VIEW);
+        $foreign = $this->makeUser($this->orgB);
+
+        $this->actingAs($actor, 'sanctum')
+            ->getJson("/api/scoped-roles/user/{$foreign->id}")
+            ->assertStatus(403);
+
+        $this->actingAs($actor, 'sanctum')
+            ->getJson("/api/scoped-roles/user/{$foreign->id}/access-summary")
+            ->assertStatus(403);
+    }
+
     // ========== GET /api/scoped-roles/audit-logs ==========
 
     public function test_member_cannot_view_audit_logs(): void

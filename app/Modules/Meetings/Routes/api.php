@@ -89,10 +89,18 @@ Route::middleware('auth:sanctum')->prefix('meetings')->group(function () {
     Route::post('/{meeting}/agenda-items/reorder', [AgendaItemController::class, 'reorder']);
     // Mutations: nested under the meeting so Laravel scopes the item by `meeting_id`
     // (P0 IDOR fix — replaces the standalone /api/agenda-items/{id} routes).
-    Route::put('/{meeting}/agenda-items/{agendaItem}', [AgendaItemController::class, 'update']);
-    Route::delete('/{meeting}/agenda-items/{agendaItem}', [AgendaItemController::class, 'destroy']);
-    Route::post('/{meeting}/agenda-items/{agendaItem}/approve', [AgendaItemController::class, 'approve']);
-    Route::post('/{meeting}/agenda-items/{agendaItem}/reject', [AgendaItemController::class, 'reject']);
+    //
+    // Scoped nested binding here forces `{agendaItem}` to belong to `{meeting}`
+    // (Meeting::agendaItems()). A mismatched parent returns 404 BEFORE the
+    // controller body runs, closing the cross-parent IDOR. Scoped only on this
+    // narrow mutation sub-group to avoid widening the surface to unrelated
+    // sibling routes in this file.
+    Route::scopeBindings()->group(function () {
+        Route::put('/{meeting}/agenda-items/{agendaItem}', [AgendaItemController::class, 'update']);
+        Route::delete('/{meeting}/agenda-items/{agendaItem}', [AgendaItemController::class, 'destroy']);
+        Route::post('/{meeting}/agenda-items/{agendaItem}/approve', [AgendaItemController::class, 'approve']);
+        Route::post('/{meeting}/agenda-items/{agendaItem}/reject', [AgendaItemController::class, 'reject']);
+    });
     Route::post('/{meeting}/request-agenda', [MeetingController::class, 'requestAgenda']);
     Route::post('/{meeting}/start', [MeetingController::class, 'start']);
     Route::post('/{meeting}/complete', [MeetingController::class, 'complete']);

@@ -59,15 +59,6 @@ class UpdateSurveySectionRequest extends FormRequest
                 return;
             }
 
-            if (! $this->survey->canEdit()) {
-                $validator->errors()->add(
-                    'survey',
-                    'لا يمكن تعديل الاستبيان بعد نشره'
-                );
-
-                return;
-            }
-
             $section = $this->route('section');
 
             if (! $section instanceof SurveySection) {
@@ -77,9 +68,13 @@ class UpdateSurveySectionRequest extends FormRequest
             $this->section = $section;
 
             if ((int) $section->survey_id !== (int) $this->survey->id) {
+                abort(404, 'القسم غير موجود في هذا الاستبيان');
+            }
+
+            if (! $this->survey->canEdit()) {
                 $validator->errors()->add(
-                    'section',
-                    'القسم غير موجود في هذا الاستبيان'
+                    'survey',
+                    'لا يمكن تعديل الاستبيان بعد نشره'
                 );
             }
         });
