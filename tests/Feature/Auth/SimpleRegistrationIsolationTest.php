@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Modules\Core\Models\Organization;
+use App\Modules\Core\Models\OrganizationRegistrationInvitation;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -23,11 +24,17 @@ class SimpleRegistrationIsolationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_department_must_belong_to_the_selected_organization(): void
+    public function test_client_selected_department_cannot_replace_the_invitation_department(): void
     {
         $orgA = Organization::factory()->create();
         $orgB = Organization::factory()->create();
+        $deptInA = Department::factory()->create(['organization_id' => $orgA->id]);
         $deptInB = Department::factory()->create(['organization_id' => $orgB->id]);
+        [, $token] = OrganizationRegistrationInvitation::issue(
+            organizationId: $orgA->id,
+            departmentId: $deptInA->id,
+            email: 'cross@example.com',
+        );
 
         $response = $this->withHeader('X-Skip-Csrf', '1')
             ->postJson('/api/register', [
@@ -35,20 +42,27 @@ class SimpleRegistrationIsolationTest extends TestCase
                 'email' => 'cross@example.com',
                 'password' => 'Str0ng!Passw0rd9',
                 'password_confirmation' => 'Str0ng!Passw0rd9',
+                'invite_token' => $token,
                 'organization_id' => $orgA->id,
                 'department_id' => $deptInB->id, // ← belongs to orgB
             ]);
 
-        $response->assertStatus(422)
-            ->assertJsonValidationErrors('department_id');
-
-        $this->assertDatabaseMissing('users', ['email' => 'cross@example.com']);
+        $response->assertCreated();
+        $user = User::where('email', 'cross@example.com')->sole();
+        $this->assertSame($orgA->id, $user->organization_id);
+        $this->assertSame($deptInA->id, $user->department_id);
     }
 
-    public function test_department_in_same_organization_is_accepted(): void
+    public function test_department_in_same_organization_is_bound_by_an_invitation(): void
     {
         $orgA = Organization::factory()->create();
         $deptInA = Department::factory()->create(['organization_id' => $orgA->id]);
+
+        [, $token] = OrganizationRegistrationInvitation::issue(
+            organizationId: $orgA->id,
+            departmentId: $deptInA->id,
+            email: 'same@example.com',
+        );
 
         $this->withHeader('X-Skip-Csrf', '1')
             ->postJson('/api/register', [
@@ -56,8 +70,7 @@ class SimpleRegistrationIsolationTest extends TestCase
                 'email' => 'same@example.com',
                 'password' => 'Str0ng!Passw0rd9',
                 'password_confirmation' => 'Str0ng!Passw0rd9',
-                'organization_id' => $orgA->id,
-                'department_id' => $deptInA->id,
+                'invite_token' => $token,
             ])
             ->assertCreated();
 
@@ -66,10 +79,8 @@ class SimpleRegistrationIsolationTest extends TestCase
         $this->assertSame($deptInA->id, $u->department_id);
     }
 
-    public function test_rule_is_bypassed_when_department_or_organization_absent(): void
+    public function test_registration_without_an_invitation_is_rejected(): void
     {
-        // No org, no dept — both nullable. The required/nullable rules, not
-        // DepartmentBelongsToOrganization, decide whether presence is mandatory.
         $this->withHeader('X-Skip-Csrf', '1')
             ->postJson('/api/register', [
                 'name' => 'No Org',
@@ -77,6 +88,7 @@ class SimpleRegistrationIsolationTest extends TestCase
                 'password' => 'Str0ng!Passw0rd9',
                 'password_confirmation' => 'Str0ng!Passw0rd9',
             ])
-            ->assertCreated();
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['invite_token']);
     }
 }
