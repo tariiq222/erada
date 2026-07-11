@@ -616,4 +616,3 @@ Execute Tasks 1-11 serially. Shared configuration, module route files, CI, API a
 | Deployment | admin image build, Nginx contract, deep-link E2E |
 | Integration | Playwright mutations to persisted/observable outcomes |
 | Rollback | no schema diff and routing-only rollback evidence |
-
