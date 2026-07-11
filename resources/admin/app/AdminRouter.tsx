@@ -5,6 +5,9 @@ import { Login } from '@admin/pages/Login';
 import { TwoFactorVerification } from '@admin/pages/TwoFactorVerification';
 import { NotFound } from '@admin/pages/NotFound';
 import { AdminLayout } from '@admin/widgets/admin-shell/AdminLayout';
+import { Overview } from '@admin/pages/overview/Overview';
+import { SecurityAlerts } from '@admin/pages/security-alerts/SecurityAlerts';
+import { AuditRecent } from '@admin/pages/audit-recent/AuditRecent';
 
 function ProtectedPagePlaceholder({ titleKey }: { titleKey: string }) {
   const { t } = useTranslation();
@@ -29,9 +32,9 @@ export function AdminRouter() {
         <Route element={<SuperAdminBoundary />}>
           <Route element={<AdminLayout />}>
             <Route index element={<Navigate to="/overview" replace />} />
-            <Route path="/overview" element={<ProtectedPagePlaceholder titleKey="admin.overview.title" />} />
-            <Route path="/security/alerts" element={<ProtectedPagePlaceholder titleKey="admin.security_alerts.title" />} />
-            <Route path="/audit/recent" element={<ProtectedPagePlaceholder titleKey="admin.audit_recent.title" />} />
+            <Route path="/overview" element={<Overview />} />
+            <Route path="/security/alerts" element={<SecurityAlerts />} />
+            <Route path="/audit/recent" element={<AuditRecent />} />
             <Route path="/organizations/*" element={<ProtectedPagePlaceholder titleKey="admin.organizations.title" />} />
             <Route path="/access/*" element={<ProtectedPagePlaceholder titleKey="admin.access.title" />} />
             <Route path="/roles/*" element={<ProtectedPagePlaceholder titleKey="admin.roles.title" />} />
