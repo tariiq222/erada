@@ -4,6 +4,7 @@ namespace App\Modules\Core\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Services\AuthSecurityService;
 use App\Modules\Core\Services\TwoFactorService;
 use App\Modules\Shared\Models\ActivityLog;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -52,7 +53,8 @@ class TwoFactorController extends Controller
     }
 
     public function __construct(
-        private readonly TwoFactorService $twoFactorService
+        private readonly TwoFactorService $twoFactorService,
+        private readonly AuthSecurityService $authSecurityService
     ) {}
 
     /**
@@ -354,12 +356,31 @@ class TwoFactorController extends Controller
                 return response()->json(['message' => 'المستخدم غير موجود'], 404);
             }
 
+            $eligibility = $this->authSecurityService->canAttemptLogin($user->email, $request->ip());
+            if (! $user->is_active || ! $eligibility['allowed']) {
+                return response()->json([
+                    'message' => 'تعذر إكمال تسجيل الدخول',
+                ], 403);
+            }
+
             // التحقق من الكود
             if (! $this->twoFactorService->verify($user, $validated['code'])) {
                 cache()->put('2fa_tries_'.$validated['pending_token'], $tries + 1, now()->addMinutes(5));
                 throw ValidationException::withMessages([
                     'code' => ['الكود غير صحيح'],
                 ]);
+            }
+
+            $this->authSecurityService->recordSuccessfulLogin(
+                $user,
+                $request->ip(),
+                $request->userAgent()
+            );
+
+            try {
+                ActivityLog::logLogin($user, $request->ip(), $request->userAgent());
+            } catch (\Exception $e) {
+                Log::warning('Failed to log 2FA login: '.$e->getMessage());
             }
 
             // حذف pending token وعداد المحاولات
