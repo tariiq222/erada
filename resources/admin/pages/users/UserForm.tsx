@@ -23,6 +23,8 @@ export function UserForm() {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [departments, setDepartments] = useState<DepartmentSummary[]>([]);
   const [roles, setRoles] = useState<RoleDefinition[]>([]);
+  const [rolesDirty, setRolesDirty] = useState(false);
+  const [hasLockedSuperAdminRole, setHasLockedSuperAdminRole] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,13 +33,13 @@ export function UserForm() {
     let active = true;
     (async () => {
       try {
-        const organizationResponse = await adminApi.organizations.list({ per_page: 100 });
+        const organizationResponse = await adminApi.organizations.all();
         const roleResponse = await adminApi.roles.list();
         let next = form;
         if (editing) {
           const record = await adminApi.users.get(Number(userId));
-          next = { name: record.name, email: record.email, password: '', organization_id: record.organization_id, department_id: record.department?.id ?? record.department_id ?? null, phone: record.phone, extension: record.extension, job_title: record.job_title, is_active: record.is_active, roles: record.roles ?? [] };
-          if (active) setForm(next);
+          next = { name: record.name, email: record.email, password: '', organization_id: record.organization_id, department_id: record.department?.id ?? record.department_id ?? null, phone: record.phone, extension: record.extension, job_title: record.job_title, is_active: record.is_active, roles: (record.roles ?? []).filter((role) => role !== 'super_admin') };
+          if (active) { setForm(next); setHasLockedSuperAdminRole((record.roles ?? []).includes('super_admin')); }
         }
         const organizationId = next.organization_id;
         const departmentResponse = organizationId ? await adminApi.departments.summary(organizationId) : { data: [] };
@@ -67,8 +69,12 @@ export function UserForm() {
     if (Object.keys(nextErrors).length) return;
     setError(null);
     try {
-      const payload: AdminUserInput = { ...form, phone: form.phone || null, extension: form.extension || null, job_title: form.job_title || null };
-      if (editing && !payload.password) delete payload.password;
+      const payload: Partial<AdminUserInput> = { ...form, phone: form.phone || null, extension: form.extension || null, job_title: form.job_title || null };
+      if (editing) {
+        delete payload.organization_id;
+        if (!payload.password) delete payload.password;
+        if (!rolesDirty) delete payload.roles;
+      }
       if (editing) await adminApi.users.update(Number(userId), payload); else await adminApi.users.create(payload);
       navigate('/users');
     } catch (caught) { setError(apiErrorMessage(caught, t('users.save_error'))); }
@@ -79,12 +85,12 @@ export function UserForm() {
     <Input aria-label={t('common.name')} label={t('common.name')} value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} error={errors.name} />
     <Input aria-label={t('common.email')} type="email" label={t('common.email')} value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} error={errors.email} />
     <Input aria-label={t('users.password')} type="password" label={t('users.password')} value={form.password ?? ''} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} error={errors.password} />
-    <label className="text-sm">{t('admin.organizations.title')}<select className="mt-1 block w-full rounded-lg border p-2" value={form.organization_id ?? ''} onChange={(event) => void chooseOrganization(event.target.value ? Number(event.target.value) : null)}><option value="">{t('common.none')}</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label>
+    <label className="text-sm">{t('admin.organizations.title')}<select aria-label={t('admin.organizations.title')} disabled={editing} className="mt-1 block w-full rounded-lg border p-2" value={form.organization_id ?? ''} onChange={(event) => void chooseOrganization(event.target.value ? Number(event.target.value) : null)}><option value="">{t('common.none')}</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label>
     <label className="text-sm">{t('common.department')}<select aria-label={t('common.department')} className="mt-1 block w-full rounded-lg border p-2" value={form.department_id ?? ''} onChange={(event) => setForm((current) => ({ ...current, department_id: event.target.value ? Number(event.target.value) : null }))}><option value="">{t('users.select_department')}</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label>
     <Input label={t('common.phone')} value={form.phone ?? ''} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} />
     <Input label={t('users.extension')} value={form.extension ?? ''} onChange={(event) => setForm((current) => ({ ...current, extension: event.target.value }))} />
     <Input label={t('users.job_title')} value={form.job_title ?? ''} onChange={(event) => setForm((current) => ({ ...current, job_title: event.target.value }))} />
-    <fieldset className="space-y-2 md:col-span-2"><legend className="text-sm font-medium">{t('users.roles')}</legend>{roles.map((role) => <label className="me-4 inline-flex items-center gap-2" key={role.id}><input type="checkbox" checked={form.roles.includes(role.name)} onChange={() => setForm((current) => ({ ...current, roles: current.roles.includes(role.name) ? current.roles.filter((name) => name !== role.name) : [...current.roles, role.name] }))} />{role.display_name}</label>)}</fieldset>
+    <fieldset className="space-y-2 md:col-span-2"><legend className="text-sm font-medium">{t('users.roles')}</legend>{hasLockedSuperAdminRole && <p className="rounded-lg border p-3 text-sm">{t('admin.users.superAdminLocked')}</p>}{roles.map((role) => <label className="me-4 inline-flex items-center gap-2" key={role.id}><input type="checkbox" checked={form.roles.includes(role.name)} onChange={() => { setRolesDirty(true); setForm((current) => ({ ...current, roles: current.roles.includes(role.name) ? current.roles.filter((name) => name !== role.name) : [...current.roles, role.name] })); }} />{role.display_name}</label>)}</fieldset>
     <label className="flex items-center gap-2"><input type="checkbox" checked={form.is_active} onChange={(event) => setForm((current) => ({ ...current, is_active: event.target.checked }))} />{t('users.user_active')}</label>
     <div className="flex gap-2 md:col-span-2"><Button type="submit">{t(editing ? 'common.save_changes' : 'common.create')}</Button><Button type="button" variant="secondary" onClick={() => navigate('/users')}>{t('common.cancel')}</Button></div>
   </form></Card></div>;

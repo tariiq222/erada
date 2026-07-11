@@ -289,6 +289,7 @@ export interface IncidentTypeInput {
   name: string;
   name_ar: string;
   is_active: boolean;
+  requires_reportable_type: boolean;
 }
 
 export interface ActivityLogEntry {

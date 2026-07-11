@@ -32,6 +32,7 @@ class StoreIncidentTypeRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'name_ar' => ['required', 'string', 'max:255'],
             'is_active' => ['sometimes', 'boolean'],
+            'requires_reportable_type' => ['sometimes', 'boolean'],
         ];
     }
 }

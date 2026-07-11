@@ -4,7 +4,9 @@ namespace App\Modules\Core\Http\Requests;
 
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Rules\AssignableRoleKey;
+use App\Modules\HR\Models\Department;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
 /**
@@ -44,12 +46,18 @@ class UpdateUserRequest extends FormRequest
     {
         $targetId = $this->route('user');
         $id = $targetId instanceof User ? $targetId->id : $targetId;
+        $target = $targetId instanceof User ? $targetId : User::find($targetId);
+        $targetOrganizationId = $target?->organization_id;
 
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'email' => ['sometimes', 'required', 'email', 'unique:users,email,'.$id],
             'password' => ['nullable', Password::defaults()],
-            'department_id' => ['nullable', 'exists:departments,id'],
+            'department_id' => [
+                'nullable',
+                Rule::exists(Department::class, 'id')
+                    ->where(fn ($query) => $query->where('organization_id', $targetOrganizationId)),
+            ],
             'phone' => ['nullable', 'string', 'max:20'],
             'extension' => ['nullable', 'string', 'max:10'],
             'job_title' => ['nullable', 'string', 'max:255'],
@@ -81,6 +89,15 @@ class UpdateUserRequest extends FormRequest
                 : User::find($targetId);
 
             if ($target === null) {
+                return;
+            }
+
+            if (in_array('super_admin', $roles, true) && ! $target->hasRole('super_admin')) {
+                $validator->errors()->add(
+                    'roles',
+                    'لا يمكن منح دور المدير العام من شاشة تعديل المستخدم.'
+                );
+
                 return;
             }
 

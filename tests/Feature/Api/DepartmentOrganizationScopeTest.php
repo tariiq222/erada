@@ -227,8 +227,8 @@ class DepartmentOrganizationScopeTest extends TestCase
                 'is_active' => true,
             ]);
 
-        // adminA can CREATE in orgA, but D-06 check catches cross-org parent
-        // (engine allows CREATE on orgA scope, then D-06 guard fires → 403)
+        // Non-super callers preserve the controller's existing explicit
+        // cross-organization denial contract.
         $response->assertStatus(403);
     }
 
@@ -338,6 +338,66 @@ class DepartmentOrganizationScopeTest extends TestCase
             'name' => 'قسم super_admin',
             'organization_id' => $this->orgB->id,
         ]);
+    }
+
+    public function test_super_admin_cannot_create_department_with_parent_from_another_target_org(): void
+    {
+        $parentA = Department::factory()->create([
+            'organization_id' => $this->orgA->id,
+            'level' => 1,
+            'parent_id' => null,
+        ]);
+
+        $this->actingAs($this->superAdmin, 'sanctum')
+            ->postJson('/api/admin/departments', [
+                'name' => 'Cross-org child',
+                'organization_id' => $this->orgB->id,
+                'parent_id' => $parentA->id,
+                'level' => 2,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['parent_id']);
+    }
+
+    public function test_super_admin_cannot_update_department_with_parent_from_another_target_org(): void
+    {
+        $parentA = Department::factory()->create([
+            'organization_id' => $this->orgA->id,
+            'level' => 1,
+            'parent_id' => null,
+        ]);
+        $targetB = Department::factory()->create([
+            'organization_id' => $this->orgB->id,
+            'level' => 2,
+            'parent_id' => null,
+        ]);
+
+        $this->actingAs($this->superAdmin, 'sanctum')
+            ->putJson("/api/admin/departments/{$targetB->id}", [
+                'name' => $targetB->name,
+                'parent_id' => $parentA->id,
+                'level' => 2,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['parent_id']);
+    }
+
+    public function test_super_admin_manager_must_belong_to_selected_department_org(): void
+    {
+        $managerA = User::factory()->create([
+            'organization_id' => $this->orgA->id,
+            'department_id' => $this->deptA->id,
+        ]);
+
+        $this->actingAs($this->superAdmin, 'sanctum')
+            ->postJson('/api/admin/departments', [
+                'name' => 'Org B department',
+                'organization_id' => $this->orgB->id,
+                'level' => 1,
+                'manager_id' => $managerA->id,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['manager_id']);
     }
 
     public function test_super_admin_sees_all_departments_in_index(): void

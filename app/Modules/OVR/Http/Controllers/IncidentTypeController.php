@@ -24,8 +24,13 @@ class IncidentTypeController extends Controller
             return response()->json(['message' => __('ovr.api.view_incident_types_forbidden')], 403);
         }
 
+        $validated = $request->validate([
+            'include_inactive' => ['sometimes', 'boolean'],
+        ]);
+        $includeInactive = $user->isSuperAdmin() && ($validated['include_inactive'] ?? false);
+
         $types = IncidentType::query()
-            ->where('is_active', true)
+            ->when(! $includeInactive, fn ($query) => $query->where('is_active', true))
             ->forOrganization($request->user()->organization_id)
             ->with(['reportableTypes' => function ($q) use ($request) {
                 $q->forOrganization($request->user()->organization_id);
@@ -60,7 +65,7 @@ class IncidentTypeController extends Controller
     {
         // Authorization is handled by StoreIncidentTypeRequest::authorize()
         // (OVR_MANAGE_TYPES via engine).
-        $type = IncidentType::create($request->only(['name', 'name_ar', 'is_active']));
+        $type = IncidentType::create($request->only(['name', 'name_ar', 'is_active', 'requires_reportable_type']));
 
         // Audit log: إنشاء نوع حادثة
         ActivityLog::create([
@@ -83,8 +88,8 @@ class IncidentTypeController extends Controller
         // Authorization is handled by UpdateIncidentTypeRequest::authorize()
         // (OVR_MANAGE_TYPES via engine).
 
-        $oldValues = $type->only(['name', 'name_ar', 'is_active']);
-        $type->update($request->only(['name', 'name_ar', 'is_active']));
+        $oldValues = $type->only(['name', 'name_ar', 'is_active', 'requires_reportable_type']);
+        $type->update($request->only(['name', 'name_ar', 'is_active', 'requires_reportable_type']));
 
         // Audit log: تحديث نوع حادثة
         ActivityLog::create([
@@ -94,7 +99,7 @@ class IncidentTypeController extends Controller
             'loggable_type' => IncidentType::class,
             'loggable_id' => $type->id,
             'old_values' => $oldValues,
-            'new_values' => $type->only(['name', 'name_ar', 'is_active']),
+            'new_values' => $type->only(['name', 'name_ar', 'is_active', 'requires_reportable_type']),
             'ip_address' => $request->ip(),
         ]);
 

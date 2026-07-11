@@ -188,4 +188,51 @@ class UserUpdateIsolationTest extends TestCase
             'name' => 'Updated By Super',
         ]);
     }
+
+    public function test_super_admin_cannot_move_user_to_department_in_another_organization(): void
+    {
+        $superAdmin = User::factory()->create(['organization_id' => $this->orgA->id]);
+        $superAdmin->assignRole('super_admin');
+        $target = User::factory()->create([
+            'organization_id' => $this->orgA->id,
+            'department_id' => $this->deptA->id,
+        ]);
+        $target->assignRole('viewer');
+
+        $this->actingAs($superAdmin, 'sanctum')
+            ->putJson("/api/users/{$target->id}", ['department_id' => $this->deptB->id])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['department_id']);
+
+        $this->assertSame($this->deptA->id, $target->fresh()->department_id);
+    }
+
+    public function test_updating_existing_super_admin_roles_cannot_silently_remove_super_admin(): void
+    {
+        $actor = User::factory()->create(['organization_id' => $this->orgA->id]);
+        $actor->assignRole('super_admin');
+        $target = User::factory()->create(['organization_id' => $this->orgB->id]);
+        $target->assignRole('super_admin');
+
+        $this->actingAs($actor, 'sanctum')
+            ->putJson("/api/users/{$target->id}", ['roles' => ['viewer']])
+            ->assertOk();
+
+        $this->assertTrue($target->fresh()->hasRole('super_admin'));
+    }
+
+    public function test_super_admin_cannot_grant_super_admin_through_user_update(): void
+    {
+        $actor = User::factory()->create(['organization_id' => $this->orgA->id]);
+        $actor->assignRole('super_admin');
+        $target = User::factory()->create(['organization_id' => $this->orgA->id]);
+        $target->assignRole('viewer');
+
+        $this->actingAs($actor, 'sanctum')
+            ->putJson("/api/users/{$target->id}", ['roles' => ['super_admin']])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['roles']);
+
+        $this->assertFalse($target->fresh()->hasRole('super_admin'));
+    }
 }

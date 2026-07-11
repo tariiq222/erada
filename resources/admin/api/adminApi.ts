@@ -69,6 +69,18 @@ export const adminApi = {
     update: (id: number, data: Partial<OrganizationInput>) =>
       api.put(`/admin/organizations/${id}`, data),
     delete: (id: number) => api.delete(`/admin/organizations/${id}`),
+    all: async () => {
+      const data: Organization[] = [];
+      let page = 1;
+      let lastPage = 1;
+      do {
+        const response = await api.get<PaginatedResponse<Organization>>(`/admin/organizations${queryString({ per_page: 100, page })}`);
+        data.push(...response.data);
+        lastPage = response.meta.last_page;
+        page += 1;
+      } while (page <= lastPage);
+      return { data };
+    },
   },
   roles: {
     list: () => api.get<{ data: RoleDefinition[]; meta: { total: number } }>('/admin/roles'),
@@ -89,6 +101,18 @@ export const adminApi = {
     update: (id: number, data: Partial<AdminUserInput>) => api.put(`/admin/users/${id}`, data),
     unlock: (id: number) => api.post(`/admin/users/${id}/unlock`, undefined),
     delete: (id: number) => api.delete(`/admin/users/${id}`),
+    all: async (organizationId: number) => {
+      const data: AdminUser[] = [];
+      let page = 1;
+      let lastPage = 1;
+      do {
+        const response = await api.get<RawPaginatedResponse<AdminUser>>(`/admin/users${queryString({ organization_id: organizationId, per_page: 100, page })}`);
+        data.push(...response.data);
+        lastPage = response.last_page;
+        page += 1;
+      } while (page <= lastPage);
+      return { data };
+    },
   },
   access: {
     summary: (userId: number) =>
@@ -135,7 +159,8 @@ export const adminApi = {
       api.get<PaginatedResponse<ScopeType>>(`/admin/scope-types${queryString(params)}`),
   },
   incidentTypes: {
-    list: () => api.get<{ data: IncidentType[] }>('/admin/incident-types'),
+    list: (params?: { include_inactive?: boolean }) =>
+      api.get<{ data: IncidentType[] }>(`/admin/incident-types${queryString(params)}`),
     create: (data: IncidentTypeInput) => api.post('/admin/incident-types', data),
     update: (id: string, data: Partial<IncidentTypeInput>) => api.put(`/admin/incident-types/${id}`, data),
     delete: (id: string) => api.delete(`/admin/incident-types/${id}`),

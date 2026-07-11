@@ -84,6 +84,15 @@ class UserController extends Controller
 
             $this->applyUserVisibility($query, $user);
 
+            if ($user->isSuperAdmin()) {
+                $validatedFilters = $request->validate([
+                    'organization_id' => ['nullable', 'integer', 'exists:organizations,id'],
+                ]);
+                if (isset($validatedFilters['organization_id'])) {
+                    $query->where('organization_id', (int) $validatedFilters['organization_id']);
+                }
+            }
+
             // البحث
             if ($request->has('search')) {
                 $search = $request->search;
@@ -303,9 +312,11 @@ class UserController extends Controller
 
             // فحص تصعيد الأدوار — canAssignRole عبر UpdateUserRequest::withValidator
 
-            // منع تصعيد الصلاحيات: لا يمكن تعيين super_admin عبر API
-            if ($roles !== null) {
-                $roles = array_diff($roles, ['super_admin']);
+            // An existing super_admin role is immutable through this generic
+            // user editor. UpdateUserRequest rejects granting it to a new
+            // target; this branch prevents an omitted checkbox from revoking it.
+            if ($roles !== null && $user->hasRole('super_admin')) {
+                $roles = array_values(array_unique([...$roles, 'super_admin']));
             }
 
             // منع نقل المستخدم لمؤسسة أخرى

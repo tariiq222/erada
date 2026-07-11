@@ -102,6 +102,24 @@ describe('admin user contracts', () => {
     expect(apiDelete).toHaveBeenCalledWith('/admin/users/9');
   });
 
+  it('loads every organization and manager-candidate page through canonical filters', async () => {
+    apiGet
+      .mockResolvedValueOnce({ data: [{ id: 17, name: 'North' }], meta: { current_page: 1, last_page: 2, per_page: 100, total: 2 } })
+      .mockResolvedValueOnce({ data: [{ id: 18, name: 'South' }], meta: { current_page: 2, last_page: 2, per_page: 100, total: 2 } })
+      .mockResolvedValueOnce({ data: [{ id: 9, name: 'First Manager' }], current_page: 1, last_page: 2, per_page: 100, total: 2 })
+      .mockResolvedValueOnce({ data: [{ id: 10, name: 'Second Manager' }], current_page: 2, last_page: 2, per_page: 100, total: 2 });
+
+    const organizations = await adminApi.organizations.all();
+    const managers = await adminApi.users.all(17);
+
+    expect(organizations.data.map((row) => row.id)).toEqual([17, 18]);
+    expect(managers.data.map((row) => row.id)).toEqual([9, 10]);
+    expect(apiGet).toHaveBeenNthCalledWith(1, '/admin/organizations?per_page=100&page=1');
+    expect(apiGet).toHaveBeenNthCalledWith(2, '/admin/organizations?per_page=100&page=2');
+    expect(apiGet).toHaveBeenNthCalledWith(3, '/admin/users?organization_id=17&per_page=100&page=1');
+    expect(apiGet).toHaveBeenNthCalledWith(4, '/admin/users?organization_id=17&per_page=100&page=2');
+  });
+
   it('requires a trusted operational origin and rejects unsafe record paths', () => {
     vi.stubEnv('VITE_OPERATIONAL_URL', 'https://operations.example.test/app/');
     expect(operationalUrl('/projects/42')).toBe('https://operations.example.test/projects/42');
@@ -181,5 +199,52 @@ describe('admin user contracts', () => {
     setPath('/users/99');
     render(<AdminRouter />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Cross-organization access denied');
+  });
+
+  it('keeps organization immutable and preserves an existing super-admin role on edit', async () => {
+    const superAdminRecord = { ...userRecord, roles: ['super_admin'], organization_id: 17 };
+    apiGet
+      .mockResolvedValueOnce({ data: [{ id: 17, name: 'North Health Cluster' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 1 } })
+      .mockResolvedValueOnce({ data: [], meta: { total: 0 } })
+      .mockResolvedValueOnce(superAdminRecord)
+      .mockResolvedValueOnce({ data: [{ id: 4, name: 'Quality' }], current_page: 1, last_page: 1, per_page: 100, total: 1 });
+    apiPut.mockResolvedValue({ user: superAdminRecord });
+    const actor = userEvent.setup();
+    setPath('/users/9/edit');
+
+    render(<AdminRouter />);
+
+    const organization = await screen.findByLabelText(i18n.t('admin.organizations.title'));
+    expect(organization).toBeDisabled();
+    expect(screen.getByText(i18n.t('admin.users.superAdminLocked'))).toBeInTheDocument();
+    await actor.click(screen.getByRole('button', { name: i18n.t('common.save_changes') }));
+
+    await waitFor(() => expect(apiPut).toHaveBeenCalled());
+    const payload = apiPut.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty('organization_id');
+    expect(payload).not.toHaveProperty('roles');
+  });
+
+  it('filters the user list by the selected organization', async () => {
+    apiGet.mockImplementation((path) => {
+      if (path === '/admin/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
+      if (path.includes('organization_id=18')) return Promise.resolve({ data: [{ ...userRecord, organization_id: 18 }], current_page: 1, last_page: 1, per_page: 20, total: 1 });
+      return Promise.resolve({ data: [], current_page: 1, last_page: 1, per_page: 20, total: 0 });
+    });
+    const actor = userEvent.setup();
+    setPath('/users');
+    render(<AdminRouter />);
+
+    const organization = await screen.findByLabelText(i18n.t('admin.organizations.title'));
+    await actor.selectOptions(organization, '18');
+
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/admin/users?organization_id=18&page=1&per_page=20'));
+  });
+
+  it('has mirrored translations for security controls', () => {
+    for (const key of ['admin.users.failedAttempts', 'admin.users.unlock', 'admin.users.superAdminLocked']) {
+      expect(i18n.getResource('ar', 'translation', key)).toBeTruthy();
+      expect(i18n.getResource('en', 'translation', key)).toBeTruthy();
+    }
   });
 });

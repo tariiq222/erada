@@ -85,6 +85,23 @@ class IncidentTypeControllerTest extends TestCase
         ]);
     }
 
+    public function test_store_persists_requires_reportable_type(): void
+    {
+        $this->actingAs($this->manager, 'sanctum')
+            ->postJson('/api/ovr/categories', [
+                'name' => 'Medication',
+                'name_ar' => 'دوائي',
+                'requires_reportable_type' => true,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.requires_reportable_type', true);
+
+        $this->assertDatabaseHas('ovr_incident_types', [
+            'name' => 'Medication',
+            'requires_reportable_type' => true,
+        ]);
+    }
+
     public function test_store_requires_name_and_name_ar(): void
     {
         $this->actingAs($this->manager, 'sanctum')
@@ -179,6 +196,47 @@ class IncidentTypeControllerTest extends TestCase
         $this->assertSame('Updated Only Name', $type->name);
         $this->assertSame('ابقني', $type->name_ar);
         $this->assertTrue($type->is_active);
+    }
+
+    public function test_update_persists_requires_reportable_type(): void
+    {
+        $type = IncidentType::create([
+            'name' => 'Medication',
+            'name_ar' => 'دوائي',
+            'is_active' => true,
+            'requires_reportable_type' => false,
+        ]);
+
+        $this->actingAs($this->manager, 'sanctum')
+            ->putJson("/api/ovr/categories/{$type->id}", [
+                'requires_reportable_type' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.requires_reportable_type', true);
+    }
+
+    public function test_super_admin_can_explicitly_include_inactive_incident_types(): void
+    {
+        $superAdmin = User::factory()->create([
+            'organization_id' => $this->org->id,
+            'department_id' => $this->department->id,
+        ]);
+        $superAdmin->assignRole('super_admin');
+        $active = IncidentType::create(['name' => 'Active', 'name_ar' => 'نشط', 'is_active' => true]);
+        $inactive = IncidentType::create(['name' => 'Inactive', 'name_ar' => 'غير نشط', 'is_active' => false]);
+
+        $default = $this->actingAs($superAdmin, 'sanctum')
+            ->getJson('/api/admin/incident-types')
+            ->assertOk();
+        $this->assertContains($active->id, collect($default->json('data'))->pluck('id')->all());
+        $this->assertNotContains($inactive->id, collect($default->json('data'))->pluck('id')->all());
+
+        $withInactive = $this->actingAs($superAdmin, 'sanctum')
+            ->getJson('/api/admin/incident-types?include_inactive=1')
+            ->assertOk();
+        $ids = collect($withInactive->json('data'))->pluck('id')->all();
+        $this->assertContains($active->id, $ids);
+        $this->assertContains($inactive->id, $ids);
     }
 
     public function test_unauthenticated_cannot_update_incident_type(): void

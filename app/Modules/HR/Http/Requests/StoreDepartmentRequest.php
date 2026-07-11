@@ -32,20 +32,27 @@ class StoreDepartmentRequest extends FormRequest
     public function rules(): array
     {
         $user = $this->user();
+        $targetOrganizationId = $user->isSuperAdmin()
+            ? $this->input('organization_id', $user->organization_id)
+            : $user->organization_id;
+        $parentExistsRule = $user->isSuperAdmin()
+            ? Rule::exists('departments', 'id')
+                ->where(fn ($query) => $query->where('organization_id', $targetOrganizationId))
+            : 'exists:departments,id';
 
         $rules = [
             'name' => ['required', 'string', 'max:255'],
             'code' => ['nullable', 'string', 'max:50'],
             'description' => ['nullable', 'string'],
-            'parent_id' => ['nullable', 'exists:departments,id'],
+            'parent_id' => [
+                'nullable',
+                $parentExistsRule,
+            ],
             'level' => ['required', 'integer', 'in:1,2,3,4,5,6'],
             'manager_id' => [
                 'nullable',
-                Rule::exists('users', 'id')->where(function ($query) use ($user) {
-                    if (! $user->isSuperAdmin()) {
-                        $query->where('organization_id', $user->organization_id);
-                    }
-                }),
+                Rule::exists('users', 'id')
+                    ->where(fn ($query) => $query->where('organization_id', $targetOrganizationId)),
             ],
             'is_active' => ['boolean'],
         ];

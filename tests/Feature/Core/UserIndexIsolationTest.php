@@ -102,6 +102,42 @@ class UserIndexIsolationTest extends TestCase
         $this->assertGreaterThanOrEqual(3, count($data));
     }
 
+    public function test_super_admin_can_filter_users_by_explicit_organization(): void
+    {
+        $superAdmin = User::factory()->create([
+            'organization_id' => $this->orgA->id,
+            'department_id' => $this->deptA->id,
+            'is_active' => true,
+        ]);
+        $superAdmin->assignRole('super_admin');
+        $orgAUser = $this->memberUser($this->orgA, $this->deptA);
+        $orgBUser = $this->memberUser($this->orgB, $this->deptB);
+
+        $response = $this->actingAs($superAdmin, 'sanctum')
+            ->getJson("/api/admin/users?organization_id={$this->orgB->id}")
+            ->assertOk();
+
+        $ids = collect($response->json('data'))->pluck('id')->all();
+        $this->assertContains($orgBUser->id, $ids);
+        $this->assertNotContains($orgAUser->id, $ids);
+        $this->assertNotContains($superAdmin->id, $ids);
+    }
+
+    public function test_non_super_admin_cannot_widen_user_index_with_organization_filter(): void
+    {
+        $admin = $this->adminUser($this->orgA, $this->deptA);
+        $orgAUser = $this->memberUser($this->orgA, $this->deptA);
+        $orgBUser = $this->memberUser($this->orgB, $this->deptB);
+
+        $response = $this->actingAs($admin, 'sanctum')
+            ->getJson("/api/users?organization_id={$this->orgB->id}")
+            ->assertOk();
+
+        $ids = collect($response->json('data'))->pluck('id')->all();
+        $this->assertContains($orgAUser->id, $ids);
+        $this->assertNotContains($orgBUser->id, $ids);
+    }
+
     public function test_search_does_not_leak_across_orgs(): void
     {
         $admin = $this->adminUser($this->orgA, $this->deptA);
