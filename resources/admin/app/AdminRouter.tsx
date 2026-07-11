@@ -1,5 +1,4 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import { SuperAdminBoundary } from '@admin/app/SuperAdminBoundary';
 import { Login } from '@admin/pages/Login';
 import { TwoFactorVerification } from '@admin/pages/TwoFactorVerification';
@@ -18,19 +17,13 @@ import { GovernanceRulesPage } from '@admin/pages/access/GovernanceRulesPage';
 import { ActivityLogsPage } from '@admin/pages/activity-logs/ActivityLogsPage';
 import { ScopedRoleAuditPage } from '@admin/pages/scoped-roles/ScopedRoleAuditPage';
 import { ScopeTypesPage } from '@admin/pages/scope-types/ScopeTypesPage';
-
-function ProtectedPagePlaceholder({ titleKey }: { titleKey: string }) {
-  const { t } = useTranslation();
-
-  return (
-    <section className="mx-auto max-w-6xl p-5 sm:p-8" data-testid="admin-protected-page">
-      <p className="mb-2 text-xs font-semibold text-[var(--accent-default)]">
-        {t('admin.shell.brand')}
-      </p>
-      <h1 className="text-2xl font-bold text-[var(--text-primary)]">{t(titleKey)}</h1>
-    </section>
-  );
-}
+import { UsersPage } from '@admin/pages/users/UsersPage';
+import { UserForm } from '@admin/pages/users/UserForm';
+import { UserDetails } from '@admin/pages/users/UserDetails';
+import { DepartmentsPage } from '@admin/pages/departments/DepartmentsPage';
+import { DepartmentForm } from '@admin/pages/departments/DepartmentForm';
+import { DepartmentDetails } from '@admin/pages/departments/DepartmentDetails';
+import { IncidentTypesPage } from '@admin/pages/incident-types/IncidentTypesPage';
 
 export function AdminRouter() {
   return (
@@ -56,12 +49,18 @@ export function AdminRouter() {
             <Route path="/roles/governing-departments" element={<Navigate to="/access/governance" replace />} />
             <Route path="/roles/:roleId" element={<RoleForm />} />
             <Route path="/roles/:roleId/edit" element={<RoleForm />} />
-            <Route path="/users/*" element={<ProtectedPagePlaceholder titleKey="admin.users.title" />} />
+            <Route path="/users" element={<UsersPage />} />
+            <Route path="/users/new" element={<UserForm />} />
+            <Route path="/users/:userId" element={<UserDetails />} />
+            <Route path="/users/:userId/edit" element={<UserForm />} />
             <Route path="/activity-logs" element={<ActivityLogsPage />} />
             <Route path="/scoped-roles/audit-logs" element={<ScopedRoleAuditPage />} />
             <Route path="/scope-types" element={<ScopeTypesPage />} />
-            <Route path="/departments/*" element={<ProtectedPagePlaceholder titleKey="admin.departments.title" />} />
-            <Route path="/incident-types/*" element={<ProtectedPagePlaceholder titleKey="admin.incidentTypes.title" />} />
+            <Route path="/departments" element={<DepartmentsPage />} />
+            <Route path="/departments/new" element={<DepartmentForm />} />
+            <Route path="/departments/:departmentId" element={<DepartmentDetails />} />
+            <Route path="/departments/:departmentId/edit" element={<DepartmentForm />} />
+            <Route path="/incident-types" element={<IncidentTypesPage />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Route>

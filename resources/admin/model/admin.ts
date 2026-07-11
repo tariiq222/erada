@@ -189,6 +189,108 @@ export interface DepartmentSummary {
   name: string;
 }
 
+export interface RawPaginatedResponse<T> {
+  data: T[];
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  total: number;
+}
+
+export interface AdminUser {
+  id: number;
+  name: string;
+  email: string;
+  organization_id: number | null;
+  department_id?: number | null;
+  department: DepartmentSummary | null;
+  phone: string | null;
+  extension: string | null;
+  job_title: string | null;
+  is_active: boolean;
+  roles: string[];
+  permissions?: string[];
+  created_at?: string | null;
+}
+
+export interface AdminUserInput {
+  name: string;
+  email: string;
+  password?: string;
+  organization_id?: number | null;
+  department_id: number | null;
+  phone: string | null;
+  extension: string | null;
+  job_title: string | null;
+  is_active: boolean;
+  roles: string[];
+}
+
+export interface UserSecurityStatus {
+  is_locked: boolean;
+  locked_until: string | null;
+  failed_attempts: number;
+  last_failed_login: string | null;
+  last_login: string | null;
+  last_login_ip: string | null;
+}
+
+export interface AdminDepartment {
+  id: number;
+  organization_id: number | null;
+  name: string;
+  code: string | null;
+  description: string | null;
+  parent_id: number | null;
+  parent: DepartmentSummary | null;
+  level: number;
+  level_name: string;
+  manager_id: number | null;
+  manager: DepartmentSummary | null;
+  is_active: boolean;
+  users_count?: number;
+  children?: { id: number; name: string; code: string | null; parent_id: number | null }[];
+}
+
+export interface AdminDepartmentInput {
+  name: string;
+  code: string | null;
+  description: string | null;
+  parent_id: number | null;
+  level: number;
+  manager_id: number | null;
+  is_active: boolean;
+  organization_id?: number | null;
+}
+
+export interface DepartmentHierarchy {
+  all: AdminDepartment[];
+  departments: AdminDepartment[];
+  sections: AdminDepartment[];
+  units: AdminDepartment[];
+}
+
+export interface ReportableType {
+  id: string;
+  name: string;
+  name_ar: string;
+}
+
+export interface IncidentType {
+  id: string;
+  name: string;
+  name_ar: string;
+  is_active: boolean;
+  requires_reportable_type?: boolean;
+  reportable_types?: ReportableType[];
+}
+
+export interface IncidentTypeInput {
+  name: string;
+  name_ar: string;
+  is_active: boolean;
+}
+
 export interface ActivityLogEntry {
   id: number;
   user?: { id: number; name: string } | null;

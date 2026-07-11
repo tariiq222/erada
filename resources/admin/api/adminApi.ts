@@ -3,19 +3,27 @@ import type {
   AbilityRegistry,
   AccessSummary,
   ActivityLogEntry,
+  AdminDepartment,
+  AdminDepartmentInput,
+  AdminUser,
+  AdminUserInput,
   AdminUserSummary,
   AuditRecentResponse,
   DepartmentSummary,
   GovernanceRule,
+  IncidentType,
+  IncidentTypeInput,
   Organization,
   OrganizationInput,
   OverviewCounts,
   PaginatedResponse,
   RoleDefinition,
   RoleInput,
+  RawPaginatedResponse,
   ScopeType,
   SecurityAlertsData,
   ScopedRoleAuditLog,
+  UserSecurityStatus,
 } from '@admin/model/admin';
 
 type QueryValue = string | number | boolean | null | undefined;
@@ -73,12 +81,27 @@ export const adminApi = {
   },
   users: {
     summary: () => api.get<{ data: AdminUserSummary[] }>('/admin/users?per_page=100'),
+    list: (params?: Record<string, QueryValue>) =>
+      api.get<RawPaginatedResponse<AdminUser>>(`/admin/users${queryString(params)}`),
+    get: (id: number) => api.get<AdminUser>(`/admin/users/${id}`),
+    security: (id: number) => api.get<{ security: UserSecurityStatus }>(`/admin/users/${id}/security`),
+    create: (data: Partial<AdminUserInput>) => api.post('/admin/users', data),
+    update: (id: number, data: Partial<AdminUserInput>) => api.put(`/admin/users/${id}`, data),
+    unlock: (id: number) => api.post(`/admin/users/${id}/unlock`, undefined),
+    delete: (id: number) => api.delete(`/admin/users/${id}`),
   },
   access: {
     summary: (userId: number) =>
       api.get<{ data: AccessSummary }>(`/admin/scoped-roles/user/${userId}/access-summary`),
   },
   departments: {
+    list: (params?: Record<string, QueryValue>) =>
+      api.get<RawPaginatedResponse<AdminDepartment>>(`/admin/departments${queryString(params)}`),
+    get: (id: number) => api.get<AdminDepartment>(`/admin/departments/${id}`),
+    hierarchy: () => api.get('/admin/departments/hierarchy'),
+    create: (data: Partial<AdminDepartmentInput>) => api.post('/admin/departments', data),
+    update: (id: number, data: Partial<AdminDepartmentInput>) => api.put(`/admin/departments/${id}`, data),
+    delete: (id: number) => api.delete(`/admin/departments/${id}`),
     summary: async (organizationId: number) => {
       const data: DepartmentSummary[] = [];
       let page = 1;
@@ -110,5 +133,13 @@ export const adminApi = {
   scopeTypes: {
     list: (params?: Record<string, QueryValue>) =>
       api.get<PaginatedResponse<ScopeType>>(`/admin/scope-types${queryString(params)}`),
+  },
+  incidentTypes: {
+    list: () => api.get<{ data: IncidentType[] }>('/admin/incident-types'),
+    create: (data: IncidentTypeInput) => api.post('/admin/incident-types', data),
+    update: (id: string, data: Partial<IncidentTypeInput>) => api.put(`/admin/incident-types/${id}`, data),
+    delete: (id: string) => api.delete(`/admin/incident-types/${id}`),
+    addReportableType: (id: string, data: { name: string; name_ar: string }) =>
+      api.post(`/admin/incident-types/${id}/reportable-types`, data),
   },
 };
