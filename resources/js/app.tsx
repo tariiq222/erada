@@ -15,7 +15,6 @@ import { ThemeProvider } from "@shared/contexts/ThemeContext";
 import { OrganizationProvider } from "@shared/contexts/OrganizationContext";
 import { ToastProvider } from "@shared/ui/Toast";
 import { AppLayout } from "@widgets/app-shell";
-import { AdminLayout } from "@widgets/admin-shell";
 import {
 	RequirePermission,
 	RequireAdmin,
@@ -48,8 +47,6 @@ const TaskForm = lazy(() => import("./pages/tasks/TaskForm"));
 const UsersList = lazy(() => import("./pages/users/UsersList"));
 const UserView = lazy(() => import("./pages/users/UserView"));
 const UserForm = lazy(() => import("./pages/users/UserForm"));
-const UserAccessSummary = lazy(() => import("./pages/admin/roles/UserAccessSummary"));
-const AccessHub = lazy(() => import("./pages/admin/access/AccessHub"));
 const Profile = lazy(() => import("./pages/profile/Profile"));
 const DepartmentsList = lazy(() => import("./pages/hr/DepartmentsList"));
 const DepartmentView = lazy(() => import("./pages/hr/DepartmentView"));
@@ -147,46 +144,6 @@ const SurveyStatistics = lazy(() => import("./pages/surveys/SurveyStatistics"));
 const DepartmentStatistics = lazy(
 	() => import("./pages/hr/DepartmentStatistics"),
 );
-// Admin Pages (Super Admin only)
-// Note: the previous /admin/registrations page (admin approval queue for the
-// old invite + admin-approval registration flow) was removed in the
-// simplified-registration cutover. Self-registration is now a single-step
-// POST /api/register that activates the user immediately — there is no
-// pending-approval queue to render.
-const OrganizationsList = lazy(
-	() => import("./pages/admin/organizations/OrganizationsList"),
-);
-const OrganizationForm = lazy(
-	() => import("./pages/admin/organizations/OrganizationForm"),
-);
-const ScopeTypesList = lazy(
-	() => import("./pages/admin/scope-types/ScopeTypesList"),
-);
-const ActivityLogsList = lazy(
-	() => import("./pages/admin/activity-logs/ActivityLogsList"),
-);
-// Phase 4A — the activity-log page is gated by AUDIT_VIEW
-// (engine capability alias `audit.view`) NOT super-admin. The
-// non-admin cluster_auditor role holds AUDIT_VIEW + CLUSTER_TREE_VIEW
-// and must be able to reach this page.
-const ScopedRoleAuditLogs = lazy(
-	() => import("./pages/admin/scoped-roles/ScopedRoleAuditLogs"),
-);
-const RolesList = lazy(() => import("./pages/admin/roles/RolesList"));
-const RoleForm = lazy(() => import("./pages/admin/roles/RoleForm"));
-const GoverningDepartments = lazy(() => import("./pages/admin/roles/GoverningDepartments"));
-
-// M1 — Super Admin System Governance Console (read-mostly)
-const SuperAdminOverview = lazy(
-	() => import("./pages/admin/overview/Overview"),
-);
-const SuperAdminSecurityAlerts = lazy(
-	() => import("./pages/admin/security-alerts/SecurityAlerts"),
-);
-const SuperAdminAuditRecent = lazy(
-	() => import("./pages/admin/audit-recent/AuditRecent"),
-);
-
 // مكون التحميل
 const PageLoader: React.FC = () => {
 	const { t } = useTranslation();
@@ -524,15 +481,6 @@ const App: React.FC = () => {
 																</RequirePermission>
 															}
 														/>
-														<Route
-															path="/admin/departments/statistics"
-															element={
-																<Navigate
-																	to="/hr/departments/statistics"
-																	replace
-																/>
-															}
-														/>
 														{/* Users */}
 														<Route
 															path="/users"
@@ -570,19 +518,6 @@ const App: React.FC = () => {
 																	}}
 																>
 																	<UserView />
-																</RequirePermission>
-															}
-														/>
-														<Route
-															path="/users/:id/access"
-															element={
-																<RequirePermission
-																	config={{
-																		permission:
-																			"users.view",
-																	}}
-																>
-																	<UserAccessSummary />
 																</RequirePermission>
 															}
 														/>
@@ -1223,188 +1158,6 @@ const App: React.FC = () => {
 																>
 																	<SurveyResponses />
 																</RequirePermission>
-															}
-														/>
-													</Route>
-
-													{/* Super Admin Control Plane — distinct shell for /admin/* */}
-													<Route element={<AdminLayout />}>
-														<Route
-															path="/admin"
-															element={
-																<Navigate
-																	to="/admin/overview"
-																	replace
-																/>
-															}
-														/>
-														{/* Admin Pages (Super Admin only) */}
-														<Route
-															path="/admin/organizations"
-															element={
-																<RequireAdmin>
-																	<OrganizationsList />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/organizations/new"
-															element={
-																<RequireAdmin>
-																	<OrganizationForm />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/organizations/:id"
-															element={
-																<RequireAdmin>
-																	<OrganizationForm />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/scope-types"
-															element={
-																<RequireAdmin>
-																	<ScopeTypesList />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/activity-logs"
-															element={
-																<RequirePermission
-																	config={{
-																		permissions: [
-																			"audit.view",
-																			"audit.export",
-																		],
-																	}}
-																>
-																	<ActivityLogsList />
-																</RequirePermission>
-															}
-														/>
-														{/* M1 Super Admin System Governance Console */}
-														<Route
-															path="/admin/overview"
-															element={
-																<RequireAdmin>
-																	<SuperAdminOverview />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/security/alerts"
-															element={
-																<RequireAdmin>
-																	<SuperAdminSecurityAlerts />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/audit/recent"
-															element={
-																<RequireAdmin>
-																	<SuperAdminAuditRecent />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/scoped-roles/audit-logs"
-															element={
-																<RequireAdmin>
-																	<ScopedRoleAuditLogs />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/access"
-															element={
-																<RequireAdmin>
-																	<AccessHub />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/roles"
-															element={
-																<RequireAdmin>
-																	<RolesList />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/roles/governing-departments"
-															element={
-																<RequireAdmin>
-																	<GoverningDepartments />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/roles/new"
-															element={
-																<RequireAdmin>
-																	<RoleForm />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/roles/:id"
-															element={
-																<RequireAdmin>
-																	<RoleForm />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/users"
-															element={
-																<RequireAdmin>
-																	<UsersList />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/users/create"
-															element={
-																<RequireAdmin>
-																	<UserForm />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/users/:id"
-															element={
-																<RequireAdmin>
-																	<UserView />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/users/:id/edit"
-															element={
-																<RequireAdmin>
-																	<UserForm />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/departments"
-															element={
-																<RequireAdmin>
-																	<DepartmentsList />
-																</RequireAdmin>
-															}
-														/>
-														<Route
-															path="/admin/incident-types"
-															element={
-																<RequireAdmin>
-																	<OVRSettings />
-																</RequireAdmin>
 															}
 														/>
 													</Route>

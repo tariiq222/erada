@@ -9,6 +9,7 @@ import ThemeSwitcher from '@shared/ui/ThemeSwitcher';
 import {IconSearch, IconMenu, IconSettings, IconLogout, IconUser, IconChevronDown, IconShield} from '@tabler/icons-react';
 import { OrgSwitcher } from './OrgSwitcher';
 import { NotificationBell } from '@features/meetings/components/NotificationBell';
+import { adminUrl } from '@shared/config/urls';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -17,7 +18,7 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const { t } = useTranslation();
-  const { user, logout, canAccess } = useAuth();
+  const { user, logout, isSuperAdmin = () => false } = useAuth();
   const { settings: systemSettings } = useSystemSettings();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   // triggerRef wraps the user button (in-flow), panelRef wraps the portaled menu (in <body>).
@@ -189,16 +190,16 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                     <IconUser className="h-4 w-4 text-[var(--text-tertiary)]" aria-hidden="true" />
                     <span className="text-sm font-medium">{t('nav.profile')}</span>
                   </Link>
-                  {canAccess({ permission: 'core.view_organizations' }) && (
-                    <Link
+                  {isSuperAdmin() && (
+                    <a
                       role="menuitem"
-                      to="/admin/organizations"
+                      href={adminUrl('/organizations')}
                       onClick={() => setDropdownOpen(false)}
                       className="w-full min-h-11 flex items-center gap-3 px-3 py-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--surface-base)] transition-colors"
                     >
                       <IconSettings className="h-4 w-4 text-[var(--text-tertiary)]" aria-hidden="true" />
                       <span className="text-sm font-medium">{t('nav.settings')}</span>
-                    </Link>
+                    </a>
                   )}
                 </div>
 

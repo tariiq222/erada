@@ -110,7 +110,7 @@ describe('application route registry', () => {
     expect(screen.getByTestId('theme-provider')).toBeInTheDocument();
     expect(document.querySelector('[data-path="/dashboard"]')).not.toBeNull();
     expect(document.querySelector('[data-path="/projects/create"]')).not.toBeNull();
-    expect(document.querySelector('[data-path="/admin/organizations"]')).not.toBeNull();
+    expect(document.querySelector('[data-path="/admin/organizations"]')).toBeNull();
     expect(document.querySelector('[data-path="/surveys"]')).not.toBeNull();
     expect(document.querySelector('[data-path="risks"]')).not.toBeNull();
   });

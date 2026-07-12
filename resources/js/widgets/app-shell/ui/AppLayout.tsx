@@ -13,6 +13,7 @@ import {
   buildNasaqGroups,
   App,
 } from "@shared/nasaq/app";
+import { adminUrl } from "@shared/config/urls";
 import {IconSparkles, IconLoader} from '@tabler/icons-react';
 
 const NAV_KEY_TO_I18N: Record<string, string> = {
@@ -42,10 +43,6 @@ const PATH_TO_KEY: Record<string, string> = (() => {
 })();
 
 function deriveActiveKey(pathname: string): string {
-  if (pathname.startsWith("/admin/activity-logs")) return "activity";
-  if (pathname.startsWith("/admin/organizations")) return "organizations";
-  if (pathname.startsWith("/admin/roles")) return "roles";
-  if (pathname.startsWith("/admin/users")) return "users";
   if (pathname.startsWith("/hr/employees")) return "employees";
   if (pathname.startsWith("/hr")) return "departments";
   if (pathname.startsWith("/ovr")) return "ovr";
@@ -104,7 +101,7 @@ function getInitials(name?: string): string {
 
 const AppLayout: React.FC = () => {
   const { t, i18n } = useTranslation();
-  const { isAuthenticated, isLoading, user, isAdmin, canAccess, logout } = useAuth();
+  const { isAuthenticated, isLoading, user, isSuperAdmin = () => false, canAccess, logout } = useAuth();
   const { resolvedTheme, setTheme } = useTheme();
   const { direction, setLocale } = useLocale();
   const { currentOrganization, organizations, switchOrganization } = useOrganization();
@@ -172,8 +169,8 @@ const AppLayout: React.FC = () => {
   }, [i18n.language, direction]);
 
   const navGroups = useMemo(
-    () => buildNasaqGroups((key) => t(key), canAccess, isAdmin()),
-    [t, canAccess, isAdmin],
+    () => buildNasaqGroups((key) => t(key), canAccess, isSuperAdmin()),
+    [t, canAccess, isSuperAdmin],
   );
 
   if (isLoading) {
@@ -251,6 +248,10 @@ const AppLayout: React.FC = () => {
       activePath={location.pathname}
       activeHref={activeHref}
       onNavigate={(path: string) => {
+        if (/^https?:\/\//i.test(path)) {
+          window.location.assign(path);
+          return;
+        }
         navigate(path);
       }}
       sidebarLabels={sidebarLabels}
@@ -277,10 +278,10 @@ const AppLayout: React.FC = () => {
         settings: t("nav.settings", "الإعدادات"),
         logout: t("nav.logout", "تسجيل الخروج"),
       }}
-      isAdmin={isAdmin()}
+      isAdmin={isSuperAdmin()}
       onProfile={() => navigate("/profile")}
-      onTechnicalDashboard={() => navigate("/admin/overview")}
-      onSettings={() => navigate("/admin/organizations")}
+      onTechnicalDashboard={() => window.location.assign(adminUrl('/overview'))}
+      onSettings={() => window.location.assign(adminUrl('/organizations'))}
       onLogout={() => {
         void logout();
       }}
@@ -293,7 +294,7 @@ const AppLayout: React.FC = () => {
       onSwitchOrg={(id) => {
         void switchOrganization(id);
       }}
-      onManageOrgs={() => navigate("/admin/organizations")}
+      onManageOrgs={() => window.location.assign(adminUrl('/organizations'))}
       direction={direction}
       t={(key: string, fallback?: string) => t(key, fallback || "")}
       paletteLabels={{

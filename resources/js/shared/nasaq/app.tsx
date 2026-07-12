@@ -2,7 +2,7 @@ import React from "react";
 import { Tooltip, Kbd, CommandPalette } from "@shared/ui";
 import { Icon, Avatar } from "./ui";
 
-export type NasaqNavGroupId = "main" | "planning" | "meetings" | "ops" | "quality" | "crisis" | "admin";
+export type NasaqNavGroupId = "main" | "planning" | "meetings" | "ops" | "quality" | "crisis";
 
 export const NASAQ_NAV: Array<{
   group: NasaqNavGroupId;
@@ -22,10 +22,6 @@ export const NASAQ_NAV: Array<{
   { group: "ops", key: "surveys", path: "/surveys", icon: "inbox" },
   { group: "crisis", key: "risks", path: "/risk-management/risks", icon: "shield" },
   { group: "ops", key: "departments", path: "/hr/departments", icon: "users" },
-  { group: "admin", key: "users", path: "/admin/users", icon: "users", requireAdmin: true },
-  { group: "admin", key: "organizations", path: "/admin/organizations", icon: "building", requireAdmin: true },
-  { group: "admin", key: "roles", path: "/admin/access", icon: "badge", requireAdmin: true },
-  { group: "admin", key: "activity", path: "/admin/activity-logs", icon: "list", requireAdmin: true },
 ];
 
 // ── Accordion navigation tree ───────────────────────────────────────────────
@@ -249,47 +245,6 @@ export const NASAQ_NAV_TREE: RawNavModule[] = [
       { key: "hr-stats", labelKey: "nav.statistics", icon: "gauge", path: "/hr/departments/statistics", access: { permission: "departments.view" } },
     ],
   },
-  {
-    group: "admin",
-    key: "users",
-    labelKey: "nav.users",
-    icon: "users",
-    path: "/admin/users",
-    requireAdmin: true,
-    children: [
-      CREATE("users-create", "/admin/users/create"),
-      { key: "users-all", labelKey: "nav.view_all", icon: "list", path: "/admin/users" },
-      STATS("users-stats", "/users/statistics"),
-    ],
-  },
-  {
-    group: "admin",
-    key: "organizations",
-    labelKey: "nav.organizations",
-    icon: "building",
-    path: "/admin/organizations",
-    requireAdmin: true,
-    children: [
-      { key: "organizations-create", labelKey: "nav.create_new", icon: "plus", path: "/admin/organizations/new" },
-      { key: "organizations-all", labelKey: "nav.view_all", icon: "list", path: "/admin/organizations" },
-    ],
-  },
-  {
-    group: "admin",
-    key: "roles",
-    labelKey: "nav.roles",
-    icon: "badge",
-    path: "/admin/access",
-    requireAdmin: true,
-    children: [
-      { key: "access-roles", labelKey: "nav.access.tabs.roles", icon: "badge", path: "/admin/access?tab=roles" },
-      { key: "access-members", labelKey: "nav.access.tabs.members", icon: "users", path: "/admin/access?tab=members" },
-      { key: "access-governance", labelKey: "nav.access.tabs.governance", icon: "building", path: "/admin/access?tab=governance" },
-      { key: "access-audit", labelKey: "nav.access.tabs.audit", icon: "log", path: "/admin/access?tab=audit" },
-      { key: "roles-create", labelKey: "nav.create_new", icon: "plus", path: "/admin/roles/new" },
-    ],
-  },
-  { group: "admin", key: "activity", labelKey: "nav.activity_logs", icon: "log", path: "/admin/activity-logs", requireAdmin: true },
 ];
 
 export type NavItem = { key: string; label: string; icon: string; path: string; accent?: NasaqNavAccent; children?: NavItem[] };

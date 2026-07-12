@@ -773,7 +773,7 @@ describe('Header Component', () => {
     }
 
     const settingsLink = screen.getByText('الإعدادات').closest('a');
-    expect(settingsLink).toHaveAttribute('href', '/admin/organizations');
+    expect(settingsLink).toHaveAttribute('href', 'http://localhost:3000/organizations');
   });
 
   it('renders copyright in dropdown footer', async () => {
@@ -829,19 +829,21 @@ describe('Sidebar Navigation Links', () => {
     expect(link).toBeInTheDocument();
   });
 
-  it('renders users link', () => {
-    mockLocation.pathname = '/admin/users';
+  it('renders the users link on the configured admin origin', async () => {
+    mockLocation.pathname = '/dashboard';
     render(<Sidebar isOpen={true} onToggle={vi.fn()} />);
 
-    const link = document.querySelector('a[href="/admin/users"]');
+    await userEvent.click(screen.getAllByRole('button', { name: 'الإدارة' })[0]);
+    const link = document.querySelector('a[href="http://localhost:3000/users"]');
     expect(link).toBeInTheDocument();
   });
 
-  it('renders departments link', () => {
-    mockLocation.pathname = '/admin/departments';
+  it('renders the departments link on the configured admin origin', async () => {
+    mockLocation.pathname = '/dashboard';
     render(<Sidebar isOpen={true} onToggle={vi.fn()} />);
 
-    const link = document.querySelector('a[href="/admin/departments"]');
+    await userEvent.click(screen.getAllByRole('button', { name: 'الإدارة' })[0]);
+    const link = document.querySelector('a[href="http://localhost:3000/departments"]');
     expect(link).toBeInTheDocument();
   });
 });

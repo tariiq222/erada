@@ -6,6 +6,7 @@ import { useAuth, AccessConfig } from "@shared/contexts/AuthContext";
 import { useSystemSettings } from "@shared/contexts/SystemSettingsContext";
 import {IconAlertOctagon, IconAlertTriangle, IconChartBar, IconBriefcase, IconBuilding, IconSquareCheck, IconChevronLeft, IconClipboardList, IconLayoutKanban, IconHistory, IconLayoutDashboard, IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand, IconLifebuoy, IconNetwork, IconPlus, IconRocket, IconSettings, IconShield, IconShieldCheck, IconTag, IconTarget, IconUsers, type LucideIcon} from '@tabler/icons-react';
 import { IconClipboardCheck } from '@shared/ui/icons';
+import { adminUrl } from '@shared/config/urls';
 
 interface SidebarProps {
 	isOpen: boolean;
@@ -16,6 +17,7 @@ interface NavItem {
 	label: string;
 	href: string;
 	icon: LucideIcon;
+	external?: boolean;
 	access?: AccessConfig;
 	children?: NavItem[];
 }
@@ -38,7 +40,6 @@ interface NavSection {
 }
 
 const deriveSectionId = (pathname: string): SectionId => {
-	if (pathname.startsWith("/admin")) return "admin";
 	if (pathname.startsWith("/ovr")) return "ovr";
 	if (pathname.startsWith("/risk-management")) return "risks";
 	if (pathname.startsWith("/strategy")) return "strategy";
@@ -57,7 +58,7 @@ const shouldUseExactMatch = (href: string) =>
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 	const { t } = useTranslation();
-	const { canAccess } = useAuth();
+	const { canAccess, isSuperAdmin = () => false } = useAuth();
 	const { settings: systemSettings } = useSystemSettings();
 	const location = useLocation();
 	const [railOpen, setRailOpen] = useState(false);
@@ -281,7 +282,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 		// still self-filters its child items via `filterNavItems` so users
 		// who only hold the umbrella capability see only the entries their
 		// own item-level access allows.
-		if (canAccess({ permission: "core.view_organizations" })) {
+		if (isSuperAdmin()) {
 			baseSections.push({
 				id: "admin",
 				title: t("nav.admin_section"),
@@ -289,55 +290,58 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 				items: [
 					{
 						label: t("admin.organizations.title"),
-						href: "/admin/organizations",
+						href: adminUrl("/organizations"),
 						icon: IconBuilding,
+						external: true,
 					},
 					{
 						label: t("admin.departments.title"),
-						href: "/admin/departments",
+						href: adminUrl("/departments"),
 						icon: IconNetwork,
-					},
-					{
-						label: t("hr.departments_statisticsTitle"),
-						href: "/admin/departments/statistics",
-						icon: IconChartBar,
+						external: true,
 					},
 					{
 						label: t("admin.users.title"),
-						href: "/admin/users",
+						href: adminUrl("/users"),
 						icon: IconUsers,
+						external: true,
 					},
 					{
 						label: t("admin.roles.title"),
-						href: "/admin/roles",
+						href: adminUrl("/access"),
 						icon: IconShield,
+						external: true,
 					},
 					{
 						label: t("admin.scopeTypes.title"),
-						href: "/admin/scope-types",
+						href: adminUrl("/scope-types"),
 						icon: IconTag,
+						external: true,
 					},
 					{
 						label: t("admin.incidentTypes.title"),
-						href: "/admin/incident-types",
+						href: adminUrl("/incident-types"),
 						icon: IconAlertTriangle,
+						external: true,
 					},
 					{
 						label: t("admin.activityLogs.title"),
-						href: "/admin/activity-logs",
+						href: adminUrl("/activity-logs"),
 						icon: IconHistory,
+						external: true,
 					},
 					{
 						label: t("admin.scopedRolesAudit.title"),
-						href: "/admin/scoped-roles/audit-logs",
+						href: adminUrl("/scoped-roles/audit-logs"),
 						icon: IconShieldCheck,
+						external: true,
 					},
 				],
 			});
 		}
 
 		return baseSections;
-	}, [canAccess, t]);
+	}, [isSuperAdmin, t]);
 
 	const expandableItemHrefs = useMemo(
 		() =>
@@ -496,9 +500,19 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 						item.children.map((child) => {
 							const ChildIcon = child.icon;
 
-							return (
-								<NavLink
-									key={child.href}
+								return child.external ? (
+									<a
+										key={child.href}
+										href={child.href}
+										onClick={closeOnClick ? onToggle : undefined}
+										className="flex min-h-10 items-center gap-3 rounded-md py-2 pe-3 ps-9 text-sm font-medium transition-colors text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
+									>
+										<ChildIcon className="h-[18px] w-[18px] shrink-0 opacity-90" />
+										<span className="min-w-0 truncate">{child.label}</span>
+									</a>
+								) : (
+									<NavLink
+										key={child.href}
 									to={child.href}
 									end={shouldUseExactMatch(child.href)}
 									onClick={
@@ -517,10 +531,24 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 									<span className="min-w-0 truncate">
 										{child.label}
 									</span>
-								</NavLink>
-							);
-						})}
+									</NavLink>
+								);
+							})}
 				</div>
+			);
+		}
+
+		if (item.external) {
+			return (
+				<a
+					key={item.href}
+					href={item.href}
+					onClick={closeOnClick ? onToggle : undefined}
+					className="flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
+				>
+					<ItemIcon className="h-[18px] w-[18px] shrink-0 opacity-90" />
+					<span className="min-w-0 truncate">{item.label}</span>
+				</a>
 			);
 		}
 
