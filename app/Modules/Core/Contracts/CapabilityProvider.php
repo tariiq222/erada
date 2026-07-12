@@ -5,39 +5,38 @@ namespace App\Modules\Core\Contracts;
 use App\Modules\Core\Models\User;
 
 /**
- * CapabilityProvider: module-owned contract for declaring the capabilities
- * exposed to the SPA by auth/me.
+ * CapabilityProvider: legacy/advisory module contract.
  *
- * Why this exists
- * ---------------
- * The unified AccessDecision engine exposes capabilities as `module.action`
- * (see App\Modules\Core\Authorization\Capability). The SPA, however, has
- * route guards, menus, and button gates include contextual capabilities
- * that a resource-free engine call cannot express — e.g. "can the user
- * create at least one project *somewhere* in their department subtree
- * OR the governing department for a project type?" Those are
- * context-aware decisions owned by the Projects module, not by the engine.
+ * Why this still exists
+ * ---------------------
+ * Modules continue to tag CapabilityProvider implementations under
+ * `engined_capability_providers` for backwards compatibility with the
+ * earlier /me iteration path. However, the canonical /api/user
+ * projection no longer iterates this tag. The current source of truth
+ * for /api/user capabilities is `User::canonicalCapabilityNames()`,
+ * which derives canonical dotted capabilities (e.g. `hr.view`,
+ * `projects.view`) directly from active canonical role assignments
+ * through the AccessDecision engine — see
+ * `App\Modules\Core\Models\User::canonicalCapabilityNames()` and
+ * `App\Modules\Core\Authorization\Capability`.
  *
- * Rather than hard-coding calls to ProjectAuthorizationService /
- * RiskAuthorizationService / OvrAuthorizationService inside AuthController
- * (which re-couples Core to every module and bloats /me), each owning
- * module tags a CapabilityProvider into the container under
- * `engined_capability_providers`. AuthController iterates the tag and
- * merges the returned flags. Adding a new module capability becomes
- * a one-file, one-tag-line change with no edits to AuthController.
+ * In other words, providers are no longer on the wire-format critical
+ * path. They remain as advisory helpers and a future cleanup may
+ * retire them. Adding a new module capability does NOT require a new
+ * provider — register the canonical resource/action mapping so it
+ * flows through `Capability` and `CapabilityToAuthorizationRolePermission`.
  *
  * Contract
  * --------
  * userCapabilities() returns an associative array of
  *   flag-string => bool
- * where the flag-string matches the capability name the SPA gates on
- * (e.g. 'view_projects', 'create_projects', 'ovr.create'). A `true` value
- * means "this user holds this capability"; `false` means they do
- * not. AuthController only appends `true` flags to the permissions array.
+ * for any module-specific decision that wants to surface a non-canonical
+ * projection. Callers MUST NOT treat the result as the wire-format
+ * authority; the /api/user capability list is canonicalCapabilityNames().
  *
- * Implementations MUST be safe to call on every /me hit. They SHOULD be
- * cheap (a handful of checks against the engine's memoized scope chain);
- * if a provider becomes expensive, memoize its result for the request.
+ * Implementations MUST be safe to call and SHOULD be cheap (a handful of
+ * checks against the engine's memoized scope chain). If a provider
+ * becomes expensive, memoize its result for the request.
  */
 interface CapabilityProvider
 {

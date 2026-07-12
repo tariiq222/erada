@@ -37,6 +37,34 @@ class AuthzCutoverPreflightCommand extends Command
     /** @var list<string> */
     private const NULL_SCOPE_TYPES = ['all', 'own'];
 
+    /**
+     * Declared scope_type values accepted by StoreRoleRequest / UpdateRoleRequest
+     * AND enforced at the database level by migration
+     * `2026_07_12_000013_restrict_authorization_role_scopes`. The CHECK
+     * constraint is authoritative — this list is duplicated here so the
+     * preflight can cheaply surface any pre-existing malformed rows on
+     * databases that have not yet been migrated to the new constraint.
+     *
+     * MUST mirror AssignmentScope::TYPES exactly: roles and assignments both
+     * require exact scope_type match, so the role table must accept the full
+     * supported set (including `own`, which is assignment-shape but also a
+     * legitimate role declaration shape).
+     *
+     * @var list<string>
+     */
+    private const ROLE_DEFINITION_SCOPES = [
+        'all',
+        'organization',
+        'department',
+        'own',
+        'project',
+        'program',
+        'portfolio',
+        'kpi',
+        'meeting',
+        'survey',
+    ];
+
     public function handle(): int
     {
         $checks = [
@@ -162,6 +190,9 @@ class AuthzCutoverPreflightCommand extends Command
             'role_scope_mismatches' => DB::table('authorization_role_assignments as a')
                 ->join('authorization_roles as r', 'r.id', '=', 'a.authorization_role_id')
                 ->whereColumn('a.scope_type', '!=', 'r.scope_type')
+                ->count(),
+            'malformed_role_scope_types' => DB::table('authorization_roles')
+                ->whereNotIn('scope_type', self::ROLE_DEFINITION_SCOPES)
                 ->count(),
             'duplicate_semantic_assignments' => DB::query()->fromSub(
                 DB::table('authorization_role_assignments')

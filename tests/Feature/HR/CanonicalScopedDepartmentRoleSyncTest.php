@@ -39,6 +39,13 @@ class CanonicalScopedDepartmentRoleSyncTest extends TestCase
             'role_key' => $managerRole->name,
         ]);
 
+        // CSD-CA23078-HR-002 — sync path now requires an actor context
+        // (defensive null = skip). The controller-driven flow passes the
+        // request user; observer-driven flows inherit `auth()->user()`. For
+        // test isolation we use a super_admin so the actor guard admits any
+        // auto-grant this test wants to materialize.
+        $this->actingAsSuperAdmin();
+
         app(ScopedDepartmentRoleSyncService::class)->syncUser($user->fresh());
 
         foreach ([$memberRole, $managerRole] as $role) {
@@ -93,6 +100,9 @@ class CanonicalScopedDepartmentRoleSyncTest extends TestCase
             ]);
         }
 
+        // CSD-CA23078-HR-002 — see comment in the sibling test.
+        $this->actingAsSuperAdmin();
+
         app(ScopedDepartmentRoleSyncService::class)->syncUser($user);
 
         $this->assertDatabaseMissing('authorization_role_assignments', [
@@ -136,5 +146,20 @@ class CanonicalScopedDepartmentRoleSyncTest extends TestCase
             'is_system' => false,
             'is_active' => true,
         ]);
+    }
+
+    /**
+     * Sign in as a freshly-created canonical super_admin so the
+     * `auth()->user()` fallback inside {@see ScopedDepartmentRoleSyncService}
+     * is non-null and the actor guard admits the test's auto-grant material.
+     */
+    private function actingAsSuperAdmin(): User
+    {
+        $super = User::factory()->create(['is_active' => true]);
+        $this->grantCanonicalSuperAdmin($super);
+
+        $this->actingAs($super, 'sanctum');
+
+        return $super;
     }
 }

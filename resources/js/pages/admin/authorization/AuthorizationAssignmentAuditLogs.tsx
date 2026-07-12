@@ -5,6 +5,7 @@ import { PageHeader, FilterBar, DataTable, Select, Input, DatePicker, StatusBadg
 import type { DataTableColumn, SelectOption } from '@shared/ui';
 import {
   authorizationAssignmentsApi,
+  AUTHORIZATION_ASSIGNMENT_AUDIT_EVENT_LIST,
   type AuthorizationAssignmentAuditLog,
 } from '@entities/authorization-assignment';
 import { formatDateTime } from '@shared/lib/utils';
@@ -19,14 +20,23 @@ interface MetaState {
 const AuthorizationAssignmentAuditLogs: React.FC<{ embedded?: boolean }> = ({ embedded }) => {
   const { t } = useTranslation();
 
-  const ACTION_LABELS: Record<string, string> = {
-    role_assigned: t('admin.authorizationAssignmentAudit.actions.role_assigned'),
-    role_revoked: t('admin.authorizationAssignmentAudit.actions.role_revoked'),
-    role_updated: t('admin.authorizationAssignmentAudit.actions.role_updated'),
-    permission_granted: t('admin.authorizationAssignmentAudit.actions.permission_granted'),
-    permission_revoked: t('admin.authorizationAssignmentAudit.actions.permission_revoked'),
-    access_denied: t('admin.authorizationAssignmentAudit.actions.access_denied'),
-  };
+  // Per-event translated labels. Where a translation already exists for the
+// canonical concept, reuse it; otherwise the raw event text is shown (the
+// plan forbids inventing unrelated translation keys).
+//   - canonical_assignment_assigned → reuse "role_assigned"
+//   - canonical_assignment_revoked → reuse "role_revoked"
+//   - canonical_assignment_synced  → no translation → raw event text
+//   - role_created                  → no translation → raw event text
+//   - role_updated                  → reuse "role_updated"
+//   - role_disabled                 → no translation → raw event text
+const ACTION_LABELS: Record<string, string> = {
+  canonical_assignment_assigned: t('admin.authorizationAssignmentAudit.actions.role_assigned'),
+  canonical_assignment_revoked: t('admin.authorizationAssignmentAudit.actions.role_revoked'),
+  // canonical_assignment_synced: no pre-existing translation; display event text.
+  // role_created: no pre-existing translation; display event text.
+  role_updated: t('admin.authorizationAssignmentAudit.actions.role_updated'),
+  // role_disabled: no pre-existing translation; display event text.
+};
 
   const SCOPE_LABELS: Record<string, string> = {
     project: t('admin.authorizationAssignmentAudit.scopes.project'),
@@ -124,9 +134,9 @@ const AuthorizationAssignmentAuditLogs: React.FC<{ embedded?: boolean }> = ({ em
 
   const actionOptions: SelectOption[] = [
     { value: '', label: t('admin.authorizationAssignmentAudit.filters.allActions') },
-    ...Object.keys(ACTION_LABELS).map((key) => ({
-      value: key,
-      label: ACTION_LABELS[key],
+    ...AUTHORIZATION_ASSIGNMENT_AUDIT_EVENT_LIST.map((event) => ({
+      value: event,
+      label: ACTION_LABELS[event] || event,
     })),
   ];
 

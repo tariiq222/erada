@@ -92,4 +92,32 @@ class RoleControllerCatalogTest extends TestCase
             'edit_settings' => ['edit_settings'],
         ];
     }
+
+    /**
+     * Verified residual (2026-07-12): the role-definition scope picker must
+     * NOT include `own`. The `own` scope is assignment-only — every
+     * StoreRoleRequest / UpdateRoleRequest validation rule rejects it for
+     * role definitions. Surfacing it in the picker would let admins pick an
+     * invalid scope and only learn about the rejection on submit.
+     */
+    public function test_role_definition_scope_options_exclude_assignment_only_own_scope(): void
+    {
+        $response = $this->actingAs($this->superAdmin, 'sanctum')
+            ->getJson('/api/roles/scope-options');
+
+        $response->assertStatus(200);
+
+        $keys = collect($response->json('scopes'))->pluck('key')->all();
+
+        $this->assertNotContains('own', $keys, 'own is assignment-only and must not appear in role-definition scope options');
+        $this->assertContains('all', $keys);
+        $this->assertContains('organization', $keys);
+        $this->assertContains('department', $keys);
+        $this->assertContains('project', $keys);
+        $this->assertContains('program', $keys);
+        $this->assertContains('portfolio', $keys);
+        $this->assertContains('kpi', $keys);
+        $this->assertContains('meeting', $keys);
+        $this->assertContains('survey', $keys);
+    }
 }

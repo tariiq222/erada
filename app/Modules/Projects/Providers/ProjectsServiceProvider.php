@@ -13,9 +13,13 @@ class ProjectsServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // Tag the module's CapabilityProvider so AuthController can iterate
-        // all engined_capability_providers without referencing this module
-        // directly. See App\Modules\Core\Contracts\CapabilityProvider.
+        // Tag the module's CapabilityProvider for the legacy
+        // `engined_capability_providers` advisory tag. AuthController no
+        // longer iterates this tag — the canonical /api/user projection
+        // derives capabilities via User::canonicalCapabilityNames(). The
+        // tag is kept so non-canonical advisory consumers can still
+        // resolve the provider if they explicitly opt in. See
+        // App\Modules\Core\Contracts\CapabilityProvider.
         $this->app->tag([ProjectCapabilityProvider::class], 'engined_capability_providers');
     }
 

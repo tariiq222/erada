@@ -313,7 +313,7 @@ class AuthorizationRoleAssignmentController extends Controller
     /**
      * عرض جميع الأدوار السياقية لمستخدم
      */
-    public function userAssignments(User $user): JsonResponse
+    public function userAssignments(Request $request, User $user): JsonResponse
     {
         // Authz delegates to UserPolicy::view, which routes through the engine
         // USERS_VIEW capability, applies same-org isolation, and grants self +
@@ -321,7 +321,7 @@ class AuthorizationRoleAssignmentController extends Controller
         $this->authorize('view', $user);
 
         return response()->json([
-            'data' => $this->canonicalAssignmentSummaries($user),
+            'data' => $this->canonicalAssignmentSummaries($user, $request->user()),
         ]);
     }
 
@@ -331,14 +331,14 @@ class AuthorizationRoleAssignmentController extends Controller
      * plus every scoped assignment with its source (auto = from department
      * membership, manual = explicitly granted), scope target name, and reach cap.
      */
-    public function accessSummary(User $user): JsonResponse
+    public function accessSummary(Request $request, User $user): JsonResponse
     {
         // Same authz seam as userAssignments — UserPolicy::view.
         $this->authorize('view', $user);
 
         return response()->json([
             'data' => [
-                'assignments' => $this->canonicalAssignmentSummaries($user),
+                'assignments' => $this->canonicalAssignmentSummaries($user, $request->user()),
             ],
         ]);
     }
@@ -346,12 +346,41 @@ class AuthorizationRoleAssignmentController extends Controller
     /**
      * @return list<array{id: int, role_id: int, role: string, label: string, scope_type: string, scope_id: int|null, scope_name: string|null, organization_id: int|null, inherit_to_children: bool, expires_at: string|null, source: string, granted_by: int|null}>
      */
-    private function canonicalAssignmentSummaries(User $user): array
+    private function canonicalAssignmentSummaries(User $user, ?User $actor): array
     {
+        // CSD-CA23078-CORE-002 — stale-org filter (mirrors
+        // AccessDecision::canonicalListAssignmentMatchesUserOrganization and the
+        // UserProjectScope::canonicalGrantingScopes filter).
+        //
+        // Drop rows where assignment.organization_id is non-null and NOT equal
+        // to the target user's current organization_id. The scope_type='all' +
+        // actor-is-super_admin exception is the canonical defensive bypass: a
+        // super_admin viewer can still see the target's all-scope assignments
+        // even if their stale organization_id is stale.
+        //
+        // Decision: drop stale rows entirely rather than emit `__stale: true`
+        // because (a) the endpoint is a read-only access view and showing a
+        // stale row with a stale flag would let an admin mistake it for an
+        // active grant; (b) the safety-net migration
+        // (2026_07_12_000015_invalidate_stale_canonical_assignments_on_org_transfer)
+        // expires the rows in-place and writes one audit row per stale
+        // assignment to `authorization_assignment_audits` so the historical
+        // record is preserved; (c) the filter mirrors the engine behavior
+        // (AccessDecision::canonicalListAssignmentMatchesUserOrganization
+        // returns false rather than marking the row).
+        $isActorSuperAdmin = $actor instanceof User && $actor->isSuperAdmin();
+
         $assignments = AuthorizationRoleAssignment::query()
             ->where('user_id', $user->id)
             ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))
             ->whereHas('role', fn ($query) => $query->where('is_active', true))
+            ->where(function ($query) use ($user, $isActorSuperAdmin) {
+                $query->whereNull('organization_id')
+                    ->orWhere('organization_id', $user->organization_id);
+                if ($isActorSuperAdmin) {
+                    $query->orWhere('scope_type', 'all');
+                }
+            })
             ->with('role:id,name,label')
             ->get();
 

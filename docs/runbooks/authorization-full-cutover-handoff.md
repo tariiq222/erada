@@ -2,7 +2,7 @@
 
 ## Status
 
-`BLOCKED — all previously known cutover gates were rerun successfully, but the latest independent Luna review found one unresolved HIGH super-admin scope-mismatch bypass. The final independent verdict is FIX_REQUIRED, not PASS.`
+`INTEGRATION REVIEW (REWORK_REQUIRED → REWORKED) — the previously open HIGH super-admin scope-mismatch bypass was closed by commit `ca23078` (`fix(authz): require canonical super_admin role scope to be all`), which enforces that both canonical super-admin predicates (`User::isSuperAdmin()` and `CanonicalAuthorizationAssignmentActorGuard::isCanonicalSuperAdmin()`) require the role declaration AND the assignment to declare `scope_type='all'` with `scope_id=NULL`. A subsequent verified-residuals pass was identified as REWORK_REQUIRED on first review because (a) the new role-scope CHECK constraint excluded `own` even though `AssignmentScope::isCompatibleWithRoleScope()` requires exact scope match, breaking `CanonicalRoleAssignmentEndpointTest::test_guard_denial_rolls_back_every_assignment_in_the_request`; and (b) the audit filter only patched two of the six canonical event strings. Both defects are now corrected: the constraint accepts every AssignmentScope::TYPES value (so a role declared at `own` is a valid canonical path), and the audit filter is wired to a single-source canonical event list covering every event the backend writes. Independent follow-up Luna review has not been re-run. No production deployment, commit, push, merge, or live-fixture E2E run has been authorized or performed.`
 
 This work must be accepted and delivered as one coherent backend, frontend, database, and integration cutover. Do not merge, deploy, or delete production data based on an individual phase passing in isolation.
 
@@ -158,34 +158,32 @@ Current disposition:
 - Gap 2: implemented and targeted decision/preflight/controller tests passed.
 - Gap 3: implemented; focused frontend tests and the full frontend quality/build gates passed, and the final reviewer verified the canonical surfaces are clean.
 
-The final independent read-only review was then run through the Tariq Gateway with this receipt:
+The final independent read-only review (Luna high-effort) found one additional HIGH issue:
 
-```text
-Routing receipt
-Session: authz-full-cutover-final-review-20260712-r2
-Execution: gpt-5.6-luna / openai / verifier-high / high
-Session share: MiniMax 0/0 eligible attempts (independent review is excluded)
-```
+- `User::isSuperAdmin()` requires the assignment row to be `all`/null but did not require the related `super_admin` role itself to declare `scope_type=all`.
+- `CanonicalAuthorizationAssignmentActorGuard::isCanonicalSuperAdmin()` had the same omission in its explicit global assignment exception.
 
-It returned `FIX_REQUIRED` for one additional HIGH issue:
+Commit `ca23078` (`fix(authz): require canonical super_admin role scope to be all`) closed the bypass:
 
-- `User::isSuperAdmin()` requires the assignment row to be `all`/null but does not require the related `super_admin` role itself to declare `scope_type=all`.
-- `CanonicalAuthorizationAssignmentActorGuard::isCanonicalSuperAdmin()` has the same omission in its explicit global assignment exception.
-- A malformed role declared at another scope but assigned at `all` can therefore bypass policies and assignment-authority restrictions even though `AccessDecision` correctly rejects ordinary role/assignment scope mismatches.
+- `User::isSuperAdmin()` now matches `scope_type='all'` and `scope_id IS NULL` on the assignment AND `scope_type='all'` on the joined role row.
+- `CanonicalAuthorizationAssignmentActorGuard::isCanonicalSuperAdmin()` enforces the same dual condition in its global assignment exception.
+- Regression coverage was added in `tests/Unit/Models/UserTest.php` and `tests/Unit/Core/Authorization/CanonicalAuthorizationAssignmentActorGuardTest.php`, covering canonical pass, malformed role reject, and no-assignment reject.
 
-The issue is still present in the current filesystem. The immutable bounded plan is:
+The HIGH super-admin bypass is therefore closed. Independent follow-up Luna review has not been re-run against the post-`ca23078` filesystem; the disposition above is based on the code change, the targeted regression tests, and the focused high-risk gates listed in the next section.
 
-`docs/runbooks/prompts/fix-super-admin-scope-mismatch-plan.md`
+### Verified residual work after `ca23078`
 
-An attempted supervised MiniMax mutation did not start because the supervisor requires a clean Git worktree. Its result was:
+A subsequent verified-residuals pass closed five smaller gaps that survived the earlier cutover. None of these weaken backend authorization; all five are bounded regressions of known failures:
 
-```text
-RESULT: NEEDS_REDISPATCH — supervised MiniMax work requires a clean Git working tree.
-Execution: no gateway child recorded
-MiniMax eligible attempts: 0/0
-```
+1. Survey responses SPA gate: `/surveys/:id/responses` previously required the legacy flat string `view_survey_responses`. The route gate now requires `surveys.review_responses`, matching the canonical Surveys capability. The legacy grep guard test now asserts both that the canonical string is present and that the legacy one is not. Without this fix, the SPA silently denied access to survey responses even for users who held the canonical grant.
+2. Authorization-assignment audit filter wiring: the admin audit page sent the legacy strings `role_assigned` / `role_revoked` to `/api/authorization-assignment-audits?action=…`, but the controller filters on `authorization_assignment_audits.event` whose canonical values are `canonical_assignment_assigned`, `canonical_assignment_revoked`, and `canonical_assignment_synced` (written by `AuthorizationAssignmentService::auditMutation`). The action picker now emits the canonical strings; existing translated labels are reused for assigned/revoked, and `synced` falls through to the raw event text since no translation exists.
+3. Capability-provider contract drift: the contract and per-module ServiceProvider comments stated `AuthController` iterates the `engined_capability_providers` tag. The canonical /api/user projection no longer iterates it — capabilities flow through `User::canonicalCapabilityNames()`. The contract and every module's provider comment now describe the providers as legacy/advisory helpers. The HR provider's runtime output was kept unchanged (consumers still reference `view_hr`/`manage_hr`); the provider's docblock documents the split and `HRCapabilityProviderTest` now pins `User::canonicalCapabilityNames()` as the canonical source.
+4. Role-scope picker filter: `RoleController::scopeOptions()` returned the full `AssignmentScope::catalog()` including `own`. `StoreRoleRequest` and `UpdateRoleRequest` reject `own` as a declared role scope (it is assignment-only), so the picker surfaced an option that the API would then reject. The controller now filters `key !== AssignmentScope::OWN` before returning.
+5. Role-scope DB constraint: a new forward migration (`2026_07_12_000013_restrict_authorization_role_scopes.php`) installs `authorization_roles_scope_type_check` accepting every scope in `AssignmentScope::TYPES` (the same ten values already enforced on `authorization_role_assignments.scope_type` by migration `000012`). The migration fails closed before applying the constraint if any pre-existing role row carries an unsupported scope. `AuthzCutoverPreflightCommand::canonicalIntegrity()` also reports `malformed_role_scope_types` so any pre-migration database surfaces its bad rows cheaply. `tests/Feature/Core/Authorization/AuthorizationSchemaTest.php` pins both the rejection of unsupported values and the acceptance of every supported value, including `own` (a role declared at `own` is a valid canonical path exercised by `CanonicalRoleAssignmentEndpointTest` because `AssignmentScope::isCompatibleWithRoleScope()` requires exact scope match between role and assignment). `AuthzCutoverPreflightCommand::canonicalIntegrity()` reports `malformed_role_scope_types` so any pre-migration database surfaces its bad rows cheaply.
 
-Do not interpret that as a failed code change: MiniMax never ran and no project file was modified by the attempt.
+> First-pass review caught a regression: an earlier draft of the constraint excluded `own`, which would have broken `CanonicalRoleAssignmentEndpointTest::test_guard_denial_rolls_back_every_assignment_in_the_request` at the DB layer after every `migrate:fresh`. The constraint now mirrors `AssignmentScope::TYPES` exactly so the runtime can produce the canonical `own`-scoped role/assignment state that the existing endpoint test exercises.
+
+> First-pass review also caught a Task 2 defect: the audit filter only patched two of the six canonical event strings, and `AuthorizationAssignmentAuditLogs.tsx` still listed Spatie-era dead options (`permission_granted` / `permission_revoked` / `access_denied`) that no longer correspond to any backend write. The filter is now driven from a single-source FE constant (`AUTHORIZATION_ASSIGNMENT_AUDIT_EVENT_LIST`) covering exactly the six events written by `AuthorizationAssignmentService::auditMutation`, `ScopedDepartmentRoleSyncService::auditMutation`, and `RoleController::writeAudit` (`canonical_assignment_assigned`, `canonical_assignment_revoked`, `canonical_assignment_synced`, `role_created`, `role_updated`, `role_disabled`). A Vitest case iterates every option in the list and asserts the request wire value matches the canonical backend event, with no Spatie-era leakage.
 
 ## Remaining work, in strict order
 

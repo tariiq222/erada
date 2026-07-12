@@ -20,12 +20,12 @@ class CoreServiceProvider extends ServiceProvider
             CanonicalAuthorizationAssignmentActorGuard::class,
         );
 
-        // Phase 8-C: tag the Core module's CapabilityProvider so
-        // AuthController can iterate all engined_capability_providers
-        // without referencing Core directly. See
-        // App\Modules\Core\Contracts\CapabilityProvider. Today the
-        // provider surfaces Capability::DASHBOARD_VIEW for the
-        // /api/dashboard/* route gate and the SPA's useCan('dashboard.view').
+        // Tag the Core module's CapabilityProvider under
+        // engined_capability_providers for backwards compatibility with the
+        // older /me iteration path. AuthController no longer iterates this
+        // tag — canonical /api/user capabilities come from
+        // User::canonicalCapabilityNames(). See
+        // App\Modules\Core\Contracts\CapabilityProvider.
         $this->app->tag([CoreCapabilityProvider::class], 'engined_capability_providers');
     }
 

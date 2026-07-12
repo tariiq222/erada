@@ -436,7 +436,16 @@ class AccessDecision
      * Ownership is a narrow canonical floor, never a substitute for a role.
      * It grants record viewing to the owner/reporter/assignee and grants edit
      * only to a true owner on models that explicitly opt into lifecycle-aware
-     * owner editing. Organization isolation has already run before this method.
+     * owner editing.
+     *
+     * ORDERING INVARIANT — caller MUST invoke sameOrganization() before this
+     * method (evaluateCanonical() does, at the top of the layer stack after
+     * only super_admin and the cluster_tree rescue). If this floor were ever
+     * evaluated BEFORE the org gate, a user who created a record in Org A and
+     * was later moved to Org B would keep seeing and editing that record
+     * purely via the created_by/owner_id columns — a cross-org IDOR. The
+     * canonical owner floor grants visibility ONLY within the user's current
+     * organization; the org gate is what enforces that scope.
      */
     protected static function canonicalOwnerFloorGrants(User $user, string $capability, Model $target): bool
     {
@@ -528,6 +537,15 @@ class AccessDecision
      * يفشل CLOSED: إذا تعذّر اشتقاق مؤسسة الهدف ⇒ نرفض (عزل المؤسسة لا يُتخطّى).
      * الأهداف بلا org شرعية (مثل المهام الشخصية) تُحكم بطبقة ملكية فوق المحرّك
      * في الـ Policy قبل الوصول إلى هنا.
+     *
+     * ORDERING INVARIANT — this gate MUST run BEFORE canonicalOwnerFloorGrants()
+     * in evaluateCanonical(). It is the outermost engine-layer organization
+     * check, sitting directly under the super_admin short-circuit and the
+     * cluster_tree rescue. Owning a record (created_by / owner_id) does NOT
+     * bypass it: the same comparison here is what stops a user moved to a
+     * different org from continuing to see / edit records they previously
+     * created in the old org. The owner floor grants visibility only within
+     * the user's current organization — this gate is what enforces that.
      */
     protected static function sameOrganization(User $user, Model $target): bool
     {

@@ -3,13 +3,17 @@
 namespace App\Modules\Projects\Services\Project;
 
 use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Contracts\AuthorizationAssignmentActorGuard;
+use App\Modules\Core\Authorization\Data\AssignmentScope;
 use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Projects\Exceptions\ProjectMemberAlreadyExistsException;
 use App\Modules\Projects\Models\Project;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -31,6 +35,10 @@ class TeamService
         'project_manager' => 'manager',
         'project_viewer' => 'viewer',
     ];
+
+    public function __construct(
+        private readonly AuthorizationAssignmentActorGuard $assignmentActorGuard,
+    ) {}
 
     public static function resolveRoleConstant(string $rawRole): string
     {
@@ -82,9 +90,27 @@ class TeamService
         });
     }
 
-    /** @param array<int, array<string, mixed>> $teamMembers */
+    /**
+     * Replace the project's team membership.
+     *
+     * Defense-in-depth (CSD-CA23078-PROJECTS-002): the bulk project update path
+     * used to grant the actor themselves a project role with source=auto, fully
+     * bypassing the canonical manual-assignment actor guard. Even though the
+     * request-layer validation now rejects a self-grant with role != viewer,
+     * a direct service call (CLI, jobs, internal callers) could still trigger
+     * it. Before persisting anything we strip every self-assignment entry that
+     * would escalate the actor above `project_viewer` unless the canonical actor
+     * guard allows the manual equivalent. Blocked entries are logged (with full
+     * context) and skipped — the rest of the payload is processed normally so
+     * unrelated updates are not aborted.
+     *
+     * @param  array<int, array<string, mixed>>  $teamMembers
+     */
     public function replaceTeamMembers(Project $project, array $teamMembers): void
     {
+        $actor = Auth::user();
+        $teamMembers = $this->filterSelfAssignmentEscalations($project, $teamMembers, $actor);
+
         DB::transaction(function () use ($project, $teamMembers): void {
             $protectedRoleId = AuthorizationRole::query()
                 ->where('name', 'project_manager')
@@ -100,6 +126,84 @@ class TeamService
             $this->createTeamMembers($project, $teamMembers);
             DB::afterCommit(static fn () => AccessDecision::flushCache());
         });
+    }
+
+    /**
+     * Strip self-assignment entries whose canonical role would escalate the
+     * actor above `project_viewer` without passing the canonical manual-
+     * assignment actor guard. Blocked entries are recorded via Log::warning so
+     * security reviews can audit the bulk-path bypass attempts.
+     *
+     * @param  array<int, array<string, mixed>>  $teamMembers
+     * @return array<int, array<string, mixed>>
+     */
+    private function filterSelfAssignmentEscalations(Project $project, array $teamMembers, ?User $actor): array
+    {
+        if ($actor === null) {
+            return $teamMembers;
+        }
+
+        $actorId = (int) $actor->id;
+        $scope = new AssignmentScope('project', (int) $project->id, false);
+
+        return array_values(array_filter($teamMembers, function (array $entry) use ($actor, $actorId, $project, $scope): bool {
+            $entryUserId = isset($entry['user_id']) ? (int) $entry['user_id'] : null;
+
+            if ($entryUserId === null || $entryUserId !== $actorId) {
+                return true;
+            }
+
+            try {
+                $canonicalRoleName = self::canonicalRoleName((string) ($entry['role'] ?? 'member'));
+            } catch (InvalidArgumentException) {
+                Log::warning('TeamService.replaceTeamMembers: self-assignment skipped — unknown role alias', [
+                    'project_id' => $project->id,
+                    'actor_id' => $actor->id,
+                    'raw_role' => $entry['role'] ?? null,
+                    'reason' => 'unknown_role_alias',
+                ]);
+
+                return false;
+            }
+
+            // Viewer self-assignment is harmless — it is the lowest-privilege
+            // project-scope role and the actor already cleared the project's
+            // basic edit gate (otherwise they would not be in this method).
+            if ($canonicalRoleName === 'project_viewer') {
+                return true;
+            }
+
+            $role = AuthorizationRole::query()->where('name', $canonicalRoleName)->first();
+            if ($role === null) {
+                Log::warning('TeamService.replaceTeamMembers: self-assignment skipped — canonical role not found', [
+                    'project_id' => $project->id,
+                    'actor_id' => $actor->id,
+                    'canonical_role' => $canonicalRoleName,
+                    'reason' => 'canonical_role_missing',
+                ]);
+
+                return false;
+            }
+
+            $subject = User::query()->whereKey($actorId)->first();
+            if ($subject === null) {
+                return false;
+            }
+
+            if ($this->assignmentActorGuard->allows($actor, $subject, $role, $scope)) {
+                return true;
+            }
+
+            Log::warning('TeamService.replaceTeamMembers: self-assignment blocked by canonical actor guard', [
+                'project_id' => $project->id,
+                'actor_id' => $actor->id,
+                'canonical_role' => $canonicalRoleName,
+                'scope' => $scope->semanticKey(),
+                'reason' => 'canonical_assignment_actor_guard_denied',
+            ]);
+
+            return false;
+        }));
     }
 
     public function updateMemberRole(Project $project, int $userId, string $role): bool

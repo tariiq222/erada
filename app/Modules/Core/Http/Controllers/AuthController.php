@@ -16,6 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -50,6 +51,39 @@ class AuthController extends Controller
         }
 
         return self::$timingEqualizationHash;
+    }
+
+    /**
+     * TTL for an issued 2FA pending_token (seconds). Single-use, scoped to
+     * the (user_id, ip) tuple, deleted on consume or on first successful verify.
+     */
+    private const PENDING_2FA_TTL_SECONDS = 300;
+
+    /**
+     * Mint a single-use pending_2fa challenge keyed to (user_id, ip).
+     *
+     * The cache entry stores both the user_id AND the requesting IP so the
+     * /api/2fa/verify route (TwoFactorController::verify) can compare
+     * against the IP of the verifying request. The token is consumed
+     * (forgotten from cache) on the first successful verify or on TTL
+     * expiry — whichever happens first.
+     */
+    private function issuePendingTwoFactorChallenge(User $user, ?string $ip): string
+    {
+        $token = Str::random(48);
+
+        cache()->put(
+            '2fa_pending_'.$token,
+            [
+                'user_id' => (int) $user->id,
+                'ip' => $ip,
+                'issued_at' => now()->toIso8601String(),
+                'expires_at' => now()->addSeconds(self::PENDING_2FA_TTL_SECONDS)->toIso8601String(),
+            ],
+            self::PENDING_2FA_TTL_SECONDS,
+        );
+
+        return $token;
     }
 
     public function __construct(
@@ -174,6 +208,31 @@ class AuthController extends Controller
 
             // 5. تسجيل الدخول الناجح
             $this->securityService->recordSuccessfulLogin($user, $ip, $userAgent);
+
+            // 6. CORE-004 fix — enforced 2FA challenge flow.
+            //
+            // A confirmed-2FA user MUST NOT receive a Sanctum token or
+            // auth_token cookie after a successful password check alone.
+            // We mint a single-use, short-lived pending_token (scoped to
+            // the (user_id, ip) tuple) and require the client to complete
+            // the 2FA challenge via /api/2fa/verify before any session is
+            // established. The /api/2fa/verify route is the only path that
+            // mints the Sanctum token and sets the auth_token cookie.
+            if ($this->twoFactorService->isEnabled($user)) {
+                $pendingToken = $this->issuePendingTwoFactorChallenge($user, $ip);
+
+                Log::info('2FA challenge issued after password verification', [
+                    'user_id' => $user->id,
+                    'ip' => $ip,
+                ]);
+
+                return response()->json([
+                    'two_factor_required' => true,
+                    'user_id' => (int) $user->id,
+                    'pending_token' => $pendingToken,
+                    'message' => 'كلمة المرور صحيحة. يلزم التحقق من رمز المصادقة الثنائية.',
+                ], 200);
+            }
 
             $token = $user->createToken('auth-token')->plainTextToken;
 

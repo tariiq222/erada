@@ -66,6 +66,15 @@ class RoleController extends Controller
         $validated = $request->validated();
         $capabilities = $this->validatedCapabilities($validated);
 
+        // CSD-CA23078-CORE-006: privilege-escalation actor guard. Runs
+        // outside the transaction so a 403 short-circuits BEFORE any DB
+        // write — the role row is never persisted and `writeAudit` never
+        // runs. The guard still guards `syncCapabilities` because no
+        // transaction begins until it passes.
+        if (($denied = $this->guardRoleCapabilityMutation($request, null, $capabilities)) !== null) {
+            return response()->json(['message' => $denied['message'] ?? 'forbidden'], 403);
+        }
+
         $role = DB::transaction(function () use ($validated, $capabilities, $request): AuthorizationRole {
             $label = $validated['label'] ?? $validated['label_ar'] ?? $validated['label_en'] ?? $validated['name'];
             $role = AuthorizationRole::query()->create([
@@ -100,6 +109,14 @@ class RoleController extends Controller
 
         $oldCapabilities = $this->capabilitiesFor($roleDefinition->load('permissions.resource'));
         $capabilities = $this->validatedCapabilities($validated, $oldCapabilities);
+
+        // CSD-CA23078-CORE-006: privilege-escalation actor guard. Runs
+        // before `DB::transaction` so a 403 short-circuits BEFORE any DB
+        // write — the role row is never updated, `syncCapabilities` never
+        // runs, and `writeAudit` never persists an event row.
+        if (($denied = $this->guardRoleCapabilityMutation($request, $roleDefinition, $capabilities)) !== null) {
+            return response()->json(['message' => $denied['message'] ?? 'forbidden'], 403);
+        }
 
         DB::transaction(function () use ($validated, $capabilities, $oldCapabilities, $roleDefinition, $request): void {
             $lockedRole = AuthorizationRole::query()->whereKey($roleDefinition->id)->lockForUpdate()->firstOrFail();
@@ -163,7 +180,11 @@ class RoleController extends Controller
 
     public function scopeOptions(): JsonResponse
     {
+        // Filter the assignment catalog down to role-definition scopes only.
+        // `own` is assignment-only — StoreRoleRequest / UpdateRoleRequest
+        // reject it for role definitions, so the picker must not surface it.
         $scopes = collect(AssignmentScope::catalog())
+            ->filter(fn (array $scope) => $scope['key'] !== AssignmentScope::OWN)
             ->map(fn (array $scope) => ['key' => $scope['key'], 'label' => $scope['label_ar']])
             ->values();
 
@@ -401,5 +422,120 @@ class RoleController extends Controller
             'old_value' => $old === null ? null : json_encode($old), 'new_value' => $new === null ? null : json_encode($new),
             'reason' => 'canonical role mutation', 'ip_address' => $request->ip(), 'user_agent' => $request->userAgent(), 'created_at' => now(),
         ]);
+    }
+
+    /**
+     * CSD-CA23078-CORE-006: privilege-escalation actor guard around role
+     * DEFINITION mutations (`store()` and `update()`).
+     *
+     * Rejects the mutation with a 403 body unless ALL of these hold:
+     *
+     *  1. The role being mutated does not have `is_admin_role=true` OR the
+     *     `core.assign_roles` capability is not present in the new payload,
+     *     unless the actor is a canonical super_admin.
+     *  2. The actor holds `core.assign_roles` (canonical super_admin short-
+     *     circuits).
+     *  3. Every NEW capability requested in the payload is one the actor
+     *     already holds (prevents self-escalation by adding caps the actor
+     *     does not have yet).
+     *  4. For every existing assignee of this role, the canonical actor
+     *     guard confirms the actor retains authority over the implied
+     *     `(role, scope)` triple — i.e. the role's current `permissions()`
+     *     are within the actor's reach.
+     *
+     * Returns `null` when the mutation is allowed; otherwise returns the
+     * payload the controller should serialize into a 403 JSON response.
+     *
+     * @param  list<string>  $newCapabilities
+     * @return array<string, mixed>|null
+     */
+    private function guardRoleCapabilityMutation(
+        Request $request,
+        ?AuthorizationRole $existingRole,
+        array $newCapabilities,
+    ): ?array {
+        /** @var User|null $actor */
+        $actor = $request->user();
+        if ($actor === null) {
+            return ['message' => 'Authentication required.'];
+        }
+
+        // `isSuperAdmin()` walks the actor's canonical role assignments and
+        // returns true ONLY when an active assignment points at the
+        // `super_admin` role with scope_type=all + is_system=true (mirrors
+        // the predicate inside `CanonicalAuthorizationAssignmentActorGuard`,
+        // which is intentionally not exposed publicly here).
+        $isCanonicalSuperAdmin = (bool) $actor->isSuperAdmin();
+
+        // Rule 1: admin-role + `core.assign_roles` payload ⇒ super_admin only.
+        $payloadRequestsCoreAssignRoles = in_array(
+            Capability::CORE_ASSIGN_ROLES,
+            $newCapabilities,
+            true,
+        );
+        $isAdminRole = $existingRole !== null && (bool) $existingRole->is_admin_role;
+
+        if (($isAdminRole || $payloadRequestsCoreAssignRoles) && ! $isCanonicalSuperAdmin) {
+            return [
+                'message' => 'Only canonical super_admin may mutate an admin role or grant core.assign_roles.',
+            ];
+        }
+
+        // Rule 2: non-super_admin actors must hold `core.assign_roles`.
+        // The route middleware already gates on `roles.edit` /
+        // `roles.create`, but `roles.edit` is a coarser dimension than the
+        // assignment privilege. A `:roles.edit` capability without
+        // `core.assign_roles` MUST NOT be sufficient to rewrite a role's
+        // capability payload.
+        if (! $isCanonicalSuperAdmin && ! AccessDecision::can($actor, Capability::CORE_ASSIGN_ROLES)) {
+            return [
+                'message' => 'Mutating role definitions requires core.assign_roles.',
+            ];
+        }
+
+        // Rule 3: every new capability in the payload must already be one
+        // the actor holds (or the actor is a super_admin). `core.assign_roles`
+        // was already rejected under Rule 1 for non-super_admin callers.
+        if (! $isCanonicalSuperAdmin) {
+            foreach ($newCapabilities as $capability) {
+                if ($capability === Capability::CORE_ASSIGN_ROLES) {
+                    continue;
+                }
+                if (! AccessDecision::can($actor, $capability)) {
+                    return [
+                        'message' => "The actor cannot grant a capability they do not already hold: [{$capability}].",
+                    ];
+                }
+            }
+        }
+
+        // Rule 4: existing assignees — verify the actor can legitimately
+        // retain each binding under the implied `(role, scope)` triple.
+        // For `store()`, `existingRole` is null and there are no assignees,
+        // so this loop is intentionally skipped.
+        if ($existingRole !== null) {
+            $existingAssignments = AuthorizationRoleAssignment::query()
+                ->where('authorization_role_id', $existingRole->id)
+                ->get();
+
+            foreach ($existingAssignments as $assignment) {
+                $assignee = User::query()->find((int) $assignment->user_id);
+                if ($assignee === null) {
+                    continue;
+                }
+                $scope = new AssignmentScope(
+                    (string) $assignment->scope_type,
+                    $assignment->scope_id === null ? null : (int) $assignment->scope_id,
+                    (bool) $assignment->inherit_to_children,
+                );
+                if (! $this->assignmentActorGuard->allows($actor, $assignee, $existingRole, $scope)) {
+                    return [
+                        'message' => 'The actor does not have authority over an existing assignment for this role.',
+                    ];
+                }
+            }
+        }
+
+        return null;
     }
 }

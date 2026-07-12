@@ -235,9 +235,28 @@ class RolesAndPermissionsSeeder extends Seeder
         ];
     }
 
+    /**
+     * Seeded system roles that participate in the obsolete-pivot sweep.
+     *
+     * `super_admin` is intentionally excluded: its pivots are
+     * admin-managed and any safety-net overwrite would clobber operator
+     * overrides. The exclusion preserves the pre-cutover contract where
+     * super_admin rows are only mutated by an explicit admin action.
+     *
+     * @var list<string>
+     */
+    private const SWEPT_SYSTEM_ROLES = [
+        'admin',
+        'viewer',
+        'dept_manager',
+        'member',
+    ];
+
     public function run(): void
     {
-        DB::transaction(function (): void {
+        $auditRows = [];
+
+        DB::transaction(function () use (&$auditRows): void {
             $catalog = self::roleCatalog();
             $mappings = $this->mappedCapabilities($catalog);
 
@@ -251,6 +270,11 @@ class RolesAndPermissionsSeeder extends Seeder
             $resources = AuthorizationResource::query()
                 ->whereIn('key', array_column($mappings, 'resource'))
                 ->pluck('id', 'key');
+
+            // Track the desired (resource_id|action) set per swept role so the
+            // post-upsert sweep can compare the live pivots to the canonical
+            // catalog without re-deriving the mapping a second time.
+            $desiredByRole = [];
 
             foreach ($catalog as $name => $definition) {
                 $role = AuthorizationRole::query()->updateOrCreate(
@@ -298,8 +322,87 @@ class RolesAndPermissionsSeeder extends Seeder
                     );
                 }
 
+                if (in_array($name, self::SWEPT_SYSTEM_ROLES, true)) {
+                    $desiredByRole[$name] = [
+                        'role_id' => $role->id,
+                        'desired_keys' => array_keys($desired),
+                    ];
+                }
+            }
+
+            // CSD-CA23078-SEEDER-001 — obsolete-pivot sweep.
+            //
+            // After the upsert loop has rebuilt the desired pivots for every
+            // catalog role, walk the swept system roles and DELETE any
+            // authorization_role_permissions row that is no longer in the
+            // canonical catalog. Each deletion is mirrored into
+            // authorization_assignment_audits with the
+            // `role_catalog_sync_obsolete_pivot_removed` event so the
+            // historical record is preserved. The sweep:
+            //   - targets ONLY seeded system roles named in
+            //     self::SWEPT_SYSTEM_ROLES (custom / operator-created roles
+            //     are never read or written);
+            //   - excludes super_admin (preserved semantics);
+            //   - is idempotent: a second run finds no obsolete rows because
+            //     the first run already removed them, so no extra audits are
+            //     written.
+            $resourceKeyById = DB::table('authorization_resources')
+                ->pluck('key', 'id');
+
+            foreach ($desiredByRole as $roleName => $entry) {
+                $existing = DB::table('authorization_role_permissions')
+                    ->where('authorization_role_id', $entry['role_id'])
+                    ->select(['authorization_resource_id', 'action'])
+                    ->get();
+
+                foreach ($existing as $pivot) {
+                    $key = $pivot->authorization_resource_id.'|'.$pivot->action;
+                    if (in_array($key, $entry['desired_keys'], true)) {
+                        continue;
+                    }
+
+                    DB::table('authorization_role_permissions')
+                        ->where('authorization_role_id', $entry['role_id'])
+                        ->where('authorization_resource_id', $pivot->authorization_resource_id)
+                        ->where('action', $pivot->action)
+                        ->delete();
+
+                    $auditRows[] = [
+                        'event' => 'role_catalog_sync_obsolete_pivot_removed',
+                        'actor_id' => null,
+                        'target_user_id' => null,
+                        'scope_type' => null,
+                        'scope_id' => null,
+                        'role' => $roleName,
+                        'old_value' => json_encode([
+                            'authorization_role_id' => (int) $entry['role_id'],
+                            'authorization_resource_id' => (int) $pivot->authorization_resource_id,
+                            'authorization_resource_key' => $resourceKeyById[$pivot->authorization_resource_id] ?? null,
+                            'action' => $pivot->action,
+                        ], JSON_THROW_ON_ERROR),
+                        'new_value' => json_encode([
+                            'authorization_role_id' => (int) $entry['role_id'],
+                            'authorization_resource_id' => (int) $pivot->authorization_resource_id,
+                            'authorization_resource_key' => $resourceKeyById[$pivot->authorization_resource_id] ?? null,
+                            'action' => $pivot->action,
+                            'reason' => 'obsolete pivot no longer in canonical role catalog',
+                            'source' => 'RolesAndPermissionsSeeder',
+                            'ticket' => 'CSD-CA23078-SEEDER-001',
+                        ], JSON_THROW_ON_ERROR),
+                        'reason' => 'CSD-CA23078-SEEDER-001 obsolete pivot removed by role catalog sync sweep',
+                        'ip_address' => null,
+                        'user_agent' => 'seeder',
+                        'created_at' => now(),
+                    ];
+                }
             }
         });
+
+        if ($auditRows !== []) {
+            foreach (array_chunk($auditRows, 500) as $chunk) {
+                DB::table('authorization_assignment_audits')->insert($chunk);
+            }
+        }
 
         AccessDecision::flushCache();
         $this->command?->info('Canonical authorization roles and permissions seeded successfully.');

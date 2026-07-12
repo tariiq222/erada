@@ -206,14 +206,17 @@ class UserTest extends TestCase
         $organization = Organization::factory()->create();
         $this->user->forceFill(['organization_id' => $organization->id])->save();
 
-        $malformedRole = AuthorizationRole::query()->create([
-            'name' => 'malformed_super_admin',
+        $malformedRole = AuthorizationRole::query()
+            ->where('name', 'super_admin')
+            ->firstOrFail();
+        $malformedRole->update([
             'label' => 'Malformed super admin',
             'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
             'is_admin_role' => true,
             'is_system' => true,
             'is_active' => true,
         ]);
+        $malformedRole->refresh();
 
         AuthorizationRoleAssignment::query()->create([
             'authorization_role_id' => $malformedRole->id,

@@ -33,10 +33,11 @@ class Phase3VerificationTest extends TestCase
     /**
      * Query budget for GET /api/risk-management/risks with 10 seeded risks.
      *
-     * Observed breakdown (PostgreSQL, query log) — engine path (Wave 3 task 8):
+     * Observed breakdown (PostgreSQL, query log) — canonical engine path:
      *   - 2 Spatie role lookups (model_has_roles + roles)
      *   - 1 engine scoped-roles lookup (model_has_scoped_roles)
-     *   - 1 ScopedRoleDefinition lookup (the engine consults it per request)
+     *   - 1 authorization_role_permissions row count (the engine consults
+     *     the canonical pivot per request to resolve the capability)
      *   - 1 risk_settings read (governing-dept check inside UserRiskScope)
      *   - 1 paginator COUNT query
      *   - 1 main risks SELECT (withCount('actions') is an inline subquery)
@@ -46,8 +47,9 @@ class Phase3VerificationTest extends TestCase
      * holding the line at 10 proves the index eager-loads its relations.
      *
      * Legacy Spatie gate used the cache (3 fewer lookups: no scoped-roles,
-     * no ScopedRoleDefinition, no risk_settings). The engine path costs one
-     * extra round-trip per request in exchange for the contextual scope chain.
+     * no authorization_role_permissions row count, no risk_settings). The
+     * engine path costs one extra round-trip per request in exchange for
+     * the contextual scope chain.
      */
     private const INDEX_QUERY_BUDGET = 10;
 

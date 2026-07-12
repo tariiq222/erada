@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Core\Authorization;
 
+use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Data\AssignmentScope;
 use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;

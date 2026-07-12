@@ -260,6 +260,11 @@ class AuthorizationSchemaTest extends TestCase
         $scopeTypes = ['all', 'organization', 'department', 'own', 'project', 'program', 'portfolio', 'kpi', 'meeting', 'survey'];
 
         foreach ($scopeTypes as $index => $scopeType) {
+            // The role's declared scope_type mirrors the assignment's
+            // scope_type — AssignmentScope::isCompatibleWithRoleScope requires
+            // exact match, so the canonical path for an `own` assignment is a
+            // role declared with `scope_type='own'`. This is exercised by
+            // CanonicalRoleAssignmentEndpointTest (e.g. test_guard_denial_rolls_back_every_assignment_in_the_request).
             $roleId = DB::table('authorization_roles')->insertGetId([
                 'name' => "r-each-scope-{$scopeType}",
                 'label' => "Each scope {$scopeType}",
@@ -289,6 +294,68 @@ class AuthorizationSchemaTest extends TestCase
         }
 
         $this->assertSame(count($scopeTypes), DB::table('authorization_role_assignments')->count());
+    }
+
+    public function test_authorization_roles_rejects_unsupported_declared_scope_type(): void
+    {
+        // Verified residual (2026-07-12): a declared role scope MUST be one of
+        // the nine role-definition scope values accepted by StoreRoleRequest /
+        // UpdateRoleRequest. The 'own' scope is assignment-only — assigning it
+        // to a role definition was previously silently accepted by the database
+        // and only rejected at the FormRequest layer. The new CHECK constraint
+        // closes the gap and gives a hard schema-level guarantee.
+        $this->assertTableExists('authorization_roles');
+
+        $this->expectExceptionMessageMatches('/check constraint|violates/i');
+
+        DB::table('authorization_roles')->insert([
+            'name' => 'r-bad-scope',
+            'label' => 'Bad scope role',
+            'scope_type' => 'not_a_real_scope',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    public function test_authorization_roles_accepts_every_role_definition_scope_type(): void
+    {
+        // Companion to test_authorization_roles_rejects_unsupported_declared_scope_type.
+        // Every scope_type accepted by StoreRoleRequest / UpdateRoleRequest
+        // must remain insertable after the CHECK constraint lands. The full
+        // set mirrors AssignmentScope::TYPES: `all`, `organization`,
+        // `department`, `own`, `project`, `program`, `portfolio`, `kpi`,
+        // `meeting`, `survey`. `own` is included because a role declared at
+        // `own` is a valid canonical path (the role-definition picker on
+        // /admin/roles filters `own` out for UX, but the DB constraint must
+        // still accept it to support runtime paths that create such roles).
+        $this->assertTableExists('authorization_roles');
+
+        $scopeTypes = [
+            'all',
+            'organization',
+            'department',
+            'own',
+            'project',
+            'program',
+            'portfolio',
+            'kpi',
+            'meeting',
+            'survey',
+        ];
+
+        $before = DB::table('authorization_roles')->count();
+
+        foreach ($scopeTypes as $index => $scopeType) {
+            DB::table('authorization_roles')->insert([
+                'name' => "r-each-def-{$scopeType}-{$index}",
+                'label' => "Each role-definition scope {$scopeType}",
+                'scope_type' => $scopeType,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $this->assertSame($before + count($scopeTypes), DB::table('authorization_roles')->count());
     }
 
     public function test_authorization_role_assignments_requires_unique_combination(): void

@@ -3,6 +3,8 @@
 namespace App\Modules\HR\Services;
 
 use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Contracts\AuthorizationAssignmentActorGuard;
+use App\Modules\Core\Authorization\Data\AssignmentScope;
 use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\User;
@@ -10,6 +12,7 @@ use App\Modules\HR\Models\Department;
 use App\Modules\HR\Models\DepartmentCapacityRole;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
@@ -20,6 +23,10 @@ use RuntimeException;
  */
 class ScopedDepartmentRoleSyncService
 {
+    public function __construct(
+        private readonly AuthorizationAssignmentActorGuard $assignmentActorGuard,
+    ) {}
+
     /**
      * Whether the department's capacity policy still expects this role as an
      * auto grant for this user — member capacity if the user is a member of the
@@ -50,10 +57,39 @@ class ScopedDepartmentRoleSyncService
         return false;
     }
 
-    public function syncUser(User $user): void
+    /**
+     * @param  User|null  $actor  When set, every materialized auto-grant is
+     *                            validated against this actor's authority
+     *                            (CSD-CA23078-HR-002). Falls back to
+     *                            `auth()->user()` so observer-driven syncs
+     *                            inherit the surrounding HTTP context; if no
+     *                            actor resolves (CLI, queue worker, no-auth
+     *                            observer), the grant is skipped with a
+     *                            warning log — fail closed, no DB writes.
+     */
+    public function syncUser(User $user, ?User $actor = null): void
     {
-        DB::transaction(function () use ($user): void {
-            User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
+        $actor ??= auth()->user();
+
+        DB::transaction(function () use (&$user, $actor): void {
+            // CSD-CA23078-HR-001 — Lock + refresh invariant.
+            //
+            // The caller may hand us a stale User snapshot (e.g. a chunk
+            // iterator loaded N rows ago before another writer moved the
+            // user's department, or a captured $user from before a
+            // department transfer). The row lock prevents concurrent
+            // mutation, and re-binding $user to the freshly-locked model
+            // guarantees every downstream scope computation in this
+            // transaction — membership, leadership, stale-assignment
+            // cleanup — runs against current DB state, not the captured
+            // snapshot. Without the re-bind, a user already moved out of
+            // deptA keeps the deptA auto-grant materialized because the
+            // cleanup `whereNotIn('scope_id', $expectedByScope)` is
+            // computed from the stale $user->department_id and excludes
+            // deptA from the revocation set. Must be the FIRST statement
+            // inside the transaction so the lock is acquired before any
+            // other reader sees a half-applied state.
+            $user = User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
 
             // Scopes this user currently SHOULD hold an auto role on.
             $expectedByScope = [];
@@ -77,7 +113,7 @@ class ScopedDepartmentRoleSyncService
             }
 
             foreach ($expectedByScope as $scopeId => $roleKeys) {
-                $this->syncAutoAssignmentsForScope($user, $scopeId, $roleKeys);
+                $this->syncAutoAssignmentsForScope($user, $scopeId, $roleKeys, $actor);
             }
 
             // Cleanup only automatic department assignments on scopes no longer expected.
@@ -99,18 +135,23 @@ class ScopedDepartmentRoleSyncService
         });
     }
 
-    public function syncDepartment(Department $department): void
+    /**
+     * @param  User|null  $actor  See {@see syncUser()}.
+     */
+    public function syncDepartment(Department $department, ?User $actor = null): void
     {
-        $department->users()->chunkById(200, function (Collection $users) {
+        $actor ??= auth()->user();
+
+        $department->users()->chunkById(200, function (Collection $users) use ($actor) {
             foreach ($users as $user) {
-                $this->syncUser($user);
+                $this->syncUser($user, $actor);
             }
         });
 
         if ($department->manager_id !== null) {
             $manager = User::find($department->manager_id);
             if ($manager !== null) {
-                $this->syncUser($manager);
+                $this->syncUser($manager, $actor);
             }
         }
 
@@ -122,9 +163,9 @@ class ScopedDepartmentRoleSyncService
             ->pluck('user_id')
             ->unique();
 
-        User::whereIn('id', $holderIds)->chunkById(200, function (Collection $users) {
+        User::whereIn('id', $holderIds)->chunkById(200, function (Collection $users) use ($actor) {
             foreach ($users as $user) {
-                $this->syncUser($user);
+                $this->syncUser($user, $actor);
             }
         });
     }
@@ -139,8 +180,11 @@ class ScopedDepartmentRoleSyncService
             ->all();
     }
 
-    /** @param list<string> $roleKeys */
-    private function syncAutoAssignmentsForScope(User $user, int $departmentId, array $roleKeys): void
+    /**
+     * @param  list<string>  $roleKeys
+     * @param  User|null  $actor  See {@see syncUser()}.
+     */
+    private function syncAutoAssignmentsForScope(User $user, int $departmentId, array $roleKeys, ?User $actor = null): void
     {
         $department = Department::query()->findOrFail($departmentId);
         if ($user->organization_id === null || (int) $user->organization_id !== (int) $department->organization_id) {
@@ -206,6 +250,54 @@ class ScopedDepartmentRoleSyncService
                 continue;
             }
 
+            // CSD-CA23078-HR-002 — actor guard against privilege escalation via
+            // auto-grants. Defense in depth: the controller already gates the
+            // policy write, but if any path slips a non-super_admin actor
+            // through (observer, queue, CLI), the sync must still refuse to
+            // materialize a role they could not have assigned themselves.
+            if ($actor === null) {
+                Log::warning('Skipping capacity auto-grant: no actor in sync context', [
+                    'subject_user_id' => $user->id,
+                    'department_id' => $departmentId,
+                    'role' => $role->name,
+                ]);
+                $this->auditMutation(
+                    $user,
+                    null,
+                    $role->name,
+                    null,
+                    null,
+                    'skipped_no_actor',
+                );
+
+                continue;
+            }
+
+            $scope = new AssignmentScope(
+                AuthorizationRoleAssignment::SCOPE_DEPARTMENT,
+                $departmentId,
+            );
+
+            if (! $this->assignmentActorGuard->allows($actor, $user, $role, $scope)) {
+                Log::warning('Skipping capacity auto-grant: actor guard denied', [
+                    'actor_id' => $actor->id,
+                    'subject_user_id' => $user->id,
+                    'department_id' => $departmentId,
+                    'role' => $role->name,
+                ]);
+                $this->auditMutation(
+                    $user,
+                    null,
+                    $role->name,
+                    null,
+                    null,
+                    'skipped_actor_denied',
+                    actorId: (int) $actor->id,
+                );
+
+                continue;
+            }
+
             $assignment = AuthorizationRoleAssignment::query()->create($identity + [
                 'organization_id' => $department->organization_id,
                 'inherit_to_children' => true,
@@ -219,18 +311,19 @@ class ScopedDepartmentRoleSyncService
 
     private function auditMutation(
         User $subject,
-        AuthorizationRoleAssignment $assignment,
+        ?AuthorizationRoleAssignment $assignment,
         ?string $role,
         ?array $old,
         ?array $new,
         string $event,
+        ?int $actorId = null,
     ): void {
         DB::table('authorization_assignment_audits')->insert([
             'event' => 'canonical_assignment_'.$event,
-            'actor_id' => null,
+            'actor_id' => $actorId,
             'target_user_id' => $subject->id,
-            'scope_type' => $assignment->scope_type,
-            'scope_id' => $assignment->scope_id,
+            'scope_type' => $assignment?->scope_type,
+            'scope_id' => $assignment?->scope_id,
             'role' => $role,
             'old_value' => $old === null ? null : json_encode($old),
             'new_value' => $new === null ? null : json_encode($new),

@@ -1217,7 +1217,7 @@ const App: React.FC = () => {
 																		allCapabilities:
 																			[
 																				"surveys.view",
-																				"view_survey_responses",
+																				"surveys.review_responses",
 																			],
 																	}}
 																>
