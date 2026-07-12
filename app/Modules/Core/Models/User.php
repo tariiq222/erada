@@ -308,6 +308,7 @@ class User extends Authenticatable
             ->whereNull('scope_id')
             ->whereHas('role', fn ($query) => $query
                 ->where('name', 'super_admin')
+                ->where('scope_type', AuthorizationRoleAssignment::SCOPE_ALL)
                 ->where('is_system', true))
             ->exists();
     }

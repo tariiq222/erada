@@ -75,6 +75,7 @@ final class CanonicalAuthorizationAssignmentActorGuard implements AuthorizationA
             })
             ->whereHas('role', fn ($query) => $query
                 ->where('name', 'super_admin')
+                ->where('scope_type', AuthorizationRoleAssignment::SCOPE_ALL)
                 ->where('is_admin_role', true)
                 ->where('is_active', true))
             ->exists();

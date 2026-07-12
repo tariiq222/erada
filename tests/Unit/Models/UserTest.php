@@ -2,7 +2,10 @@
 
 namespace Tests\Unit\Models;
 
+use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
@@ -185,6 +188,52 @@ class UserTest extends TestCase
      * اختبار isSuperAdmin
      */
     public function test_is_super_admin(): void
+    {
+        $this->grantCanonicalSuperAdmin($this->user);
+
+        $this->assertTrue($this->user->isSuperAdmin());
+    }
+
+    /**
+     * Regression: a super_admin role whose declared scope_type is NOT 'all'
+     * but whose assignment is scope_type=all + scope_id=null MUST NOT
+     * satisfy isSuperAdmin(). The role's declared scope_type is authoritative;
+     * a malformed row that declares scope_type='organization' cannot escalate
+     * to system-wide super admin just because its assignment is shaped 'all'.
+     */
+    public function test_is_super_admin_rejects_malformed_role_with_non_all_declared_scope(): void
+    {
+        $organization = Organization::factory()->create();
+        $this->user->forceFill(['organization_id' => $organization->id])->save();
+
+        $malformedRole = AuthorizationRole::query()->create([
+            'name' => 'malformed_super_admin',
+            'label' => 'Malformed super admin',
+            'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+            'is_admin_role' => true,
+            'is_system' => true,
+            'is_active' => true,
+        ]);
+
+        AuthorizationRoleAssignment::query()->create([
+            'authorization_role_id' => $malformedRole->id,
+            'user_id' => $this->user->id,
+            'scope_type' => AuthorizationRoleAssignment::SCOPE_ALL,
+            'scope_id' => null,
+            'organization_id' => null,
+            'source' => 'manual',
+        ]);
+
+        AccessDecision::flushUserCache($this->user->id);
+
+        $this->assertFalse($this->user->isSuperAdmin());
+    }
+
+    /**
+     * Regression: the canonical all/all/null super-admin assignment MUST still
+     * pass isSuperAdmin() after the role.scope_type='all' hardening.
+     */
+    public function test_is_super_admin_accepts_canonical_all_scope_role_and_assignment(): void
     {
         $this->grantCanonicalSuperAdmin($this->user);
 
