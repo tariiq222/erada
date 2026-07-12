@@ -214,6 +214,7 @@
   "auth.login": "Sign In",
   "auth.login_button": "Sign In",
   "auth.logging_in": "Signing in...",
+  "auth.dev_quick_login": "Quick development login",
   "auth.login_failed": "Login failed",
   "auth.email_label": "Email Address",
   "auth.password_label": "Password",

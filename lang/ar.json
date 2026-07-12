@@ -226,6 +226,7 @@
     "auth.login": "تسجيل الدخول",
     "auth.login_button": "دخول",
     "auth.logging_in": "جاري الدخول...",
+    "auth.dev_quick_login": "دخول سريع للتطوير",
     "auth.login_failed": "فشل تسجيل الدخول",
     "auth.email_label": "البريد الإلكتروني",
     "auth.password_label": "كلمة المرور",

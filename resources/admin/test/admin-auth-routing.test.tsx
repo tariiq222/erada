@@ -188,6 +188,21 @@ describe('admin authentication routing', () => {
     expect(window.location.pathname).not.toBe('/dashboard');
   });
 
+  it('offers a development quick login for the global super admin', async () => {
+    const user = userEvent.setup();
+    setPath('/login');
+    authMocks.login.mockImplementation(async (email: string, password: string) => {
+      expect(email).toBe('admin@admin.com');
+      expect(password).toBe('password');
+      return { success: true };
+    });
+
+    render(<AdminRouter />);
+
+    await user.click(screen.getByRole('button', { name: 'دخول سريع للتطوير' }));
+    expect(authMocks.login).toHaveBeenCalledWith('admin@admin.com', 'password');
+  });
+
   it('moves a two-factor login challenge to verification with the safe return state', async () => {
     const user = userEvent.setup();
     setPath('/login?returnTo=%2Fusers%2F9');

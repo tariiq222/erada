@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { IconLock, IconLogin, IconMail, IconShieldLock } from '@tabler/icons-react';
+import { IconBolt, IconLock, IconLogin, IconMail, IconShieldLock } from '@tabler/icons-react';
 import { useAuth } from '@shared/contexts/AuthContext';
 import { useLocale } from '@shared/contexts/LocaleContext';
 import { useSystemSettings } from '@shared/contexts/SystemSettingsContext';
@@ -23,21 +23,12 @@ export function Login() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  if (isLoading) {
-    return <p role="status">{t('common.loading')}</p>;
-  }
-
-  if (isAuthenticated) {
-    return <Navigate to={returnTo} replace />;
-  }
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const completeLogin = async (nextEmail: string, nextPassword: string) => {
     setError('');
     setSubmitting(true);
 
     try {
-      const result = await login(email, password);
+      const result = await login(nextEmail, nextPassword);
 
       if (
         result.requiresTwoFactor &&
@@ -63,6 +54,19 @@ export function Login() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  if (isLoading) {
+    return <p role="status">{t('common.loading')}</p>;
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to={returnTo} replace />;
+  }
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await completeLogin(email, password);
   };
 
   return (
@@ -117,6 +121,18 @@ export function Login() {
               >
                 {submitting ? t('auth.logging_in') : t('auth.login_button')}
               </Button>
+              {import.meta.env.DEV && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  loading={submitting}
+                  leftIcon={<IconBolt className="h-5 w-5" />}
+                  className="h-11 w-full"
+                  onClick={() => void completeLogin('admin@admin.com', 'password')}
+                >
+                  {t('auth.dev_quick_login')}
+                </Button>
+              )}
             </form>
           </CardContent>
         </Card>
