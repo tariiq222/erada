@@ -36,7 +36,7 @@ describe('admin incident-type contracts', () => {
     await adminApi.incidentTypes.update('type-1', { name_ar: 'دوائي محدث' });
     await adminApi.incidentTypes.addReportableType('type-1', { name: 'dose', name_ar: 'جرعة' });
     await adminApi.incidentTypes.delete('type-1');
-    expect(apiGet).toHaveBeenCalledWith('/admin/incident-types?include_inactive=true');
+    expect(apiGet).toHaveBeenCalledWith('/admin/incident-types?include_inactive=1');
     expect(apiPost).toHaveBeenNthCalledWith(1, '/admin/incident-types', { name: 'medication', name_ar: 'دوائي', is_active: true, requires_reportable_type: true });
     expect(apiPut).toHaveBeenCalledWith('/admin/incident-types/type-1', { name_ar: 'دوائي محدث' });
     expect(apiPost).toHaveBeenNthCalledWith(2, '/admin/incident-types/type-1/reportable-types', { name: 'dose', name_ar: 'جرعة' });

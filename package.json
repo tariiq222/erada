@@ -21,7 +21,7 @@
         "test:watch": "vitest",
         "test:coverage": "vitest run --coverage",
         "test:e2e": "playwright test",
-        "test:e2e:admin:setup": "php artisan config:clear && mkdir -p storage/framework/sessions && export APP_ENV=testing DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_PORT=${ADMIN_E2E_DB_PORT:-5433} DB_DATABASE=${ADMIN_E2E_DB_DATABASE:-iradah_pmo_admin_e2e_test} DB_USERNAME=iradah DB_PASSWORD=secret && php artisan migrate:fresh --seed --force && php artisan db:seed --class=AdminE2ETestSeeder --force",
+        "test:e2e:admin:setup": "export APP_ENV=testing DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_PORT=${ADMIN_E2E_DB_PORT:-5433} DB_DATABASE=${ADMIN_E2E_DB_DATABASE:-iradah_pmo_admin_e2e_test} DB_USERNAME=iradah DB_PASSWORD=secret CACHE_STORE=file CACHE_PREFIX=iradah_admin_e2e && php artisan config:clear && php artisan cache:clear && mkdir -p storage/framework/sessions && php artisan migrate:fresh --seed --force && php artisan db:seed --class=AdminE2ETestSeeder --force",
         "test:e2e:admin": "npm run test:e2e:admin:setup && playwright test --config=playwright.admin.config.ts",
         "quality": "npm run typecheck && npm run lint && npm run design:check && npm run test",
         "quality:ci": "npm run typecheck && npm run lint && npm run design:check && npm run test && npm run test:e2e",

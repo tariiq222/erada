@@ -1,20 +1,33 @@
 import { expect, type Page } from '@playwright/test';
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 
 export const adminFixture = {
   adminEmail: 'admin-e2e@example.test',
   twoFactorEmail: 'admin-2fa-e2e@example.test',
   regularEmail: 'regular-e2e@example.test',
+  isolatedRegularEmail: 'regular-isolated-e2e@example.test',
   password: 'AdminE2E!Password123',
 } as const;
 
 export const ADMIN_TWO_FACTOR_SECRET = 'JBSWY3DPEHPK3PXP';
 
 export async function login(page: Page, email: string = adminFixture.adminEmail, returnTo: string = '/overview'): Promise<void> {
+  // The real login rate limiter is intentionally left enabled. Each isolated
+  // Playwright context receives its own trusted test-proxy address, preventing
+  // unrelated cases from exhausting the five-attempts-per-minute bucket.
+  const octets = randomBytes(3);
+  await page.context().setExtraHTTPHeaders({
+    'X-Forwarded-For': `10.${octets[0]}.${octets[1]}.${octets[2]}`,
+  });
   await page.goto(`/login?returnTo=${encodeURIComponent(returnTo)}`);
   await page.locator('#admin-email').fill(email);
   await page.locator('#admin-password').fill(adminFixture.password);
+  const loginResponse = page.waitForResponse(
+    (response) => response.url().endsWith('/api/login') && response.request().method() === 'POST',
+  );
   await page.getByRole('button', { name: /login|دخول/i }).click();
+  const response = await loginResponse;
+  expect(response.status(), await response.text()).toBe(200);
 }
 
 export async function loginAsSuperAdmin(page: Page, returnTo: string = '/overview'): Promise<void> {

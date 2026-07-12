@@ -16,7 +16,7 @@ function rowFor(page: Page, code: string) {
  */
 async function deleteOrganization(page: Page, code: string): Promise<void> {
   // Ensure we are on the organizations listing page so the row is rendered.
-  if (!page.url().includes('/organizations')) {
+  if (!/\/organizations(?:\?|$)/.test(page.url())) {
     await page.goto('/organizations');
   }
   await page.locator('input[placeholder]').fill(code);
@@ -45,8 +45,8 @@ test('creates, persists, updates, reloads and deletes a uniquely coded organizat
     await loginAsSuperAdmin(page, '/organizations/new');
 
     // CREATE — exercises the real form + Laravel POST /api/admin/organizations.
-    await page.getByLabel(/اسم الجهة|organization name|name/i).first().fill(initialName);
-    await page.getByLabel(/رمز الجهة|organization code|code/i).first().fill(code);
+    await page.getByLabel(/^الاسم$/).fill(initialName);
+    await page.getByLabel(/^الكود$/).fill(code);
     const createdResponse = page.waitForResponse(
       (response) =>
         response.url().endsWith('/api/admin/organizations') &&
@@ -66,7 +66,7 @@ test('creates, persists, updates, reloads and deletes a uniquely coded organizat
 
     // UPDATE — via the edit form, real PUT, real backend validation.
     await row.locator('a[href$="/edit"]').click();
-    await page.getByLabel(/اسم الجهة|organization name|name/i).first().fill(updatedName);
+    await page.getByLabel(/^الاسم$/).fill(updatedName);
     const updatedResponse = page.waitForResponse(
       (response) =>
         response.url().includes('/api/admin/organizations/') &&

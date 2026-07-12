@@ -20,6 +20,8 @@ class AdminE2ETestSeeder extends Seeder
 
     public const REGULAR_EMAIL = 'regular-e2e@example.test';
 
+    public const ISOLATED_REGULAR_EMAIL = 'regular-isolated-e2e@example.test';
+
     public const PASSWORD = 'AdminE2E!Password123';
 
     public function run(): void
@@ -60,6 +62,8 @@ class AdminE2ETestSeeder extends Seeder
 
         $admin = $this->user(self::ADMIN_EMAIL, 'Admin E2E Super', $primary->id, $department->id, 'super_admin');
         $this->user(self::REGULAR_EMAIL, 'Admin E2E Regular', $primary->id, $department->id, 'viewer');
+        $isolatedDepartment = Department::query()->where('code', 'ADMIN-E2E-ISO')->firstOrFail();
+        $this->user(self::ISOLATED_REGULAR_EMAIL, 'Admin E2E Isolated Admin', $isolated->id, $isolatedDepartment->id, 'admin');
         $twoFactor = $this->user(self::TWO_FACTOR_EMAIL, 'Admin E2E Two Factor', $primary->id, $department->id, 'super_admin');
         $twoFactor->forceFill([
             'two_factor_secret' => Crypt::encryptString('JBSWY3DPEHPK3PXP'),

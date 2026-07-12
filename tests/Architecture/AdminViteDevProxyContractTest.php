@@ -16,7 +16,7 @@ class AdminViteDevProxyContractTest extends TestCase
         $this->assertStringContainsString("'/api': {", $config);
         $this->assertStringContainsString("target: 'http://127.0.0.1:8000'", $config);
         $this->assertStringContainsString('bypass(request)', $config);
-        $this->assertStringContainsString('return pathname;', $config);
+        $this->assertStringContainsString("return pathname;", $config);
         $this->assertStringContainsString('const viteSourceModulePath = /\\.(?:[cm]?[jt]sx?|map)$/;', $config);
         $this->assertStringNotContainsString('sec-fetch-dest', strtolower($config));
     }

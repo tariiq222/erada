@@ -13,6 +13,9 @@ const testDatabaseEnvironment = [
   'DB_USERNAME=iradah',
   'DB_PASSWORD=secret',
   'SANCTUM_STATEFUL_DOMAINS=127.0.0.1:4174',
+  // The E2E helper assigns an isolated forwarded IP per browser context so
+  // Laravel's production login limiter stays enabled without coupling cases.
+  'TRUSTED_PROXIES=*',
   'SESSION_DRIVER=file',
   'CACHE_STORE=file',
   'CACHE_PREFIX=iradah_admin_e2e',

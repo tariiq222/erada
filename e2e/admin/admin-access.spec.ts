@@ -14,7 +14,7 @@ function rowFor(page: Page, name: string) {
  * finds the row, accepts the confirm dialog, and waits for the real DELETE.
  */
 async function deleteIncidentType(page: Page, name: string): Promise<void> {
-  if (!page.url().includes('/incident-types')) {
+  if (!/\/incident-types(?:\?|$)/.test(page.url())) {
     await page.goto('/incident-types');
   }
   const row = rowFor(page, name);
@@ -49,7 +49,7 @@ test.describe('admin access, activity, incident surface flows', () => {
     );
     await page
       .getByRole('row', { name: new RegExp(adminFixture.adminEmail) })
-      .getByRole('button', { name: /view access/i })
+      .getByRole('button', { name: /^view access$|^عرض الصلاحيات$/i })
       .click();
     expect((await summary).status()).toBe(200);
     // The summary card appears only after the real network round-trip.
@@ -61,19 +61,23 @@ test.describe('admin access, activity, incident surface flows', () => {
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
     // Filter by an action the page exposes; the canonical API narrows the
-    // result set in real-time.
+    // result set in real-time. login() runs the SPA against the same backend,
+    // so a row with action="login" is written by the time we open this page.
     const filter = page.waitForResponse(
       (response) =>
         response.url().includes('/api/admin/activity-logs') &&
         response.request().method() === 'GET' &&
         response.url().includes('action='),
     );
+    // admin.activityLogs.fields.action aria-label = "Action" / "الإجراء"
     await page.locator('select[aria-label]').first().selectOption('login');
     await page.getByRole('button', { name: /search|بحث/i }).click();
     expect((await filter).status()).toBe(200);
-    // The empty-state copy is the deterministic fallback when there are no
-    // matching rows — proves real backend interaction, not a stubbed array.
-    await expect(page.getByText(/no activity logs found|لا توجد سجلات/i)).toBeVisible();
+    // The login row from the helper must appear — proves a real row exists
+    // for the action we filtered by and the backend narrowed correctly.
+    const dataRows = page.locator('tbody tr');
+    await expect(dataRows.first()).toBeVisible();
+    await expect(page.getByText(/no activity logs found|لا توجد سجلات/i)).toHaveCount(0);
   });
 
   test('renders the governance rules CRUD surface for the actor organization', async ({ page }) => {
@@ -100,10 +104,14 @@ test.describe('admin access, activity, incident surface flows', () => {
           response.url().endsWith('/api/admin/incident-types') &&
           response.request().method() === 'POST',
       );
-      await page.getByRole('button', { name: /add category|إضافة فئة/i }).click();
-      await page.getByLabel(/category name|name/i).first().fill(name);
-      await page.getByLabel(/category name ar|name_ar/i).first().fill(nameAr);
-      await page.getByRole('button', { name: /save|حفظ|create|إنشاء/i }).first().click();
+      // ovr.add_category = "Add Type" (en) / "إضافة نوع" (ar)
+      await page.getByRole('button', { name: /^add type$|^إضافة نوع$/i }).click();
+      // ovr.category_name = "Name (English)" / "الاسم (إنجليزي)"
+      await page.getByLabel(/name \(english\)|الاسم \(إنجليزي\)/i).fill(name);
+      // ovr.category_name_ar = "Name (Arabic)" / "الاسم (عربي)"
+      await page.getByLabel(/name \(arabic\)|الاسم \(عربي\)/i).fill(nameAr);
+      // common.save = "Save" / "حفظ" — scoped to the open form, not the page header
+      await page.getByRole('button', { name: /^save$|^حفظ$/i }).click();
       expect((await createdResponse).status()).toBe(201);
       created = true;
 

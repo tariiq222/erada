@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { adminFixture, loginAsSuperAdmin, uniqueSuffix } from './helpers/admin-auth';
+import { adminFixture, login, loginAsSuperAdmin, uniqueSuffix } from './helpers/admin-auth';
 
 const DEPARTMENT_PREFIX = 'E2E-DEPT';
 const USER_PREFIX = 'E2E-USER';
@@ -15,10 +15,11 @@ function rowFor(page: Page, text: string) {
  * and waits for the real DELETE through the canonical API.
  */
 async function deleteDepartment(page: Page, name: string): Promise<void> {
-  if (!page.url().includes('/departments')) {
+  // Exact list route only — '/departments/new' must NOT satisfy this guard.
+  if (!/\/departments(?:\?|$)/.test(page.url())) {
     await page.goto('/departments');
   }
-  await page.locator('select[aria-label]').first().selectOption({ label: /Admin E2E Primary/i });
+  await page.locator('select[aria-label]').first().selectOption({ label: 'Admin E2E Primary' });
   const row = rowFor(page, name);
   if ((await row.count()) === 0) return;
   const confirm = page.once('dialog', (dialog) => dialog.accept());
@@ -33,7 +34,8 @@ async function deleteDepartment(page: Page, name: string): Promise<void> {
 }
 
 async function deleteUser(page: Page, email: string): Promise<void> {
-  if (!page.url().includes('/users')) {
+  // Exact list route only — '/users/new' must NOT satisfy this guard.
+  if (!/\/users(?:\?|$)/.test(page.url())) {
     await page.goto('/users');
   }
   const search = page.locator('input[placeholder]');
@@ -84,11 +86,11 @@ test.describe('admin users, departments, and cross-organization flow', () => {
       await loginAsSuperAdmin(page, '/departments/new');
 
       await page.getByLabel(/department name|اسم القسم/i).first().fill(name);
-      await page.getByLabel(/department code|رمز القسم/i).first().fill(code);
+      await page.getByLabel(/department code|كود القسم/i).first().fill(code);
 
       // The form requires an organization selector (super_admin may pick any).
       const orgSelect = page.locator('form select').first();
-      await orgSelect.selectOption({ label: /Admin E2E Primary/i });
+      await orgSelect.selectOption({ label: 'Admin E2E Primary' });
 
       const createdResponse = page.waitForResponse(
         (response) =>
@@ -102,7 +104,7 @@ test.describe('admin users, departments, and cross-organization flow', () => {
       // Persistence: navigate back to the list and confirm the row is there.
       await expect(page).toHaveURL(/\/departments(\?|$)/);
       await page.reload();
-      await page.locator('select[aria-label]').first().selectOption({ label: /Admin E2E Primary/i });
+      await page.locator('select[aria-label]').first().selectOption({ label: 'Admin E2E Primary' });
       await expect(rowFor(page, name)).toHaveCount(1);
 
       // DELETE through the real UI confirmation + canonical DELETE.
@@ -116,7 +118,7 @@ test.describe('admin users, departments, and cross-organization flow', () => {
       expect((await removed).status()).toBe(200);
 
       await page.reload();
-      await page.locator('select[aria-label]').first().selectOption({ label: /Admin E2E Primary/i });
+      await page.locator('select[aria-label]').first().selectOption({ label: 'Admin E2E Primary' });
       await expect(rowFor(page, name)).toHaveCount(0);
       created = false;
     } finally {
@@ -179,57 +181,39 @@ test.describe('admin users, departments, and cross-organization flow', () => {
     }
   });
 
-  test('cross-organization tenant isolation: API narrows visibility to the actor organization', async ({ page }) => {
-    // Authenticate through the SPA's real login UI so the page-context
-    // request inherits the Sanctum session cookies (no X-Skip-Csrf).
+  test('cross-organization tenant isolation: non-super users are denied the foreign admin surface', async ({ page, browser }) => {
+    // First discover a real foreign organization id through the privileged SPA.
+    // The later request deliberately tries to select it as a non-super user.
     await loginAsSuperAdmin(page, '/overview');
-
-    // Use the page's shared request context so cookies + X-XSRF-TOKEN carry
-    // over exactly as the SPA's api client does.
     const req = page.context().request;
-
-    // Pull both organizations through the canonical admin endpoint.
     const orgs = await req.get('/api/admin/organizations?per_page=100', {
       headers: { Accept: 'application/json' },
     });
     expect(orgs.ok()).toBeTruthy();
     const orgsJson = (await orgs.json()) as { data: Array<{ id: number; code: string }> };
-    const isolatedOrg = orgsJson.data.find((row) => row.code === 'ADMIN-E2E-ISOLATED');
-    expect(isolatedOrg).toBeDefined();
-    if (!isolatedOrg) return;
+    const primaryOrg = orgsJson.data.find((row) => row.code === 'ADMIN-E2E-PRIMARY');
+    expect(primaryOrg).toBeDefined();
+    if (!primaryOrg) return;
 
-    // Users in the isolated org must NOT contain the primary org's admin.
-    const isolatedUsers = await req.get(
-      `/api/admin/users?organization_id=${isolatedOrg.id}&per_page=100`,
-      { headers: { Accept: 'application/json' } },
-    );
-    expect(isolatedUsers.ok()).toBeTruthy();
-    const isolatedUsersJson = (await isolatedUsers.json()) as { data: Array<{ email: string }> };
-    expect(
-      isolatedUsersJson.data.find((row) => row.email === adminFixture.adminEmail),
-    ).toBeUndefined();
+    // A distinct browser context avoids sharing the super-admin session or its
+    // login-rate-limit bucket with the non-super actor under test.
+    const isolatedContext = await browser.newContext({ baseURL: 'http://127.0.0.1:4174' });
+    try {
+      const isolatedPage = await isolatedContext.newPage();
+      await login(isolatedPage, adminFixture.isolatedRegularEmail);
+      await expect(isolatedPage).toHaveURL(/\/overview$/);
 
-    // Conversely, the primary org must contain our seed admin — proves the
-    // user listing is correctly narrowing on organization.
-    const primaryUsers = await req.get('/api/admin/users?per_page=100', {
-      headers: { Accept: 'application/json' },
-    });
-    expect(primaryUsers.ok()).toBeTruthy();
-    const primaryUsersJson = (await primaryUsers.json()) as { data: Array<{ email: string }> };
-    expect(
-      primaryUsersJson.data.find((row) => row.email === adminFixture.adminEmail),
-    ).toBeDefined();
-
-    // Also verify departments: the isolated dept must not be present when
-    // scoping to the primary org, and the governance dept must be present.
-    const primaryDepts = await req.get(
-      '/api/admin/departments?organization_id=' +
-        (orgsJson.data.find((row) => row.code === 'ADMIN-E2E-PRIMARY')?.id ?? 0) +
-        '&per_page=100',
-      { headers: { Accept: 'application/json' } },
-    );
-    expect(primaryDepts.ok()).toBeTruthy();
-    const primaryDeptsJson = (await primaryDepts.json()) as { data: Array<{ name: string }> };
-    expect(primaryDeptsJson.data.find((row) => row.name === 'Admin E2E Governance')).toBeDefined();
+      // The independent control plane is super-admin only. A tenant-scoped
+      // admin cannot use a forged foreign organization filter to enter it.
+      const departments = await isolatedContext.request.get('/api/admin/departments?per_page=100', {
+        headers: {
+          Accept: 'application/json',
+          'X-Organization-Id': String(primaryOrg.id),
+        },
+      });
+      expect(departments.status(), await departments.text()).toBe(403);
+    } finally {
+      await isolatedContext.close();
+    }
   });
 });

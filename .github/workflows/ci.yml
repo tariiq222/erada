@@ -479,6 +479,7 @@ jobs:
         # main test job uses. The Playwright setup script is `migrate:fresh --seed`
         # so each CI run gets a deterministic fresh fixture.
         env:
+          APP_ENV: testing
           DB_CONNECTION: pgsql
           DB_HOST: 127.0.0.1
           DB_PORT: 5432

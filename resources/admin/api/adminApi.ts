@@ -160,7 +160,9 @@ export const adminApi = {
   },
   incidentTypes: {
     list: (params?: { include_inactive?: boolean }) =>
-      api.get<{ data: IncidentType[] }>(`/admin/incident-types${queryString(params)}`),
+      api.get<{ data: IncidentType[] }>(`/admin/incident-types${queryString({
+        include_inactive: params?.include_inactive ? 1 : undefined,
+      })}`),
     create: (data: IncidentTypeInput) => api.post('/admin/incident-types', data),
     update: (id: string, data: Partial<IncidentTypeInput>) => api.put(`/admin/incident-types/${id}`, data),
     delete: (id: string) => api.delete(`/admin/incident-types/${id}`),
