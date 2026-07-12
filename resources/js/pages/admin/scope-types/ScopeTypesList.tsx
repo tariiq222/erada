@@ -62,6 +62,13 @@ export const ScopeTypesList: React.FC = () => {
                     </td>
                   </tr>
                 ))}
+                {!data.length && (
+                  <tr>
+                    <td colSpan={4} className="py-10 text-center text-[var(--text-tertiary)]">
+                      {t('admin.scopeTypes.empty')}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
