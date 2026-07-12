@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '@shared/contexts/AuthContext';
 import {
   IconLayoutDashboard,
   IconAlertTriangle,
@@ -10,7 +11,7 @@ import {
   IconShieldLock,
   IconUsers,
   IconActivity,
-  IconHistory as IconScopedRoleAudit,
+  IconHistory as IconAssignmentAudit,
   IconClipboardList,
 } from '@tabler/icons-react';
 
@@ -20,6 +21,7 @@ export interface AdminNavItem {
   icon: React.ComponentType<{ className?: string }>;
   /** When true, the link is rendered but visually de-emphasized (out of M1 scope). */
   secondary?: boolean;
+  capability: string;
 }
 
 /**
@@ -28,7 +30,7 @@ export interface AdminNavItem {
  * M1 (System Governance Console) - Overview, Security Alerts, Audit Recent -
  * is the primary surface and is rendered first. The remaining items
  * (organizations, access, roles, users, registrations, activity logs,
- * scoped-role audit) reuse the existing admin pages but are visually
+ * authorization-assignment audit) reuse the existing admin pages but are visually
  * grouped as the secondary cluster.
  */
 export const ADMIN_NAV_PRIMARY: AdminNavItem[] = [
@@ -36,16 +38,19 @@ export const ADMIN_NAV_PRIMARY: AdminNavItem[] = [
     href: '/admin/overview',
     labelKey: 'admin.shell.nav.overview',
     icon: IconLayoutDashboard,
+    capability: 'core.view_organizations',
   },
   {
     href: '/admin/security/alerts',
     labelKey: 'admin.shell.nav.security',
     icon: IconAlertTriangle,
+    capability: 'audit.view',
   },
   {
     href: '/admin/audit/recent',
     labelKey: 'admin.shell.nav.audit_recent',
     icon: IconHistory,
+    capability: 'audit.view',
   },
 ];
 
@@ -54,36 +59,42 @@ export const ADMIN_NAV_SECONDARY: AdminNavItem[] = [
     href: '/admin/organizations',
     labelKey: 'admin.shell.nav.organizations',
     icon: IconBuildingCommunity,
+    capability: 'core.view_organizations',
     secondary: true,
   },
   {
     href: '/admin/access',
     labelKey: 'admin.shell.nav.access',
     icon: IconKey,
+    capability: 'core.assign_roles',
     secondary: true,
   },
   {
     href: '/admin/roles',
     labelKey: 'admin.shell.nav.roles',
     icon: IconShieldLock,
+    capability: 'roles.view',
     secondary: true,
   },
   {
     href: '/admin/users',
     labelKey: 'admin.shell.nav.users',
     icon: IconUsers,
+    capability: 'users.view',
     secondary: true,
   },
   {
     href: '/admin/activity-logs',
     labelKey: 'admin.shell.nav.activity_logs',
     icon: IconActivity,
+    capability: 'audit.view',
     secondary: true,
   },
   {
-    href: '/admin/scoped-roles/audit-logs',
-    labelKey: 'admin.shell.nav.scoped_role_audit',
-    icon: IconScopedRoleAudit,
+    href: '/admin/authorization/audit-logs',
+    labelKey: 'admin.shell.nav.authorization_assignment_audit',
+    icon: IconAssignmentAudit,
+    capability: 'audit.view',
     secondary: true,
   },
 ];
@@ -111,6 +122,13 @@ function deriveActiveHref(pathname: string): string {
 const AdminSidebar: React.FC = () => {
   const { t } = useTranslation();
   const location = useLocation();
+  const { can } = useAuth();
+  const primaryItems = ADMIN_NAV_PRIMARY.filter((item) =>
+    can(item.capability),
+  );
+  const secondaryItems = ADMIN_NAV_SECONDARY.filter((item) =>
+    can(item.capability),
+  );
   const activeHref = deriveActiveHref(location.pathname);
 
   return (
@@ -126,7 +144,7 @@ const AdminSidebar: React.FC = () => {
       </div>
       <nav className="flex-1 overflow-y-auto px-2 py-3">
         <ul className="space-y-1">
-          {ADMIN_NAV_PRIMARY.map((item) => (
+          {primaryItems.map((item) => (
             <NavRow
               key={item.href}
               item={item}
@@ -138,7 +156,7 @@ const AdminSidebar: React.FC = () => {
           {t('admin.shell.sidebar.section_secondary', 'Technical controls')}
         </p>
         <ul className="mt-2 space-y-1">
-          {ADMIN_NAV_SECONDARY.map((item) => (
+          {secondaryItems.map((item) => (
             <NavRow
               key={item.href}
               item={item}

@@ -273,7 +273,7 @@ class OvrConfidentialPolicyOracleTest extends TestCase
         };
     }
 
-    private function makeUserIn(Organization $org, Department $dept, ?string $spatieRole = null): User
+    private function makeUserIn(Organization $org, Department $dept, ?string $canonicalRole = null): User
     {
         $user = User::factory()->create([
             'organization_id' => $org->id,
@@ -281,16 +281,17 @@ class OvrConfidentialPolicyOracleTest extends TestCase
             'is_active' => true,
         ]);
 
-        if ($spatieRole !== null) {
-            $user->assignRole($spatieRole);
+        if ($canonicalRole !== null) {
+            $canonicalRole === 'super_admin'
+                ? $this->grantCanonicalSuperAdmin($user)
+                : $this->assignCanonicalRole($user, $canonicalRole);
         }
 
         return $user;
     }
 
     /**
-     * super_admin → always allow (this is the Spatie role, engine bypass
-     * happens on hasRole('super_admin') BEFORE org gate).
+     * super_admin → always allow through the canonical all-scope bypass.
      */
     private function buildSuperAdmin(Organization $org): User
     {

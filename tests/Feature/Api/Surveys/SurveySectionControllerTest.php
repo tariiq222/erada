@@ -47,7 +47,7 @@ class SurveySectionControllerTest extends TestCase
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
         $this->survey = Survey::factory()->draft()->create([
             'organization_id' => $this->orgA->id,
             'created_by' => $this->user->id,
@@ -69,7 +69,7 @@ class SurveySectionControllerTest extends TestCase
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $actor->assignRole('admin');
+        $this->assignCanonicalRole($actor, 'admin');
         $this->grantEngineCapability($actor, Capability::SURVEYS_EDIT);
 
         return $actor;

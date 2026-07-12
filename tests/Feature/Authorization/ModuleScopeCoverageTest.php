@@ -13,7 +13,6 @@ use App\Modules\Meetings\Models\Meeting;
 use App\Modules\Meetings\Models\Recommendation;
 use App\Modules\Performance\Models\Kpi;
 use App\Modules\Surveys\Models\Survey;
-use Database\Seeders\AdditionalScopeTypesSeeder;
 use Database\Seeders\ScopedDepartmentRolesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -57,7 +56,6 @@ class ModuleScopeCoverageTest extends TestCase
     public function test_department_manager_can_view_department_kpi(): void
     {
         $this->seed(ScopedDepartmentRolesSeeder::class);
-        $this->seed(AdditionalScopeTypesSeeder::class);
 
         [$org, $dept, $mgr] = $this->departmentWithManager();
 
@@ -72,7 +70,6 @@ class ModuleScopeCoverageTest extends TestCase
     public function test_department_manager_can_view_department_meeting(): void
     {
         $this->seed(ScopedDepartmentRolesSeeder::class);
-        $this->seed(AdditionalScopeTypesSeeder::class);
 
         [$org, $dept, $mgr] = $this->departmentWithManager();
 
@@ -87,7 +84,6 @@ class ModuleScopeCoverageTest extends TestCase
     public function test_ruling_recommendation_rolls_up_to_meeting_scope(): void
     {
         $this->seed(ScopedDepartmentRolesSeeder::class);
-        $this->seed(AdditionalScopeTypesSeeder::class);
 
         [$org, $dept, $mgr] = $this->departmentWithManager();
 
@@ -107,7 +103,6 @@ class ModuleScopeCoverageTest extends TestCase
     public function test_department_manager_can_view_department_survey(): void
     {
         $this->seed(ScopedDepartmentRolesSeeder::class);
-        $this->seed(AdditionalScopeTypesSeeder::class);
 
         [$org, $dept, $mgr] = $this->departmentWithManager();
 

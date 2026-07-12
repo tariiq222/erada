@@ -60,7 +60,7 @@ class PublicTrackTokenTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
 
         $this->incidentType = IncidentType::create([
             'name' => 'Med Error',

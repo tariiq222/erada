@@ -40,7 +40,7 @@ class OrganizationHierarchyCrudTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
     }
 
     private function createCluster(string $code = 'CL-1'): Organization

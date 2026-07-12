@@ -64,7 +64,9 @@ class SurveyResponsePolicyTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $user->assignRole($role);
+        $role === 'super_admin'
+                ? $this->grantCanonicalSuperAdmin($user)
+                : $this->assignCanonicalRole($user, $role);
 
         return $user;
     }
@@ -115,7 +117,7 @@ class SurveyResponsePolicyTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
 
         $this->assertFalse($this->policy->review($user, $this->response));
     }
@@ -148,7 +150,7 @@ class SurveyResponsePolicyTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $sa->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($sa);
 
         $creator = User::factory()->create(['organization_id' => null]);
         $nullOrgSurvey = Survey::factory()->create([

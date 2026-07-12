@@ -16,18 +16,22 @@ export interface UserSecurityResponse {
   security: UserSecurity;
 }
 
-// الأدوار السياقية
-export interface ScopedRole {
+/** Canonical authorization assignment summary returned for a user. */
+export interface UserRoleAssignment {
+  id: number;
+  role_id: number;
   role: string;
-  role_display: string;
-  scope_id: number;
-  scope_name: string;
+  label: string;
+  scope_type: string;
+  scope_id: number | null;
+  scope_name: string | null;
+  organization_id: number | null;
+  inherit_to_children: boolean;
   expires_at: string | null;
+  source: string;
+  granted_by: number | null;
 }
 
-export interface ScopedRolesResponse {
-  data: {
-    projects: ScopedRole[];
-    departments: ScopedRole[];
-  };
+export interface UserRoleAssignmentsResponse {
+  data: UserRoleAssignment[];
 }

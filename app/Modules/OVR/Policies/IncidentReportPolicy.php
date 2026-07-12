@@ -61,7 +61,7 @@ class IncidentReportPolicy
             return false;
         }
 
-        if (! AccessDecision::can($user, Capability::OVR_VIEW, $report)) {
+        if (! $this->authorization()->canAccess($user, Capability::OVR_VIEW, $report)) {
             return false;
         }
 
@@ -89,7 +89,7 @@ class IncidentReportPolicy
             return false;
         }
 
-        if (! AccessDecision::can($user, Capability::OVR_EDIT, $report)) {
+        if (! $this->authorization()->canAccess($user, Capability::OVR_EDIT, $report)) {
             return false;
         }
 
@@ -105,7 +105,7 @@ class IncidentReportPolicy
             return false;
         }
 
-        if (! AccessDecision::can($user, Capability::OVR_DELETE, $report)) {
+        if (! $this->authorization()->canAccess($user, Capability::OVR_DELETE, $report)) {
             return false;
         }
 
@@ -275,7 +275,7 @@ class IncidentReportPolicy
             return false;
         }
 
-        if (! AccessDecision::can($user, $capability, $report)) {
+        if (! $this->authorization()->canAccess($user, $capability, $report)) {
             return false;
         }
 
@@ -301,7 +301,11 @@ class IncidentReportPolicy
      */
     private function checkConfidentialAccess(User $user, IncidentReport $report): bool
     {
-        return app(OvrAuthorizationService::class)
-            ->mayViewConfidential($user, $report);
+        return $this->authorization()->mayViewConfidential($user, $report);
+    }
+
+    private function authorization(): OvrAuthorizationService
+    {
+        return app(OvrAuthorizationService::class);
     }
 }

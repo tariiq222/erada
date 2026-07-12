@@ -34,7 +34,7 @@ class TwoFactorControllerTest extends TestCase
             'two_factor_secret' => null,
             'two_factor_confirmed_at' => null,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
     }
 
     // ========================================

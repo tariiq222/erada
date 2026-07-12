@@ -15,11 +15,11 @@ coverage. No applied migration is edited.
 
 ### Release 1: urgent containment
 
-1. Replace self-service enrollment into an existing organization or department
-   with an invitation-bound registration contract. A public registration must not
-   accept client-authoritative organization or department identifiers, must not
-   issue a usable token before enrollment is verified, and must not invoke automatic
-   department-role synchronization for an unverified registrant.
+1. Preserve open self-service enrollment: a registrant may select an existing
+   organization and one of its departments, receives the department employee role,
+   and receives no administrative role. The server must continue to reject a
+   department from another organization; department administration remains an HR
+   assignment flow, not a registration choice.
 2. Validate every user reference supplied through a project create or update
    payload against the project organization before any scoped role or relationship
    is written. This applies to team members, assignees, stakeholders, and the
@@ -58,10 +58,10 @@ coverage. No applied migration is edited.
 
 ### Enrollment authority
 
-An invite or an approved enterprise identity provider is the only authority that
-selects an existing organization and department. The client may submit the token,
-but must never choose the scope separately. Pending or invalid enrollment receives
-no session token and no role synchronization.
+Open registration is an intentional product policy. The client chooses the
+organization and department, and the server verifies that the department belongs
+to that organization. The automatic department capacity role is employee-only;
+administrative roles are assigned later by the HR workflow.
 
 ### Reference validation boundary
 
@@ -85,7 +85,7 @@ scope.
 
 ## Error behavior
 
-- Invalid or expired invitation: `422` without creating an active account or token.
+- A department outside the selected organization: `422` without creating an account.
 - Cross-organization project user reference: `422` with the offending field path.
 - Inactive role definition or organization: authorization is denied (`403`) without
   leaking another organization’s record.
@@ -94,8 +94,8 @@ scope.
 
 ## Acceptance criteria
 
-- An unaffiliated visitor cannot obtain a token, scoped role, or data from an
-  existing organization by posting organization or department IDs.
+- A visitor can register openly in a selected organization and department, but can
+  never choose a department from another organization or self-assign an admin role.
 - A project payload containing any foreign user ID is rejected atomically and does
   not create `model_has_scoped_roles` rows.
 - A user loses access immediately after their role definition is inactive.

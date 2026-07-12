@@ -38,7 +38,7 @@ class PerformanceBaselineTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
     }
 
     public function test_dashboard_stats_query_budget_is_bounded(): void

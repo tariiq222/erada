@@ -36,7 +36,7 @@ class UserKpiScopeTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $super->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($super);
 
         $orgA = Organization::factory()->create();
         $orgB = Organization::factory()->create();

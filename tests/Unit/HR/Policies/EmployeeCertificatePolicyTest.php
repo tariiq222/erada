@@ -44,7 +44,7 @@ class EmployeeCertificatePolicyTest extends TestCase
             'organization_id' => $orgA->id,
             'department_id' => $deptA->id,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $this->assertTrue($this->policy->view($superAdmin, $certB));
         $this->assertTrue($this->policy->download($superAdmin, $certB));

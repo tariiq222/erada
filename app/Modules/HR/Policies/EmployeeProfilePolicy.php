@@ -23,7 +23,7 @@ use App\Modules\HR\Support\EmployeeOrgGuard;
  *  - profile بلا user مرتبط ⇒ deny (orphan).
  *  - HR_VIEW للقراءة، HR_MANAGE للتعديل/الحذف/الإنشاء.
  *
- * لا تعتمد على Spatie direct. الـ Capability constants تمر عبر AccessDecision
+ * تمر ثوابت Capability عبر AccessDecision
  * ليتحقّق المحرك من الأدوار السياقية.
  */
 class EmployeeProfilePolicy

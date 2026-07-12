@@ -2,7 +2,7 @@
 
 namespace App\Modules\Projects\Services;
 
-use App\Modules\Core\Models\ScopedRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Projects\Http\Resources\ProjectResource;
 use App\Modules\Projects\Models\Project;
@@ -34,11 +34,12 @@ class ProjectQueryService
         return Project::with([
             'department',
             'program:id,code,name',
-            // scopedRoles + user is eager-loaded so the list endpoint can resolve
+            // roleAssignments + user is eager-loaded so the list endpoint can resolve
             // the project manager without firing a fresh query per row (N+1).
             // getManagerAttribute() always re-queries members(), so we use this
             // collection to derive manager in ProjectResource when present.
-            'scopedRoles.user',
+            'roleAssignments.role',
+            'roleAssignments.user',
         ])
             // Counter aggregates replace per-row model hydration for the
             // members/tasks/milestones/risks counts that the list cards render.
@@ -67,17 +68,16 @@ class ProjectQueryService
      */
     public function applyOwnershipScope(Builder $query, User $user): Builder
     {
-        // The legacy `project_members` table was dropped on 2026-06-14 in favor of the
-        // scoped-role engine; the `scoped_roles` shorthand here was a typo and never
-        // matched anything. The unified source of truth is `model_has_scoped_roles`
-        // with `scope_type = 'project'`. Other branches (created_by / stakeholders /
-        // assigned tasks) remain as compensating signals for projects where the user
-        // has no scoped role yet (creator, explicit stakeholder, assignee).
+        // Canonical project assignments are the only role/member source. Other
+        // branches remain compensating ownership signals for creators, explicit
+        // stakeholders, and task assignees.
         $ownedIds = array_unique(array_merge(
             Project::where('created_by', $user->id)->pluck('id')->all(),
-            DB::table('model_has_scoped_roles')
+            AuthorizationRoleAssignment::query()
                 ->where('user_id', $user->id)
-                ->where('scope_type', ScopedRole::SCOPE_PROJECT)
+                ->where('scope_type', 'project')
+                ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+                ->whereHas('role', fn ($query) => $query->where('is_active', true))
                 ->pluck('scope_id')->all(),
             DB::table('project_stakeholders')->where('user_id', $user->id)->pluck('project_id')->all(),
             DB::table('tasks')->where('assigned_to', $user->id)
@@ -168,7 +168,7 @@ class ProjectQueryService
         $paginator = $query->paginate(min((int) $request->get('per_page', 15), 100));
 
         // Wrap items with ProjectResource so the manager field is serialized
-        // correctly via the eager-loaded scopedRoles collection. The controller
+        // correctly via the eager-loaded roleAssignments collection. The controller
         // just does response()->json($paginator) and otherwise the manager
         // accessor would not appear in the JSON (model has no $appends).
         $paginator->getCollection()->transform(

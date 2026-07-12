@@ -2,6 +2,8 @@
 
 namespace Database\Seeders\Mock;
 
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Performance\Models\Kpi;
 use App\Modules\Performance\Models\KpiLink;
 use App\Modules\Projects\Models\Milestone;
@@ -12,7 +14,6 @@ use App\Modules\Projects\Models\ProjectRisk;
 use App\Modules\Projects\Models\Stakeholder;
 use App\Modules\Tasks\Models\Task;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
 
 class ProjectsSeeder extends Seeder
 {
@@ -34,7 +35,7 @@ class ProjectsSeeder extends Seeder
         ];
 
         $deptIds = array_map(fn ($d) => $d->id, $departments);
-        $pmUsers = array_filter($users, fn ($u) => $u->hasRole('project_manager'));
+        $pmUsers = array_filter($users, fn ($user) => str_contains((string) $user->job_title, 'مشروع'));
         $pmUsers = array_values($pmUsers);
 
         foreach ($projectsData as $index => $data) {
@@ -63,18 +64,7 @@ class ProjectsSeeder extends Seeder
                 'created_by' => $users[0]->id,
             ]);
 
-            // إدراج دور المدير في model_has_scoped_roles
-            DB::table('model_has_scoped_roles')->insert([
-                'user_id' => $manager->id,
-                'role' => 'manager',
-                'scope_type' => 'project',
-                'scope_id' => $project->id,
-                'inherit_to_children' => false,
-                'granted_by' => null,
-                'expires_at' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+            $this->assignProjectRole($manager->id, 'manager', $project);
 
             $this->projects[] = $project;
 
@@ -186,18 +176,30 @@ class ProjectsSeeder extends Seeder
             $usedUserIds[] = $user->id;
             $rawRole = $roles[array_rand($roles)];
 
-            DB::table('model_has_scoped_roles')->insert([
-                'user_id' => $user->id,
-                'role' => $rawRole === 'viewer' ? 'viewer' : 'member',
+            $this->assignProjectRole($user->id, $rawRole, $project);
+        }
+    }
+
+    private function assignProjectRole(int $userId, string $roleName, Project $project): void
+    {
+        $role = AuthorizationRole::query()->where('name', $roleName)->firstOrFail();
+        $organizationId = $project->department()->value('organization_id');
+
+        AuthorizationRoleAssignment::query()->updateOrCreate(
+            [
+                'authorization_role_id' => $role->id,
+                'user_id' => $userId,
                 'scope_type' => 'project',
                 'scope_id' => $project->id,
+            ],
+            [
+                'organization_id' => $organizationId,
                 'inherit_to_children' => false,
-                'granted_by' => null,
                 'expires_at' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        }
+                'source' => 'auto',
+                'granted_by' => null,
+            ],
+        );
     }
 
     private function createProjectRisksAndExpenses(Project $project, array $users): void

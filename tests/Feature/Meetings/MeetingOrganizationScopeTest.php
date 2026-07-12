@@ -51,8 +51,10 @@ class MeetingOrganizationScopeTest extends TestCase
             'is_active' => true,
         ]);
 
-        if ($role) {
-            $user->assignRole($role);
+        if ($role === 'super_admin') {
+            $this->grantCanonicalSuperAdmin($user);
+        } elseif ($role === 'admin' && $org !== null) {
+            $this->grantCanonicalAdmin($user);
         }
 
         return $user;

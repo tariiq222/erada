@@ -36,13 +36,7 @@ export const organizationsApi = {
 };
 
 export const scopeTypesApi = {
-  list: (params?: Record<string, string | number | boolean>) =>
-    api.get<PaginatedResponse<ScopeType>>('/scope-types' + buildQuery(params)),
-  get: (id: number) => api.get<{ data: ScopeType }>(`/scope-types/${id}`),
-  create: (data: Partial<ScopeType>) => api.post('/scope-types', data),
-  update: (id: number, data: Partial<ScopeType>) =>
-    api.put(`/scope-types/${id}`, data),
-  delete: (id: number) => api.delete(`/scope-types/${id}`),
+  list: () => api.get<{ data: ScopeType[] }>('/scope-types'),
 };
 
 export const activityLogsApi = {
@@ -63,7 +57,7 @@ export const activityLogsApi = {
 
 /**
  * M1 Super Admin System Governance Console (read-mostly).
- * Mounted under /api/admin/* and gated by role:super_admin server-side.
+ * Mounted under /api/admin/* and protected by the server-side authorization engine.
  */
 export const superAdminDashboardApi = {
   overview: () =>

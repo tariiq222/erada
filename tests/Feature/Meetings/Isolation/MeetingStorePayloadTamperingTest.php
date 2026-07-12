@@ -186,7 +186,7 @@ class MeetingStorePayloadTamperingTest extends TestCase
             'organization_id' => $orgA->id,
             'department_id' => $deptA->id,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         // Super admin uses orgA as the target (no subject to override org).
         $payload = $this->makeValidPayload($organizerA->id);

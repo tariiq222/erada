@@ -69,7 +69,7 @@ class ProjectExpenseSecurityTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
         $this->grantEngineCapability($user, Capability::SETTINGS_MANAGE);
 
         return $user;
@@ -82,7 +82,7 @@ class ProjectExpenseSecurityTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         return $user;
     }

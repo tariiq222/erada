@@ -15,6 +15,7 @@ import { ThemeProvider } from "@shared/contexts/ThemeContext";
 import { OrganizationProvider } from "@shared/contexts/OrganizationContext";
 import { ToastProvider } from "@shared/ui/Toast";
 import { AppLayout } from "@widgets/app-shell";
+import { AdminLayout } from "@widgets/admin-shell";
 import {
 	RequirePermission,
 	RequireAdmin,
@@ -47,6 +48,8 @@ const TaskForm = lazy(() => import("./pages/tasks/TaskForm"));
 const UsersList = lazy(() => import("./pages/users/UsersList"));
 const UserView = lazy(() => import("./pages/users/UserView"));
 const UserForm = lazy(() => import("./pages/users/UserForm"));
+const UserAccessSummary = lazy(() => import("./pages/admin/roles/UserAccessSummary"));
+const AccessHub = lazy(() => import("./pages/admin/access/AccessHub"));
 const Profile = lazy(() => import("./pages/profile/Profile"));
 const DepartmentsList = lazy(() => import("./pages/hr/DepartmentsList"));
 const DepartmentView = lazy(() => import("./pages/hr/DepartmentView"));
@@ -144,6 +147,46 @@ const SurveyStatistics = lazy(() => import("./pages/surveys/SurveyStatistics"));
 const DepartmentStatistics = lazy(
 	() => import("./pages/hr/DepartmentStatistics"),
 );
+// Admin Pages (Super Admin only)
+// Note: the previous /admin/registrations page (admin approval queue for the
+// old invite + admin-approval registration flow) was removed in the
+// simplified-registration cutover. Self-registration is now a single-step
+// POST /api/register that activates the user immediately — there is no
+// pending-approval queue to render.
+const OrganizationsList = lazy(
+	() => import("./pages/admin/organizations/OrganizationsList"),
+);
+const OrganizationForm = lazy(
+	() => import("./pages/admin/organizations/OrganizationForm"),
+);
+const ScopeTypesList = lazy(
+	() => import("./pages/admin/scope-types/ScopeTypesList"),
+);
+const ActivityLogsList = lazy(
+	() => import("./pages/admin/activity-logs/ActivityLogsList"),
+);
+// Phase 4A — the activity-log page is gated by AUDIT_VIEW
+// (engine capability alias `audit.view`) NOT super-admin. The
+// non-admin cluster_auditor role holds AUDIT_VIEW + CLUSTER_TREE_VIEW
+// and must be able to reach this page.
+const AuthorizationAssignmentAuditLogs = lazy(
+	() => import("./pages/admin/authorization/AuthorizationAssignmentAuditLogs"),
+);
+const RolesList = lazy(() => import("./pages/admin/roles/RolesList"));
+const RoleForm = lazy(() => import("./pages/admin/roles/RoleForm"));
+const GoverningDepartments = lazy(() => import("./pages/admin/roles/GoverningDepartments"));
+
+// M1 — Super Admin System Governance Console (read-mostly)
+const SuperAdminOverview = lazy(
+	() => import("./pages/admin/overview/Overview"),
+);
+const SuperAdminSecurityAlerts = lazy(
+	() => import("./pages/admin/security-alerts/SecurityAlerts"),
+);
+const SuperAdminAuditRecent = lazy(
+	() => import("./pages/admin/audit-recent/AuditRecent"),
+);
+
 // مكون التحميل
 const PageLoader: React.FC = () => {
 	const { t } = useTranslation();
@@ -231,9 +274,9 @@ const App: React.FC = () => {
 															path="/dashboard"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
-																			"view_dashboard",
+																	requirement={{
+																		capability:
+																			"dashboard.view",
 																	}}
 																>
 																	<Dashboard />
@@ -246,11 +289,11 @@ const App: React.FC = () => {
 															path="/projects"
 															element={
 																<RequirePermission
-																	config={{
-																		permissions:
+																	requirement={{
+																		anyCapabilities:
 																			[
 																				"projects.view",
-																				"view_own_projects",
+																				"projects.view",
 																			],
 																	}}
 																>
@@ -262,11 +305,11 @@ const App: React.FC = () => {
 															path="/projects/statistics"
 															element={
 																<RequirePermission
-																	config={{
-																		permissions:
+																	requirement={{
+																		anyCapabilities:
 																			[
 																				"projects.view",
-																				"view_own_projects",
+																				"projects.view",
 																			],
 																	}}
 																>
@@ -278,8 +321,8 @@ const App: React.FC = () => {
 															path="/projects/create"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"projects.create",
 																	}}
 																>
@@ -290,7 +333,7 @@ const App: React.FC = () => {
 														<Route
 															path="/projects/settings"
 															element={
-																<RequireAdmin>
+															<RequireAdmin capability="settings.manage">
 																	<ProjectSettings />
 																</RequireAdmin>
 															}
@@ -299,11 +342,11 @@ const App: React.FC = () => {
 															path="/projects/:id"
 															element={
 																<RequirePermission
-																	config={{
-																		permissions:
+																	requirement={{
+																		anyCapabilities:
 																			[
 																				"projects.view",
-																				"view_own_projects",
+																				"projects.view",
 																			],
 																	}}
 																>
@@ -315,11 +358,11 @@ const App: React.FC = () => {
 															path="/projects/:id/edit"
 															element={
 																<RequirePermission
-																	config={{
-																		permissions:
+																	requirement={{
+																		anyCapabilities:
 																			[
 																				"projects.edit",
-																				"edit_own_projects",
+																				"projects.edit",
 																			],
 																	}}
 																>
@@ -333,11 +376,11 @@ const App: React.FC = () => {
 															path="/tasks"
 															element={
 																<RequirePermission
-																	config={{
-																		permissions:
+																	requirement={{
+																		anyCapabilities:
 																			[
 																				"tasks.view",
-																				"view_own_tasks",
+																				"tasks.view",
 																			],
 																	}}
 																>
@@ -349,11 +392,11 @@ const App: React.FC = () => {
 															path="/my-tasks"
 															element={
 																<RequirePermission
-																	config={{
-																		permissions:
+																	requirement={{
+																		anyCapabilities:
 																			[
 																				"tasks.view",
-																				"view_own_tasks",
+																				"tasks.view",
 																			],
 																	}}
 																>
@@ -365,8 +408,8 @@ const App: React.FC = () => {
 															path="/tasks/create"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"tasks.create",
 																	}}
 																>
@@ -378,11 +421,11 @@ const App: React.FC = () => {
 															path="/tasks/:id"
 															element={
 																<RequirePermission
-																	config={{
-																		permissions:
+																	requirement={{
+																		anyCapabilities:
 																			[
 																				"tasks.view",
-																				"view_own_tasks",
+																				"tasks.view",
 																			],
 																	}}
 																>
@@ -394,11 +437,11 @@ const App: React.FC = () => {
 															path="/tasks/:id/edit"
 															element={
 																<RequirePermission
-																	config={{
-																		permissions:
+																	requirement={{
+																		anyCapabilities:
 																			[
 																				"tasks.edit",
-																				"edit_own_tasks",
+																				"tasks.edit",
 																			],
 																	}}
 																>
@@ -412,8 +455,8 @@ const App: React.FC = () => {
 															path="/risk-management/statistics"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"risks.view",
 																	}}
 																>
@@ -425,15 +468,15 @@ const App: React.FC = () => {
 															path="/ovr/statistics"
 															element={
 																<RequirePermission
-																	config={{
-																		allPermissions:
+																	requirement={{
+																		allCapabilities:
 																			[
 																				"ovr.view_statistics",
 																			],
-																		permissions:
+																		anyCapabilities:
 																			[
-																				"ovr.view_own",
-																				"ovr.view_department",
+																				"ovr.view_all",
+																				"ovr.view_all",
 																				"ovr.view_all",
 																			],
 																	}}
@@ -446,8 +489,8 @@ const App: React.FC = () => {
 															path="/users/statistics"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"users.view",
 																	}}
 																>
@@ -459,8 +502,8 @@ const App: React.FC = () => {
 															path="/surveys/statistics"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"surveys.view",
 																	}}
 																>
@@ -472,8 +515,8 @@ const App: React.FC = () => {
 															path="/hr/departments/statistics"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"departments.view",
 																	}}
 																>
@@ -481,13 +524,22 @@ const App: React.FC = () => {
 																</RequirePermission>
 															}
 														/>
+														<Route
+															path="/admin/departments/statistics"
+															element={
+																<Navigate
+																	to="/hr/departments/statistics"
+																	replace
+																/>
+															}
+														/>
 														{/* Users */}
 														<Route
 															path="/users"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"users.view",
 																	}}
 																>
@@ -499,8 +551,8 @@ const App: React.FC = () => {
 															path="/users/create"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"users.create",
 																	}}
 																>
@@ -512,8 +564,8 @@ const App: React.FC = () => {
 															path="/users/:id"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"users.view",
 																	}}
 																>
@@ -522,11 +574,24 @@ const App: React.FC = () => {
 															}
 														/>
 														<Route
+															path="/users/:id/access"
+															element={
+																<RequirePermission
+																	requirement={{
+																		capability:
+																			"users.view",
+																	}}
+																>
+																	<UserAccessSummary />
+																</RequirePermission>
+															}
+														/>
+														<Route
 															path="/users/:id/edit"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"users.edit",
 																	}}
 																>
@@ -548,8 +613,8 @@ const App: React.FC = () => {
 															path="/hr/employees"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"hr.view",
 																	}}
 																>
@@ -561,9 +626,9 @@ const App: React.FC = () => {
 															path="/hr/employees/create"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
-																			"manage_hr",
+																	requirement={{
+																		capability:
+																			"hr.manage",
 																	}}
 																>
 																	<EmployeeCreatePage />
@@ -574,9 +639,9 @@ const App: React.FC = () => {
 															path="/hr/employees/:id/edit"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
-																			"manage_hr",
+																	requirement={{
+																		capability:
+																			"hr.manage",
 																	}}
 																>
 																	<EmployeeEditPage />
@@ -589,8 +654,8 @@ const App: React.FC = () => {
 															path="/hr/departments"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"departments.view",
 																	}}
 																>
@@ -604,8 +669,8 @@ const App: React.FC = () => {
 															path="/hr/departments/new"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"departments.create",
 																	}}
 																>
@@ -619,8 +684,8 @@ const App: React.FC = () => {
 															path="/hr/departments/:id/edit"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"departments.edit",
 																	}}
 																>
@@ -634,8 +699,8 @@ const App: React.FC = () => {
 															path="/hr/departments/:id"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"departments.view",
 																	}}
 																>
@@ -649,11 +714,11 @@ const App: React.FC = () => {
 															path="/ovr/incidents"
 															element={
 																<RequirePermission
-																	config={{
-																		permissions:
+																	requirement={{
+																		anyCapabilities:
 																			[
-																				"ovr.view_own",
-																				"ovr.view_department",
+																				"ovr.view_all",
+																				"ovr.view_all",
 																				"ovr.view_all",
 																			],
 																	}}
@@ -666,8 +731,8 @@ const App: React.FC = () => {
 															path="/ovr/incidents/new"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"ovr.create",
 																	}}
 																>
@@ -679,11 +744,11 @@ const App: React.FC = () => {
 															path="/ovr/incidents/:tracking_token"
 															element={
 																<RequirePermission
-																	config={{
-																		permissions:
+																	requirement={{
+																		anyCapabilities:
 																			[
-																				"ovr.view_own",
-																				"ovr.view_department",
+																				"ovr.view_all",
+																				"ovr.view_all",
 																				"ovr.view_all",
 																			],
 																	}}
@@ -696,11 +761,11 @@ const App: React.FC = () => {
 															path="/ovr/incidents/:reportNumber/edit"
 															element={
 																<RequirePermission
-																	config={{
-																		permissions:
+																	requirement={{
+																		anyCapabilities:
 																			[
-																				"ovr.edit_own",
-																				"ovr.edit_all",
+																				"ovr.edit",
+																				"ovr.edit",
 																			],
 																	}}
 																>
@@ -712,8 +777,8 @@ const App: React.FC = () => {
 															path="/ovr/settings"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"ovr.manage_types",
 																	}}
 																>
@@ -738,8 +803,8 @@ const App: React.FC = () => {
 															path="/strategy/portfolios"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"strategy.view",
 																	}}
 																>
@@ -751,8 +816,8 @@ const App: React.FC = () => {
 															path="/strategy/portfolios/new"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"strategy.create",
 																	}}
 																>
@@ -764,8 +829,8 @@ const App: React.FC = () => {
 															path="/strategy/portfolios/statistics"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"strategy.view",
 																	}}
 																>
@@ -777,8 +842,8 @@ const App: React.FC = () => {
 															path="/strategy/portfolios/:id"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"strategy.view",
 																	}}
 																>
@@ -790,8 +855,8 @@ const App: React.FC = () => {
 															path="/strategy/portfolios/:id/edit"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"strategy.edit",
 																	}}
 																>
@@ -805,8 +870,8 @@ const App: React.FC = () => {
 													path="/strategy/meetings"
 													element={
 														<RequirePermission
-															config={{
-																permission:
+															requirement={{
+																capability:
 																	"meetings.view",
 															}}
 														>
@@ -819,8 +884,8 @@ const App: React.FC = () => {
 														path="/strategy/meetings/new"
 														element={
 															<RequirePermission
-																config={{
-																	permission:
+																requirement={{
+																	capability:
 																		"meetings.edit",
 																}}
 															>
@@ -832,8 +897,8 @@ const App: React.FC = () => {
 														path="/strategy/meetings/settings"
 														element={
 															<RequirePermission
-																config={{
-																	permission:
+																requirement={{
+																	capability:
 																		"meetings.edit",
 																}}
 															>
@@ -845,8 +910,8 @@ const App: React.FC = () => {
 														path="/strategy/meetings/:id"
 														element={
 															<RequirePermission
-																config={{
-																	permission:
+																requirement={{
+																	capability:
 																		"meetings.view",
 																}}
 															>
@@ -858,8 +923,8 @@ const App: React.FC = () => {
 														path="/strategy/meetings/:id/edit"
 														element={
 															<RequirePermission
-																config={{
-																	permission:
+																requirement={{
+																	capability:
 																		"meetings.edit",
 																}}
 															>
@@ -873,8 +938,8 @@ const App: React.FC = () => {
 														path="/strategy/meetings/recommendations"
 														element={
 															<RequirePermission
-																config={{
-																	permission: "meetings.view",
+																requirement={{
+																	capability: "meetings.view",
 																}}
 															>
 																<RecommendationsList />
@@ -885,8 +950,8 @@ const App: React.FC = () => {
 														path="/strategy/meetings/recommendations/new"
 														element={
 															<RequirePermission
-																config={{
-																	permission: "meetings.record_decisions",
+																requirement={{
+																	capability: "meetings.record_decisions",
 																}}
 															>
 																<RecommendationForm mode="page" />
@@ -897,8 +962,8 @@ const App: React.FC = () => {
 														path="/strategy/meetings/recommendations/:id"
 														element={
 															<RequirePermission
-																config={{
-																	permission: "meetings.view",
+																requirement={{
+																	capability: "meetings.view",
 																}}
 															>
 																<RecommendationView />
@@ -909,8 +974,8 @@ const App: React.FC = () => {
 														path="/strategy/meetings/recommendations/:id/edit"
 														element={
 															<RequirePermission
-																config={{
-																	permission: "meetings.record_decisions",
+																requirement={{
+																	capability: "meetings.record_decisions",
 																}}
 															>
 																<RecommendationForm mode="page" />
@@ -921,8 +986,8 @@ const App: React.FC = () => {
 														path="/strategy/meetings/notifications"
 														element={
 															<RequirePermission
-																config={{
-																	permission: "meetings.view",
+																requirement={{
+																	capability: "meetings.view",
 																}}
 															>
 																<NotificationsList />
@@ -933,8 +998,8 @@ const App: React.FC = () => {
 														path="/strategy/meetings/resolutions"
 														element={
 															<RequirePermission
-																config={{
-																	permission: "meeting_resolutions.view",
+																requirement={{
+																	capability: "meeting_resolutions.view",
 																}}
 															>
 																<ResolutionsPage />
@@ -947,8 +1012,8 @@ const App: React.FC = () => {
 															path="/strategy/programs"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"strategy.view",
 																	}}
 																>
@@ -960,8 +1025,8 @@ const App: React.FC = () => {
 															path="/strategy/programs/new"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"strategy.create",
 																	}}
 																>
@@ -973,8 +1038,8 @@ const App: React.FC = () => {
 															path="/strategy/programs/statistics"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"strategy.view",
 																	}}
 																>
@@ -986,8 +1051,8 @@ const App: React.FC = () => {
 													path="/strategy/programs/:id"
 													element={
 														<RequirePermission
-															config={{
-																permission:
+															requirement={{
+																capability:
 																	"strategy.view",
 															}}
 														>
@@ -999,8 +1064,8 @@ const App: React.FC = () => {
 													path="/strategy/programs/:id/edit"
 													element={
 														<RequirePermission
-															config={{
-																permission:
+															requirement={{
+																capability:
 																	"strategy.edit",
 															}}
 														>
@@ -1014,11 +1079,11 @@ const App: React.FC = () => {
 													path="/performance/kpis"
 													element={
 														<RequirePermission
-															config={{
-																permissions:
+															requirement={{
+																anyCapabilities:
 																	[
 																		"strategy.view",
-																		"view_reports",
+																		"strategy.view",
 																	],
 															}}
 														>
@@ -1030,8 +1095,8 @@ const App: React.FC = () => {
 													path="/performance/kpis/new"
 													element={
 														<RequirePermission
-															config={{
-																permission:
+															requirement={{
+																capability:
 																	"strategy.create",
 															}}
 														>
@@ -1043,11 +1108,11 @@ const App: React.FC = () => {
 													path="/performance/kpis/:id"
 													element={
 														<RequirePermission
-															config={{
-																permissions:
+															requirement={{
+																anyCapabilities:
 																	[
 																		"strategy.view",
-																		"view_reports",
+																		"strategy.view",
 																	],
 															}}
 														>
@@ -1059,8 +1124,8 @@ const App: React.FC = () => {
 													path="/performance/kpis/:id/edit"
 													element={
 														<RequirePermission
-															config={{
-																permission:
+															requirement={{
+																capability:
 																	"strategy.edit",
 															}}
 														>
@@ -1074,8 +1139,8 @@ const App: React.FC = () => {
 															path="/surveys"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"surveys.view",
 																	}}
 																>
@@ -1087,8 +1152,8 @@ const App: React.FC = () => {
 															path="/surveys/create"
 															element={
 																<RequirePermission
-																	config={{
-																		allPermissions:
+																	requirement={{
+																		allCapabilities:
 																			[
 																				"surveys.view",
 																				"surveys.create",
@@ -1103,8 +1168,8 @@ const App: React.FC = () => {
 															path="/surveys/:id"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"surveys.view",
 																	}}
 																>
@@ -1116,8 +1181,8 @@ const App: React.FC = () => {
 															path="/surveys/:id/edit"
 															element={
 																<RequirePermission
-																	config={{
-																		allPermissions:
+																	requirement={{
+																		allCapabilities:
 																			[
 																				"surveys.view",
 																				"surveys.edit",
@@ -1132,8 +1197,8 @@ const App: React.FC = () => {
 															path="/surveys/:id/builder"
 															element={
 																<RequirePermission
-																	config={{
-																		allPermissions:
+																	requirement={{
+																		allCapabilities:
 																			[
 																				"surveys.view",
 																				"surveys.edit",
@@ -1148,16 +1213,198 @@ const App: React.FC = () => {
 															path="/surveys/:id/responses"
 															element={
 																<RequirePermission
-																	config={{
-																		allPermissions:
+																	requirement={{
+																		allCapabilities:
 																			[
 																				"surveys.view",
-																				"view_survey_responses",
+																				"surveys.review_responses",
 																			],
 																	}}
 																>
 																	<SurveyResponses />
 																</RequirePermission>
+															}
+														/>
+													</Route>
+
+													{/* Super Admin Control Plane — distinct shell for /admin/* */}
+													<Route element={<AdminLayout />}>
+														<Route
+															path="/admin"
+															element={
+																<Navigate
+																	to="/admin/overview"
+																	replace
+																/>
+															}
+														/>
+														{/* Admin Pages (Super Admin only) */}
+														<Route
+															path="/admin/organizations"
+															element={
+															<RequireAdmin capability="core.view_organizations">
+																	<OrganizationsList />
+																</RequireAdmin>
+															}
+														/>
+														<Route
+															path="/admin/organizations/new"
+															element={
+															<RequireAdmin capability="core.cluster_tree.manage">
+																	<OrganizationForm />
+																</RequireAdmin>
+															}
+														/>
+														<Route
+															path="/admin/organizations/:id"
+															element={
+															<RequireAdmin capability="core.cluster_tree.manage">
+																	<OrganizationForm />
+																</RequireAdmin>
+															}
+														/>
+														<Route
+															path="/admin/scope-types"
+															element={
+															<RequireAdmin capability="settings.view">
+																	<ScopeTypesList />
+																</RequireAdmin>
+															}
+														/>
+														<Route
+															path="/admin/activity-logs"
+															element={
+																<RequirePermission
+																	requirement={{
+																		anyCapabilities: [
+																			"audit.view",
+																			"audit.export",
+																		],
+																	}}
+																>
+																	<ActivityLogsList />
+																</RequirePermission>
+															}
+														/>
+														{/* M1 Super Admin System Governance Console */}
+														<Route
+															path="/admin/overview"
+															element={
+															<RequireAdmin capability="core.view_organizations">
+																	<SuperAdminOverview />
+																</RequireAdmin>
+															}
+														/>
+														<Route
+															path="/admin/security/alerts"
+															element={
+															<RequireAdmin capability="audit.view">
+																	<SuperAdminSecurityAlerts />
+																</RequireAdmin>
+															}
+														/>
+														<Route
+															path="/admin/audit/recent"
+															element={
+															<RequireAdmin capability="audit.view">
+																	<SuperAdminAuditRecent />
+																</RequireAdmin>
+															}
+														/>
+												<Route
+													path="/admin/authorization/audit-logs"
+													element={
+													<RequireAdmin capability="audit.view">
+															<AuthorizationAssignmentAuditLogs />
+														</RequireAdmin>
+													}
+												/>
+														<Route
+															path="/admin/access"
+															element={
+															<RequireAdmin capability="core.assign_roles">
+																	<AccessHub />
+																</RequireAdmin>
+															}
+														/>
+														<Route
+															path="/admin/roles"
+															element={
+															<RequireAdmin capability="roles.view">
+																	<RolesList />
+																</RequireAdmin>
+															}
+														/>
+														<Route
+															path="/admin/roles/governing-departments"
+															element={
+															<RequireAdmin capability="settings.manage">
+																	<GoverningDepartments />
+																</RequireAdmin>
+															}
+														/>
+														<Route
+															path="/admin/roles/new"
+															element={
+															<RequireAdmin capability="roles.create">
+																	<RoleForm />
+																</RequireAdmin>
+															}
+														/>
+														<Route
+															path="/admin/roles/:id"
+															element={
+															<RequireAdmin capability="roles.view">
+																	<RoleForm />
+																</RequireAdmin>
+															}
+														/>
+														<Route
+															path="/admin/users"
+															element={
+															<RequireAdmin capability="users.view">
+																	<UsersList />
+																</RequireAdmin>
+															}
+														/>
+														<Route
+															path="/admin/users/create"
+															element={
+															<RequireAdmin capability="users.create">
+																	<UserForm />
+																</RequireAdmin>
+															}
+														/>
+														<Route
+															path="/admin/users/:id"
+															element={
+															<RequireAdmin capability="users.view">
+																	<UserView />
+																</RequireAdmin>
+															}
+														/>
+														<Route
+															path="/admin/users/:id/edit"
+															element={
+															<RequireAdmin capability="users.edit">
+																	<UserForm />
+																</RequireAdmin>
+															}
+														/>
+														<Route
+															path="/admin/departments"
+															element={
+															<RequireAdmin capability="departments.view">
+																	<DepartmentsList />
+																</RequireAdmin>
+															}
+														/>
+														<Route
+															path="/admin/incident-types"
+															element={
+															<RequireAdmin capability="ovr.manage_types">
+																	<OVRSettings />
+																</RequireAdmin>
 															}
 														/>
 													</Route>
@@ -1168,8 +1415,8 @@ const App: React.FC = () => {
 															path="/risk-management"
 															element={
 																<RequirePermission
-																	config={{
-																		permission:
+																	requirement={{
+																		capability:
 																			"risks.view",
 																	}}
 																>
@@ -1190,8 +1437,8 @@ const App: React.FC = () => {
 																path="risks"
 																element={
 																	<RequirePermission
-																		config={{
-																			permission:
+																		requirement={{
+																			capability:
 																				"risks.view",
 																		}}
 																	>
@@ -1203,8 +1450,8 @@ const App: React.FC = () => {
 																path="create"
 																element={
 																	<RequirePermission
-																		config={{
-																			permission:
+																		requirement={{
+																			capability:
 																				"risks.create",
 																		}}
 																	>
@@ -1215,7 +1462,7 @@ const App: React.FC = () => {
 															<Route
 																path="settings"
 																element={
-																	<RequireAdmin>
+																			<RequireAdmin capability="settings.manage">
 																		<RiskSettingsPage />
 																	</RequireAdmin>
 																}
@@ -1224,8 +1471,8 @@ const App: React.FC = () => {
 																path="risks/:id"
 																element={
 																	<RequirePermission
-																		config={{
-																			permission:
+																		requirement={{
+																			capability:
 																				"risks.view",
 																		}}
 																	>

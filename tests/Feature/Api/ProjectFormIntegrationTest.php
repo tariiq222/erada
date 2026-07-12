@@ -51,7 +51,7 @@ class ProjectFormIntegrationTest extends TestCase
             'is_active' => true,
         ]);
 
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
     }
 
     /**

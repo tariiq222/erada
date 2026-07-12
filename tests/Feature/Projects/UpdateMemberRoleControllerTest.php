@@ -2,8 +2,8 @@
 
 namespace Tests\Feature\Projects;
 
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\Projects\Models\Project;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -24,15 +24,15 @@ class UpdateMemberRoleControllerTest extends TestCase
     {
         $org = Organization::factory()->create();
         $admin = User::factory()->create(['organization_id' => $org->id]);
-        $admin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($admin);
 
         $project = Project::factory()->create([
             'organization_id' => $org->id,
         ]);
 
         $member = User::factory()->create(['organization_id' => $org->id]);
-        $member->assignProjectRole($project, ScopedRole::PROJECT_MEMBER, $admin->id);
-        $admin->assignProjectRole($project, ScopedRole::PROJECT_MANAGER, $admin->id);
+        $this->assignCanonicalRole($member, 'project_member', 'project', $project->id);
+        $this->assignCanonicalRole($admin, 'project_manager', 'project', $project->id);
 
         return [$admin, $project, $member, $org];
     }
@@ -50,10 +50,7 @@ class UpdateMemberRoleControllerTest extends TestCase
             ->assertOk()
             ->assertJsonPath('message', 'Member role updated successfully');
 
-        $this->assertTrue(
-            $member->fresh()->hasRoleInProject($project, ScopedRole::PROJECT_VIEWER),
-            'Member should now have PROJECT_VIEWER scoped role on the project.',
-        );
+        $this->assertCanonicalProjectRole($member, $project, 'project_viewer');
     }
 
     public function test_project_manager_without_super_admin_cannot_promote_to_manager(): void
@@ -61,10 +58,10 @@ class UpdateMemberRoleControllerTest extends TestCase
         [$admin, $project] = $this->makeProjectWithAdminAndMember();
 
         $projectManager = User::factory()->create(['organization_id' => $project->organization_id]);
-        $projectManager->assignProjectRole($project, ScopedRole::PROJECT_MANAGER, $admin->id);
+        $this->assignCanonicalRole($projectManager, 'project_manager', 'project', $project->id);
 
         $target = User::factory()->create(['organization_id' => $project->organization_id]);
-        $target->assignProjectRole($project, ScopedRole::PROJECT_MEMBER, $admin->id);
+        $this->assignCanonicalRole($target, 'project_member', 'project', $project->id);
 
         $this->actingAs($projectManager)
             ->putJson(
@@ -74,10 +71,7 @@ class UpdateMemberRoleControllerTest extends TestCase
             )
             ->assertStatus(403);
 
-        $this->assertTrue(
-            $target->fresh()->hasRoleInProject($project, ScopedRole::PROJECT_MEMBER),
-            'Target member should remain PROJECT_MEMBER after failed promotion attempt.',
-        );
+        $this->assertCanonicalProjectRole($target, $project, 'project_member');
     }
 
     public function test_super_admin_promotes_member_to_manager(): void
@@ -93,10 +87,7 @@ class UpdateMemberRoleControllerTest extends TestCase
             ->assertOk()
             ->assertJsonPath('message', 'Member role updated successfully');
 
-        $this->assertTrue(
-            $member->fresh()->hasRoleInProject($project, ScopedRole::PROJECT_MANAGER),
-            'Member should now have PROJECT_MANAGER scoped role on the project.',
-        );
+        $this->assertCanonicalProjectRole($member, $project, 'project_manager');
     }
 
     public function test_non_member_user_id_returns_404(): void
@@ -120,10 +111,10 @@ class UpdateMemberRoleControllerTest extends TestCase
 
         $otherOrg = Organization::factory()->create();
         $crossOrgActor = User::factory()->create(['organization_id' => $project->organization_id]);
-        $crossOrgActor->assignProjectRole($project, ScopedRole::PROJECT_MANAGER, $admin->id);
+        $this->assignCanonicalRole($crossOrgActor, 'project_manager', 'project', $project->id);
 
         $crossOrgMember = User::factory()->create(['organization_id' => $otherOrg->id]);
-        $crossOrgMember->assignProjectRole($project, ScopedRole::PROJECT_MEMBER, $admin->id);
+        $this->assignCanonicalRole($crossOrgMember, 'project_member', 'project', $project->id);
 
         $this->actingAs($crossOrgActor)
             ->putJson(
@@ -133,9 +124,16 @@ class UpdateMemberRoleControllerTest extends TestCase
             )
             ->assertStatus(403);
 
-        $this->assertTrue(
-            $crossOrgMember->fresh()->hasRoleInProject($project, ScopedRole::PROJECT_MEMBER),
-            'Cross-org member should retain PROJECT_MEMBER role after rejected update.',
-        );
+        $this->assertCanonicalProjectRole($crossOrgMember, $project, 'project_member');
+    }
+
+    private function assertCanonicalProjectRole(User $user, Project $project, string $roleName): void
+    {
+        $this->assertDatabaseHas('authorization_role_assignments', [
+            'authorization_role_id' => AuthorizationRole::query()->where('name', $roleName)->value('id'),
+            'user_id' => $user->id,
+            'scope_type' => 'project',
+            'scope_id' => $project->id,
+        ]);
     }
 }

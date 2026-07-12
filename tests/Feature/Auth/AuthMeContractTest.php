@@ -8,15 +8,7 @@ use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
-/**
- * AuthMeContractTest — the /api/user (auth/me) response carries a `capabilities`
- * array used for menu/button/route gating in the SPA. After Phase 9.3 the legacy
- * `permissions[]` blob is removed; `capabilities[]` and the structured `access{}`
- * map are the single source of truth (see docs/authz/deprecation-policy.md).
- * The engine-derived canonical capabilities (`module.action`, e.g. projects.view)
- * are emitted; per-record ability checks MUST still read abilities from the
- * element endpoint, not from this generic list.
- */
+/** Pins the canonical /api/user authorization contract after the final cutover. */
 class AuthMeContractTest extends TestCase
 {
     use RefreshDatabase;
@@ -37,38 +29,29 @@ class AuthMeContractTest extends TestCase
         $this->actingAs($user, 'sanctum')
             ->getJson(self::AUTH_ME_ENDPOINT)
             ->assertOk()
-            ->assertJsonStructure(['user' => ['capabilities']]);
+            ->assertJsonStructure(['user' => ['capabilities', 'access', 'role_assignments']]);
     }
 
-    public function test_auth_me_does_not_emit_legacy_permissions_array(): void
+    public function test_auth_me_does_not_emit_any_legacy_authorization_keys(): void
     {
-        // Phase 9.3 cutover: `permissions[]` is removed from the payload.
-        // Pin this for super_admin (the highest-grant user) so a future
-        // regression that re-emits the legacy blob to "help" route guards
-        // is caught before the SPA double-gates against two vocabularies.
         $user = User::factory()->create(['is_active' => true]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
-        $response = $this->actingAs($user, 'sanctum')
+        $payload = $this->actingAs($user, 'sanctum')
             ->getJson(self::AUTH_ME_ENDPOINT)
-            ->assertOk();
+            ->assertOk()
+            ->json('user');
 
-        $userPayload = $response->json('user');
-        $this->assertIsArray($userPayload);
-        $this->assertArrayNotHasKey(
-            'permissions',
-            $userPayload,
-            '/api/user payload must NOT include the legacy permissions[] key (Phase 9.3 cutover).'
-        );
+        $this->assertIsArray($payload);
+        $this->assertArrayNotHasKey('roles', $payload);
+        $this->assertArrayNotHasKey('permissions', $payload);
+        $this->assertArrayNotHasKey('scoped_roles', $payload);
     }
 
-    public function test_auth_me_emits_canonical_keys(): void
+    public function test_auth_me_emits_only_the_canonical_authorization_keys(): void
     {
-        // Single source of truth: every /api/user payload carries
-        // capabilities[], access{}, roles[], scoped_roles[], organization_id.
-        // Missing any one of these breaks the SPA — pin all of them.
         $user = User::factory()->create(['is_active' => true]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         $this->actingAs($user, 'sanctum')
             ->getJson(self::AUTH_ME_ENDPOINT)
@@ -77,23 +60,22 @@ class AuthMeContractTest extends TestCase
                 'user' => [
                     'capabilities',
                     'access',
-                    'roles',
-                    'scoped_roles',
+                    'role_assignments',
                     'organization_id',
                 ],
             ]);
     }
 
-    public function test_auth_me_includes_engine_capabilities_for_super_admin(): void
+    public function test_auth_me_includes_engine_capabilities_for_canonical_super_admin(): void
     {
         $user = User::factory()->create(['is_active' => true]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
-        $response = $this->actingAs($user, 'sanctum')
+        $capabilities = $this->actingAs($user, 'sanctum')
             ->getJson(self::AUTH_ME_ENDPOINT)
-            ->assertOk();
+            ->assertOk()
+            ->json('user.capabilities');
 
-        $capabilities = $response->json('user.capabilities');
         $this->assertIsArray($capabilities);
         $this->assertContains(Capability::PROJECTS_VIEW, $capabilities);
         $this->assertContains(Capability::TASKS_VIEW, $capabilities);

@@ -164,9 +164,9 @@ export const Profile: React.FC = () => {
               )}
 
               <div className="flex flex-wrap gap-2 justify-center mt-4">
-                {user?.roles.map((role) => (
-                  <Badge key={role} variant="accent">
-                    {t(roleLabels[role]) || role}
+                {user?.role_assignments?.map((assignment) => (
+                  <Badge key={assignment.id} variant="accent">
+                    {t(roleLabels[assignment.role]) || assignment.label || assignment.role}
                   </Badge>
                 ))}
               </div>

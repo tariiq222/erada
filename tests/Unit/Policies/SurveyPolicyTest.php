@@ -17,7 +17,7 @@ use Tests\TestCase;
  * Unit tests for SurveyPolicy (Phase 6).
  *
  * SurveyPolicy is engine-only: every gate is decided by AccessDecision::can()
- * against Capability::SURVEYS_* constants. Spatie hasPermissionTo() is NOT used.
+ * against Capability::SURVEYS_* constants through canonical assignments.
  * Record-scoped checks add a same-organization floor so a user from org A cannot
  * reach a survey that lives in org B even if their scoped roles grant the
  * underlying capability.
@@ -60,7 +60,9 @@ class SurveyPolicyTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $user->assignRole($role);
+        $role === 'super_admin'
+                ? $this->grantCanonicalSuperAdmin($user)
+                : $this->assignCanonicalRole($user, $role);
 
         return $user;
     }
@@ -142,10 +144,8 @@ class SurveyPolicyTest extends TestCase
 
     public function test_org_viewer_without_surveys_view_cannot_view_any(): void
     {
-        // NOTE: admin role has is_admin_role=true on its ScopedRoleDefinition,
-        // which short-circuits every capability to true (engine shortcut). The
-        // "without capability" floor must be exercised with viewer (a role that
-        // lacks the surveys.* permissions in scoped_role_definitions.permissions).
+        // The canonical admin role short-circuits organization capabilities.
+        // Exercise the no-capability floor with a viewer instead.
         $viewer = $this->makeUser('viewer');
 
         $this->assertFalse($this->policy->viewAny($viewer));
@@ -157,7 +157,7 @@ class SurveyPolicyTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
         $this->grantEngineCapability($user, Capability::SURVEYS_VIEW);
 
         // null-org fail-closed floor (matching the controller's abort_if).
@@ -191,7 +191,7 @@ class SurveyPolicyTest extends TestCase
             'department_id' => $deptB->id,
             'is_active' => true,
         ]);
-        $outsider->assignRole('admin');
+        $this->grantCanonicalAdmin($outsider);
         $this->grantEngineCapability($outsider, Capability::SURVEYS_VIEW);
 
         // Org B admin has SURVEYS_VIEW but the survey lives in org A → floor.
@@ -225,7 +225,7 @@ class SurveyPolicyTest extends TestCase
             'department_id' => $deptB->id,
             'is_active' => true,
         ]);
-        $outsider->assignRole('admin');
+        $this->grantCanonicalAdmin($outsider);
         $this->grantEngineCapability($outsider, Capability::SURVEYS_EDIT);
 
         $this->assertFalse($this->policy->update($outsider, $this->survey));
@@ -257,7 +257,7 @@ class SurveyPolicyTest extends TestCase
             'department_id' => $deptB->id,
             'is_active' => true,
         ]);
-        $outsider->assignRole('admin');
+        $this->grantCanonicalAdmin($outsider);
         $this->grantEngineCapability($outsider, Capability::SURVEYS_DELETE);
 
         $this->assertFalse($this->policy->delete($outsider, $this->survey));
@@ -289,7 +289,7 @@ class SurveyPolicyTest extends TestCase
             'department_id' => $deptB->id,
             'is_active' => true,
         ]);
-        $outsider->assignRole('admin');
+        $this->grantCanonicalAdmin($outsider);
         $this->grantEngineCapability($outsider, Capability::SURVEYS_REVIEW_RESPONSES);
 
         $this->assertFalse($this->policy->review($outsider, $this->survey));
@@ -303,7 +303,7 @@ class SurveyPolicyTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
         $this->grantEngineCapability($user, Capability::SURVEYS_VIEW);
 
         // Same null-org floor as viewAny: no tenancy anchor, denied.
@@ -316,7 +316,7 @@ class SurveyPolicyTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
         $this->grantEngineCapability($user, Capability::SURVEYS_EDIT);
 
         $this->assertFalse($this->policy->update($user, $this->survey));

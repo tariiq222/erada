@@ -23,15 +23,15 @@ export interface UserResponse {
 export interface CreateProjectRequest {
   name: string;
   department_id?: number | null;
-  // @deprecated The manager_id column was removed during the scoped-roles
-  // unification. Field kept for form compatibility; submitted value is
+  // @deprecated The manager_id column was removed during authorization
+  // assignment unification. Field kept for form compatibility; submitted value is
   // ignored by the server. Use `manager_user_id` instead when assigning
   // someone other than the creator.
   manager_id?: number | null;
   // Optional explicit manager override at creation time:
   //   - omitted / null / equal to creator.id ⇒ creator becomes manager.
   //   - set to another user id ⇒ server re-validates (active + same org +
-  //     in-scope + eligible) and assigns ScopedRole::PROJECT_MANAGER to
+  //     in-scope + eligible) and assigns the canonical project_manager role to
   //     that user instead. See the spec at
   //     docs/superpowers/specs/2026-06-24-assignable-project-manager-design.md
   manager_user_id?: number | null;

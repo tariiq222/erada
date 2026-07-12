@@ -31,7 +31,7 @@ class ActivityLogServiceTest extends TestCase
         $this->user = User::factory()->create([
             'department_id' => $this->department->id,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
 
         $this->service = app(ActivityLogService::class);
     }

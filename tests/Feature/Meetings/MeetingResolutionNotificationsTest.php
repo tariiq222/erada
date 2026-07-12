@@ -50,7 +50,7 @@ class MeetingResolutionNotificationsTest extends TestCase
             'organization_id' => $this->project->organization_id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
 
         $this->assigneeA = User::factory()->create([
             'department_id' => $this->dept->id,

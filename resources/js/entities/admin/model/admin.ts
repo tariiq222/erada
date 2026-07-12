@@ -51,19 +51,10 @@ export interface Organization {
 }
 
 export interface ScopeType {
-  id: number;
   key: string;
   label_ar: string;
   label_en: string;
-  icon: string | null;
-  color: string | null;
-  sort_order: number;
-  is_active: boolean;
-  model_class?: string;
-  description_ar?: string | null;
-  description_en?: string | null;
-  created_at?: string;
-  updated_at?: string;
+  target_requirement: 'none' | 'required';
 }
 
 /**

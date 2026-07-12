@@ -5,12 +5,17 @@ namespace App\Modules\Projects\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Data\AssignmentScope;
+use App\Modules\Core\Authorization\Data\AssignmentWrite;
+use App\Modules\Core\Authorization\Exceptions\AuthorizationAssignmentDenied;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
+use App\Modules\Core\Authorization\Services\AuthorizationAssignmentService;
 use App\Modules\Core\Http\Resources\UserResource;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
-use App\Modules\Projects\Exceptions\ProjectMemberAlreadyExistsException;
 use App\Modules\Projects\Http\Requests\DeleteProjectRequest;
+use App\Modules\Projects\Http\Requests\RemoveProjectMemberRequest;
 use App\Modules\Projects\Http\Requests\StoreProjectMemberRequest;
 use App\Modules\Projects\Http\Requests\StoreProjectRequest;
 use App\Modules\Projects\Http\Requests\StoreProjectRiskRequest;
@@ -25,13 +30,13 @@ use App\Modules\Projects\Http\Requests\UpdateProjectStakeholderRequest;
 use App\Modules\Projects\Http\Resources\ProjectResource;
 use App\Modules\Projects\Models\Project;
 use App\Modules\Projects\Models\ProjectSetting;
-use App\Modules\Projects\Services\Project\TeamService;
 use App\Modules\Projects\Services\ProjectActivityService;
 use App\Modules\Projects\Services\ProjectAuthorizationService;
 use App\Modules\Projects\Services\ProjectCrudService;
 use App\Modules\Projects\Services\ProjectPhaseService;
 use App\Modules\Projects\Services\ProjectQueryService;
 use App\Modules\Projects\Services\ProjectSettingsService;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -45,7 +50,7 @@ class ProjectController extends Controller
         protected ProjectCrudService $crudService,
         protected ProjectActivityService $activityService,
         protected ProjectPhaseService $phaseService,
-        protected TeamService $teamService
+        protected AuthorizationAssignmentService $assignmentService,
     ) {}
 
     /**
@@ -70,7 +75,7 @@ class ProjectController extends Controller
             $project->load([
                 'department', 'creator',
                 'milestones.deliverables', 'tasks.assignee', 'risks', 'stakeholders', 'members',
-                'scopedRoles.user', // ProjectResource::resolveManagerUser(): scopedRoles must be eager-loaded (N+1 fallback avoid)
+                'roleAssignments.user', // ProjectResource::resolveManagerUser(): assignments must be eager-loaded (N+1 fallback avoid)
             ]);
 
             return response()->json([
@@ -235,7 +240,7 @@ class ProjectController extends Controller
             $project->load([
                 'department', 'creator',
                 'tasks.assignee', 'risks', 'stakeholders', 'members',
-                'scopedRoles.user', // ProjectResource::resolveManagerUser(): scopedRoles must be eager-loaded (N+1 fallback avoid)
+                'roleAssignments.user', // ProjectResource::resolveManagerUser(): assignments must be eager-loaded (N+1 fallback avoid)
             ]);
 
             return response()->json([
@@ -465,52 +470,39 @@ class ProjectController extends Controller
             return response()->json(['message' => 'العضو والمشروع يجب أن ينتميا لنفس المؤسسة'], 403);
         }
 
-        $rawRole = $validated['role'] ?? 'member';
-        $resolvedRole = TeamService::resolveRoleConstant($rawRole);
+        $role = AuthorizationRole::query()->findOrFail($validated['role_id']);
+        $scope = new AssignmentScope('project', (int) $project->id);
 
-        // Prevent privilege escalation: minting a project manager is delete-level
-        // (an 'update'-only project manager cannot create new managers). Authorize
-        // BEFORE any write so a denied check cannot leave the escalated role
-        // persisted (H-02).
-        if ($resolvedRole === ScopedRole::PROJECT_MANAGER) {
-            $this->authorize('delete', $project);
+        if ($this->projectAssignments($member, $project)->isNotEmpty()) {
+            return response()->json(['message' => 'This user already has a project assignment'], 409);
         }
 
-        // Single source of truth for role mapping lives in TeamService::ROLE_MAPPING.
-        // TeamService::addMember throws ProjectMemberAlreadyExistsException for dupes
-        // and InvalidArgumentException for unknown roles — both caught below to
-        // preserve the controller's original 422/422 response shape.
         try {
-            DB::transaction(function () use ($project, $validated, $rawRole) {
-                $this->teamService->addMember($project, [
-                    'user_id' => $validated['user_id'],
-                    'role' => $rawRole,
-                ]);
-            });
-        } catch (ProjectMemberAlreadyExistsException) {
-            return response()->json([
-                'message' => 'هذا العضو موجود بالفعل في المشروع',
-            ], 422);
-        } catch (\InvalidArgumentException) {
-            return response()->json([
-                'message' => 'دور غير معروف: '.$rawRole,
-            ], 422);
+            $assignment = $this->assignmentService->assign(
+                $request->user(),
+                $member,
+                $role,
+                new AssignmentWrite(
+                    $scope,
+                    isset($validated['expires_at']) ? CarbonImmutable::parse($validated['expires_at']) : null,
+                ),
+            );
+        } catch (AuthorizationAssignmentDenied $exception) {
+            return response()->json(['message' => $exception->getMessage()], 403);
         }
 
-        $this->activityService->logMemberAdded($project, $member, $request->user(), $resolvedRole, $request->ip());
-
-        $project->load('members');
+        $this->activityService->logMemberAdded($project, $member, $request->user(), $role->name, $request->ip());
 
         return response()->json([
             'message' => 'تم إضافة العضو بنجاح',
-            'members' => UserResource::collection($project->members),
-        ]);
+            'data' => $this->canonicalAssignmentPayload($assignment, $role, $project),
+        ], 201);
     }
 
     /**
      * حذف عضو من المشروع
      */
-    public function removeMember(Request $request, string $id, string $userId): JsonResponse
+    public function removeMember(RemoveProjectMemberRequest $request, string $id, string $userId): JsonResponse
     {
         $project = Project::findOrFail($id);
 
@@ -524,7 +516,11 @@ class ProjectController extends Controller
         $this->authorize('update', $project);
 
         $member = User::find($userId);
-        $memberName = $member?->name ?? 'عضو محذوف';
+        if (! $member) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        $memberName = $member->name;
 
         // عزل المؤسسة (D-06): إعادة فحص الـ org-floor حتى لو العضو مضاف مسبقاً
         if (! $request->user()->isSuperAdmin()
@@ -533,14 +529,27 @@ class ProjectController extends Controller
             return response()->json(['message' => 'العضو والمشروع يجب أن ينتميا لنفس المؤسسة'], 403);
         }
 
-        $member?->revokeProjectRole($project);
-        $this->activityService->logMemberRemoved($project, $memberName, $userId, $request->user(), $request->ip());
+        $role = AuthorizationRole::query()->findOrFail($request->validated('role_id'));
+        $assignment = $this->exactManualProjectAssignment($member, $project, $role);
+        if (! $assignment) {
+            return response()->json(['message' => 'Manual project assignment not found'], 409);
+        }
 
-        $project->load('members');
+        try {
+            $this->assignmentService->revoke(
+                $request->user(),
+                $member,
+                $role,
+                new AssignmentScope('project', (int) $project->id),
+            );
+        } catch (AuthorizationAssignmentDenied $exception) {
+            return response()->json(['message' => $exception->getMessage()], 403);
+        }
+
+        $this->activityService->logMemberRemoved($project, $memberName, $userId, $request->user(), $request->ip());
 
         return response()->json([
             'message' => 'تم حذف العضو بنجاح',
-            'members' => UserResource::collection($project->members),
         ]);
     }
 
@@ -548,7 +557,7 @@ class ProjectController extends Controller
      * Update a project member's role (manager, member, viewer).
      *
      * Single source of truth for the "manage team" capability:
-     * ProjectPolicy::assignProjectRoles. Mirrors Core\ScopedRoleController
+     * ProjectPolicy::assignProjectRoles. Mirrors Core\AuthorizationRoleAssignmentController
      * (`/projects/{id}/roles/{user}` alias) so the two route families are
      * gated identically — no split-brain between `update` and `assignProjectRoles`.
      *
@@ -567,15 +576,11 @@ class ProjectController extends Controller
             }
         }
 
-        // Unify with the /roles/* route family (ScopedRoleController uses the
+        // Unify with the /roles/* route family (AuthorizationRoleAssignmentController uses the
         // same ProjectPolicy method). Super_admin still bypasses via before().
         $this->authorize('assignProjectRoles', $project);
 
         $validated = $request->validated();
-
-        if ($project->members()->where('user_id', $userId)->doesntExist()) {
-            return response()->json(['message' => 'Member not in project'], 404);
-        }
 
         $member = User::find($userId);
         if (! $member) {
@@ -588,31 +593,47 @@ class ProjectController extends Controller
             return response()->json(['message' => 'Member and project must belong to same organization'], 403);
         }
 
-        $mappedRole = match ($validated['role']) {
-            'manager' => ScopedRole::PROJECT_MANAGER,
-            'viewer' => ScopedRole::PROJECT_VIEWER,
-            default => ScopedRole::PROJECT_MEMBER,
-        };
-
-        if ($mappedRole === ScopedRole::PROJECT_MANAGER) {
-            $this->authorize('delete', $project);
+        $current = $this->manualProjectAssignment($member, $project);
+        if (! $current) {
+            return response()->json(['message' => 'Manual project assignment not found'], 404);
         }
 
-        DB::transaction(function () use ($member, $project, $mappedRole, $request) {
-            $member->revokeProjectRole($project);
-            $member->assignProjectRole($project, $mappedRole, $request->user()->id);
-        });
+        $role = AuthorizationRole::query()->findOrFail($validated['role_id']);
 
-        // Per LR-104: every scoped-role mutation invalidates the decision cache.
-        AccessDecision::flushUserCache((int) $member->id);
+        try {
+            $assignment = DB::transaction(function () use ($request, $member, $project, $current, $role, $validated) {
+                if ((int) $current->authorization_role_id !== (int) $role->id) {
+                    $oldRole = $current->role;
+                    if (! $oldRole) {
+                        abort(409, 'Current canonical role is missing');
+                    }
+                    $this->assignmentService->revoke(
+                        $request->user(),
+                        $member,
+                        $oldRole,
+                        new AssignmentScope('project', (int) $project->id),
+                    );
+                }
 
-        $this->activityService->logMemberUpdated($project, $member, $request->user(), $mappedRole, $request->ip());
+                return $this->assignmentService->assign(
+                    $request->user(),
+                    $member,
+                    $role,
+                    new AssignmentWrite(
+                        new AssignmentScope('project', (int) $project->id),
+                        isset($validated['expires_at']) ? CarbonImmutable::parse($validated['expires_at']) : null,
+                    ),
+                );
+            });
+        } catch (AuthorizationAssignmentDenied $exception) {
+            return response()->json(['message' => $exception->getMessage()], 403);
+        }
 
-        $project->load('members');
+        $this->activityService->logMemberUpdated($project, $member, $request->user(), $role->name, $request->ip());
 
         return response()->json([
             'message' => 'Member role updated successfully',
-            'members' => UserResource::collection($project->members),
+            'data' => $this->canonicalAssignmentPayload($assignment, $role, $project),
         ]);
     }
 
@@ -873,5 +894,63 @@ class ProjectController extends Controller
             'message' => 'تم تحديث الأقسام المُشرِفة بنجاح',
             'mapping' => (object) ProjectSetting::getGoverningDepartments(),
         ]);
+    }
+
+    private function projectAssignments(User $user, Project $project)
+    {
+        return AuthorizationRoleAssignment::query()
+            ->where('user_id', $user->id)
+            ->where('scope_type', 'project')
+            ->where('scope_id', $project->id)
+            ->get();
+    }
+
+    private function manualProjectAssignment(User $user, Project $project): ?AuthorizationRoleAssignment
+    {
+        $assignments = AuthorizationRoleAssignment::query()
+            ->with('role')
+            ->where('user_id', $user->id)
+            ->where('scope_type', 'project')
+            ->where('scope_id', $project->id)
+            ->where('source', 'manual')
+            ->get();
+
+        abort_if($assignments->count() > 1, 409, 'Multiple manual project assignments require reconciliation');
+
+        return $assignments->first();
+    }
+
+    private function exactManualProjectAssignment(
+        User $user,
+        Project $project,
+        AuthorizationRole $role,
+    ): ?AuthorizationRoleAssignment {
+        return AuthorizationRoleAssignment::query()
+            ->where('user_id', $user->id)
+            ->where('authorization_role_id', $role->id)
+            ->where('scope_type', 'project')
+            ->where('scope_id', $project->id)
+            ->where('source', 'manual')
+            ->first();
+    }
+
+    /** @return array<string, mixed> */
+    private function canonicalAssignmentPayload(
+        AuthorizationRoleAssignment $assignment,
+        AuthorizationRole $role,
+        Project $project,
+    ): array {
+        return [
+            'id' => (int) $assignment->id,
+            'user_id' => (int) $assignment->user_id,
+            'role_id' => (int) $assignment->authorization_role_id,
+            'role_name' => $role->name,
+            'role_display' => $role->label,
+            'project_id' => (int) $project->id,
+            'scope_type' => 'project',
+            'scope_id' => (int) $project->id,
+            'source' => $assignment->source,
+            'expires_at' => $assignment->expires_at,
+        ];
     }
 }

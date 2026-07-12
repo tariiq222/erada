@@ -24,7 +24,7 @@ class KpiValueIntegrityTest extends TestCase
     {
         $dept = Department::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
         $admin = User::factory()->create(['organization_id' => $org->id, 'department_id' => $dept->id, 'is_active' => true]);
-        $admin->assignRole('admin');
+        $this->grantCanonicalAdmin($admin);
 
         return $admin;
     }

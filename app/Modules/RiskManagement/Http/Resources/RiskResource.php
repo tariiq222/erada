@@ -4,7 +4,6 @@ namespace App\Modules\RiskManagement\Http\Resources;
 
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
-use App\Modules\Core\Models\User;
 use App\Modules\Shared\Support\ElementAbilities;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -130,55 +129,17 @@ class RiskResource extends JsonResource
             // ->resolve() directly in store/update), fall back to the active
             // request user so abilities still compute.
             //
-            // Phase CFA-05 — Cluster actors get view=true via the cluster
-            // rescue (the engine doesn't surface RISKS_VIEW as true on
-            // cross-org records, but the cross-org read was just authorized
-            // by the policy's two-path view). All write abilities are
-            // forced to false because the engine's strict-equality gate
-            // would surface them as false anyway under cluster read — the
-            // explicit override makes the contract legible to the FE.
-            'abilities' => $this->resolveAbilities($user),
+            'abilities' => ElementAbilities::resolve(
+                $user ?? request()->user(),
+                $this->resource,
+                [
+                    'view' => Capability::RISKS_VIEW,
+                    'edit' => Capability::RISKS_EDIT,
+                    'delete' => Capability::RISKS_DELETE,
+                    'reassess' => Capability::RISKS_REASSESS,
+                    'change_status' => Capability::RISKS_CHANGE_STATUS,
+                ]
+            ),
         ];
-    }
-
-    /**
-     * Phase CFA-05 — Resolve per-record abilities, with cluster-read explicit overrides.
-     *
-     * @return array<string, bool>
-     */
-    private function resolveAbilities(?User $user): array
-    {
-        $computed = ElementAbilities::resolve(
-            $user ?? request()->user(),
-            $this->resource,
-            [
-                'view' => Capability::RISKS_VIEW,
-                'edit' => Capability::RISKS_EDIT,
-                'delete' => Capability::RISKS_DELETE,
-                'reassess' => Capability::RISKS_REASSESS,
-                'change_status' => Capability::RISKS_CHANGE_STATUS,
-            ]
-        );
-
-        $isClusterRead = $user !== null
-            && ! $user->isSuperAdmin()
-            && $this->resource->exists
-            && $this->resource->organization_id !== null
-            && (int) $user->organization_id !== (int) $this->resource->organization_id
-            && AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW);
-
-        if ($isClusterRead) {
-            // Cluster rescue grants read access; all writes surface as false
-            // (engine strict-equality gate would block them in any case).
-            return [
-                'view' => true,
-                'edit' => false,
-                'delete' => false,
-                'reassess' => false,
-                'change_status' => false,
-            ];
-        }
-
-        return $computed;
     }
 }

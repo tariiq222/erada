@@ -1856,6 +1856,10 @@ vi.mock('@entities/user', () => ({
 			creator: { id: 2, name: "المدير" },
 			updater: { id: 3, name: "المشرف" },
 			roles: ["project_manager", "team_member"],
+			role_assignments: [
+				{ id: 1, role_id: 3, role: "project_manager", label: "مدير مشروع", scope_type: "project", scope_id: 1, organization_id: 1, expires_at: null, inherit_to_children: false, source: "manual" },
+				{ id: 2, role_id: 4, role: "team_member", label: "عضو فريق", scope_type: "project", scope_id: 1, organization_id: 1, expires_at: null, inherit_to_children: false, source: "manual" },
+			],
 			// Phase 9.3: legacy `permissions[]` removed from API responses; the
 			// canonical `capabilities[]` is the source of truth now.
 			capabilities: ["projects.view", "tasks.create"],
@@ -1897,6 +1901,10 @@ const getMockUser = () => ({
 	creator: { id: 2, name: "المدير" },
 	updater: { id: 3, name: "المشرف" },
 	roles: ["project_manager", "team_member"],
+	role_assignments: [
+		{ id: 1, role_id: 3, role: "project_manager", label: "مدير مشروع", scope_type: "project", scope_id: 1, organization_id: 1, expires_at: null, inherit_to_children: false, source: "manual" },
+		{ id: 2, role_id: 4, role: "team_member", label: "عضو فريق", scope_type: "project", scope_id: 1, organization_id: 1, expires_at: null, inherit_to_children: false, source: "manual" },
+	],
 	capabilities: ["projects.view", "tasks.create"],
 	created_at: "2025-01-01T10:00:00Z",
 	updated_at: "2025-01-10T15:00:00Z",
@@ -1920,18 +1928,18 @@ const getMockUser = () => ({
 	],
 });
 
-// Mock AuthContext — Phase 9.3: production code reads `useCan('users.edit')`
-// from `user.access`, so the mock must populate `access` (not `permissions[]`)
-// with the canonical dotted form to mirror the live /api/auth/me payload.
+// Mock the canonical /api/auth/me authorization contract used by useCan().
 vi.mock("@shared/contexts/AuthContext", () => ({
 	useAuth: () => ({
-		hasPermission: (perm: string) =>
-			perm === "edit_users" || perm === "delete_users",
 		user: {
 			access: {
-				users: { edit: true, delete: true },
+				"users.edit": true,
+				"users.delete": true,
 			},
+			role_assignments: [],
 		},
+		can: (capability: string) =>
+			capability === "users.edit" || capability === "users.delete",
 	}),
 }));
 

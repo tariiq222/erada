@@ -12,7 +12,7 @@ use Illuminate\Auth\Access\HandlesAuthorization;
  * PortfolioPolicy — Portfolio authorization policy.
  *
  * Engine-only: relies entirely on AccessDecision::can(). The legacy Spatie
- * flat / hasRole('pmo') logic was removed when engine=ON was finalized
+ * role-name shortcuts were removed when the canonical engine was finalized
  * (Phase E).
  *
  * Phase 9-D-D1b — Cluster tree read widening:

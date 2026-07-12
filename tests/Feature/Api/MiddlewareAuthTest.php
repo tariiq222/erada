@@ -3,6 +3,8 @@
 namespace Tests\Feature\Api;
 
 use App\Http\Middleware\SessionTimeout;
+use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -56,7 +58,7 @@ class MiddlewareAuthTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $user->assignRole($role);
+        $this->assignCanonicalRole($user, $role);
 
         return $user;
     }
@@ -130,16 +132,16 @@ class MiddlewareAuthTest extends TestCase
     public function test_user_without_permission_gets_403(): void
     {
         // viewer لا يملك create_users — نتحقق من الـ permission مباشرة
-        $this->assertFalse($this->viewer->hasPermissionTo('create_users'));
-        $this->assertFalse($this->viewer->hasPermissionTo('view_users'));
+        $this->assertFalse(AccessDecision::can($this->viewer, Capability::USERS_CREATE));
+        $this->assertFalse(AccessDecision::can($this->viewer, Capability::USERS_VIEW));
     }
 
     public function test_permission_error_response_has_required_permissions_key(): void
     {
         // نتحقق من الـ permissions مباشرة للأدوار المختلفة
-        $this->assertFalse($this->member->hasPermissionTo('delete_users'));
-        $this->assertFalse($this->viewer->hasPermissionTo('delete_users'));
-        $this->assertFalse($this->projectManager->hasPermissionTo('delete_users'));
+        $this->assertFalse(AccessDecision::can($this->member, Capability::USERS_DELETE));
+        $this->assertFalse(AccessDecision::can($this->viewer, Capability::USERS_DELETE));
+        $this->assertFalse(AccessDecision::can($this->projectManager, Capability::USERS_DELETE));
 
         // التحقق من أن الـ super_admin فقط يملك جميع الصلاحيات (عبر bypass)
         $this->assertTrue($this->superAdmin->isSuperAdmin());

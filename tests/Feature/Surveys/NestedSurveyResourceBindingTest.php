@@ -31,7 +31,7 @@ class NestedSurveyResourceBindingTest extends TestCase
             'organization_id' => $organization->id,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
 
         return $user;
     }

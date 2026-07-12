@@ -2,7 +2,6 @@
 
 namespace Tests\Unit\Models;
 
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Milestone;
@@ -38,7 +37,7 @@ class ProjectTest extends TestCase
             'progress' => 0,
         ]);
         // المدير يُمثَّل كدور سياقي (scoped role) لا كعمود manager_id
-        $this->manager->assignProjectRole($this->project, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($this->manager, 'project_manager', 'project', (int) $this->project->id);
     }
 
     /**
@@ -252,13 +251,12 @@ class ProjectTest extends TestCase
         $members = User::factory()->count(2)->create();
 
         foreach ($members as $member) {
-            $member->assignProjectRole($this->project, ScopedRole::PROJECT_MEMBER);
+            $this->assignCanonicalRole($member, 'project_member', 'project', (int) $this->project->id);
         }
 
-        $projectMembers = $this->project->members->filter(
-            fn ($u) => $u->pivot->role === ScopedRole::PROJECT_MEMBER
-        );
+        $projectMembers = $this->project->members->whereIn('id', $members->modelKeys());
         $this->assertCount(2, $projectMembers);
+        $this->assertEqualsCanonicalizing($members->modelKeys(), $projectMembers->modelKeys());
     }
 
     // ملاحظة: علاقة المشرف (supervisor) عبر عمود supervisor_id حُذفت بعد

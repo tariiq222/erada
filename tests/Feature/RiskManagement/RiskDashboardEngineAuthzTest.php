@@ -6,7 +6,6 @@ use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Role;
 use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
@@ -38,8 +37,7 @@ class RiskDashboardEngineAuthzTest extends TestCase
     {
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
-        $superRole = Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
-        $user->assignRole($superRole);
+        $this->grantCanonicalSuperAdmin($user);
 
         $response = $this->actingAs($user, 'sanctum')->getJson('/api/risk-management/dashboard');
         $response->assertStatus(200);

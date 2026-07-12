@@ -491,7 +491,7 @@ vi.mock('@entities/hr', () => ({
 vi.mock('@entities/user', () => ({
   usersApi: {
     getOne: vi.fn().mockResolvedValue({}),
-    create: vi.fn().mockResolvedValue({ id: 1 }),
+    create: vi.fn().mockResolvedValue({ user: { id: 1 } }),
     update: vi.fn().mockResolvedValue({}),
   },
 }));
@@ -499,10 +499,10 @@ vi.mock('@entities/role', () => ({
   rolesApi: {
     list: vi.fn().mockResolvedValue({
       data: [
-        { id: 1, name: 'admin', display_name: 'مدير إدارة' },
-        { id: 2, name: 'viewer', display_name: 'مشاهد' },
-        { id: 3, name: 'pmo_member', display_name: 'عضو مكتب المشاريع' },
-        { id: 4, name: 'super_admin', display_name: 'مدير النظام' },
+        { id: 1, name: 'admin', label: 'مدير إدارة', is_active: true },
+        { id: 2, name: 'viewer', label: 'مشاهد', is_active: true },
+        { id: 3, name: 'pmo_member', label: 'عضو مكتب المشاريع', is_active: true },
+        { id: 4, name: 'super_admin', label: 'مدير النظام', is_active: true },
       ],
       meta: { total: 4 },
     }),
@@ -512,8 +512,20 @@ vi.mock('@entities/role', () => ({
 // Mock AuthContext
 vi.mock('@shared/contexts/AuthContext', () => ({
   useAuth: () => ({
-    canAccess: () => true,
-    isSuperAdmin: () => true,
+    user: { id: 99 },
+    can: () => true,
+    refreshUser: vi.fn(),
+  }),
+}));
+
+vi.mock('@shared/contexts/OrganizationContext', () => ({
+  useOrganization: () => ({
+    currentOrganization: {
+      id: 1,
+      name: 'المؤسسة الافتراضية',
+      code: 'DEFAULT',
+      is_active: true,
+    },
   }),
 }));
 
@@ -750,7 +762,7 @@ describe('UserForm Roles Section', () => {
     });
   });
 
-  it('renders custom scoped role option', async () => {
+  it('renders custom authorization role option', async () => {
     render(<UserForm />);
 
     await waitFor(() => {

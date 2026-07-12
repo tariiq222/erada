@@ -2,13 +2,14 @@
 
 namespace Tests\Feature\Projects;
 
+use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
-use App\Modules\HR\Models\DepartmentCapacityRole;
 use App\Modules\Projects\Models\Project;
 use Database\Seeders\ScopedDepartmentRolesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
 /**
@@ -18,7 +19,7 @@ use Tests\TestCase;
  */
 class ProjectAbilitiesTest extends TestCase
 {
-    use RefreshDatabase;
+    use GrantsEngineCapability, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -39,14 +40,15 @@ class ProjectAbilitiesTest extends TestCase
             'parent_id' => $sector->id,
         ]);
 
-        DepartmentCapacityRole::create([
-            'department_id' => $sector->id,
-            'capacity' => 'manager',
-            'role_key' => 'dept_manager',
-        ]);
-
-        $sectorMgr = User::factory()->create(['organization_id' => $org->id]);
-        $sector->update(['manager_id' => $sectorMgr->id]);
+        $sectorMgr = User::factory()->create(['organization_id' => $org->id, 'department_id' => $sector->id]);
+        $this->grantEngineCapability(
+            $sectorMgr,
+            [Capability::PROJECTS_VIEW, Capability::PROJECTS_EDIT],
+            'department',
+            $sector->id,
+            'project_sector_manager',
+            ['inherit_to_children' => true],
+        );
 
         $project = Project::factory()->create([
             'organization_id' => $org->id,
@@ -72,10 +74,15 @@ class ProjectAbilitiesTest extends TestCase
         $child = Department::factory()->create(['organization_id' => $org->id, 'parent_id' => $sector->id]);
         $sibling = Department::factory()->create(['organization_id' => $org->id, 'parent_id' => $sector->id]);
 
-        DepartmentCapacityRole::create(['department_id' => $sibling->id, 'capacity' => 'manager', 'role_key' => 'dept_manager']);
-
-        $siblingMgr = User::factory()->create(['organization_id' => $org->id]);
-        $sibling->update(['manager_id' => $siblingMgr->id]);
+        $siblingMgr = User::factory()->create(['organization_id' => $org->id, 'department_id' => $sibling->id]);
+        $this->grantEngineCapability(
+            $siblingMgr,
+            Capability::PROJECTS_VIEW,
+            'department',
+            $sibling->id,
+            'project_sibling_manager',
+            ['inherit_to_children' => true],
+        );
 
         $project = Project::factory()->create([
             'organization_id' => $org->id,
@@ -124,7 +131,13 @@ class ProjectAbilitiesTest extends TestCase
         ]);
 
         $superAdmin = User::factory()->create(['organization_id' => $org->id]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantEngineCapability(
+            $superAdmin,
+            [],
+            'all',
+            roleKey: 'super_admin',
+            definitionFlags: ['is_admin_role' => true],
+        );
 
         $this->actingAs($superAdmin, 'sanctum')
             ->getJson("/api/projects/{$project->id}")

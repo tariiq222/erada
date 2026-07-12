@@ -2,8 +2,8 @@
 
 namespace Tests\Feature\Api\Projects;
 
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -90,7 +90,7 @@ class AssignableManagerTest extends TestCase
 
     private function withDeptRole(User $user, string $roleKey, Department $dept): User
     {
-        $user->assignScopedRole($roleKey, ScopedRole::SCOPE_DEPARTMENT, $dept->id, null, true);
+        $this->assignCanonicalRole($user, $roleKey, 'department', $dept->id);
         Cache::flush();
 
         return $user;
@@ -127,18 +127,18 @@ class AssignableManagerTest extends TestCase
      */
     private function assertProjectManagerIs(int $projectId, int $userId): void
     {
-        $this->assertDatabaseHas('model_has_scoped_roles', [
-            'scope_type' => ScopedRole::SCOPE_PROJECT,
+        $this->assertDatabaseHas('authorization_role_assignments', [
+            'scope_type' => 'project',
             'scope_id' => $projectId,
-            'role' => ScopedRole::PROJECT_MANAGER,
+            'authorization_role_id' => AuthorizationRole::query()->where('name', 'project_manager')->valueOrFail('id'),
             'user_id' => $userId,
         ]);
     }
 
-    private function assertHasNoScopedRoleOnProject(int $projectId, int $userId): void
+    private function assertHasNoCanonicalProjectRole(int $projectId, int $userId): void
     {
-        $this->assertDatabaseMissing('model_has_scoped_roles', [
-            'scope_type' => ScopedRole::SCOPE_PROJECT,
+        $this->assertDatabaseMissing('authorization_role_assignments', [
+            'scope_type' => 'project',
             'scope_id' => $projectId,
             'user_id' => $userId,
         ]);
@@ -193,7 +193,7 @@ class AssignableManagerTest extends TestCase
 
         // Target holds the manager role; creator holds NO scoped role; created_by = creator.
         $this->assertProjectManagerIs($projectId, $target->id);
-        $this->assertHasNoScopedRoleOnProject($projectId, $creator->id);
+        $this->assertHasNoCanonicalProjectRole($projectId, $creator->id);
         $this->assertDatabaseHas('projects', ['id' => $projectId, 'created_by' => $creator->id]);
 
         // Manager accessor resolves to the target, not the creator.
@@ -214,7 +214,7 @@ class AssignableManagerTest extends TestCase
         $projectId = (int) $response->json('project.id');
 
         $this->assertProjectManagerIs($projectId, $target->id);
-        $this->assertHasNoScopedRoleOnProject($projectId, $creator->id);
+        $this->assertHasNoCanonicalProjectRole($projectId, $creator->id);
         $this->assertDatabaseHas('projects', [
             'id' => $projectId,
             'type' => 'improvement',
@@ -288,7 +288,7 @@ class AssignableManagerTest extends TestCase
             'is_active' => true,
         ]);
         $foreign = $this->makeUser($otherOrgDept->id, orgId: $otherOrg->id);
-        $foreign->assignScopedRole('dept_manager', ScopedRole::SCOPE_DEPARTMENT, $otherOrgDept->id, null, true);
+        $this->assignCanonicalRole($foreign, 'dept_manager', 'department', $otherOrgDept->id);
         Cache::flush();
 
         $response = $this->actingAs($creator, 'sanctum')
@@ -376,7 +376,7 @@ class AssignableManagerTest extends TestCase
             'is_active' => true,
         ]);
         $foreign = $this->makeUser($otherOrgDept->id, orgId: $otherOrg->id);
-        $foreign->assignScopedRole('dept_manager', ScopedRole::SCOPE_DEPARTMENT, $otherOrgDept->id, null, true);
+        $this->assignCanonicalRole($foreign, 'dept_manager', 'department', $otherOrgDept->id);
         Cache::flush();
 
         $response = $this->actingAs($creator, 'sanctum')

@@ -16,7 +16,6 @@ import {
 } from '@shared/ui';
 import { useToast } from '@shared/ui/Toast';
 import { useAuth } from '@shared/contexts/AuthContext';
-import { useCan } from '@shared/api/access';
 import {
   type Project,
   type PaginatedResponse,
@@ -68,19 +67,17 @@ const ProjectsList: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const { showToast } = useToast();
-  const { hasPermission } = useAuth();
+  const { can } = useAuth();
   // Phase F4.1 — access-first for module-level actions. `useCan` reads
   // `user.access`; the `hasPermission` half is the stale-session fallback
   // kept alive until the Phase 9 cleanup freeze completes.
-  const canCreateProject =
-    useCan('projects.create') || hasPermission('projects.create');
+  const canCreateProject = can('projects.create');
   // Phase 9.3 freeze cleanup — Delete is gated on the canonical
   // `projects.delete` capability (engine-enforced). Per-record `abilities.delete`
   // is the source of truth for the row; super_admin is NOT the gate. We keep
   // the stale `hasPermission` fallback for mid-deploy sessions still carrying
   // the legacy key.
-  const canDeleteProject =
-    useCan('projects.delete') || hasPermission('projects.delete');
+  const canDeleteProject = can('projects.delete');
 
   // Open triage modal when navigated from the sidebar "create" link (?intake=1)
   useEffect(() => {

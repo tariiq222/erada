@@ -86,6 +86,17 @@ class IncidentReportResource extends JsonResource
             ]),
             'comments_count' => $this->whenCounted('comments'),
             'status_history_count' => $this->whenCounted('statusHistory'),
+            'abilities' => ElementAbilities::resolve(
+                $request?->user() ?? request()->user(),
+                $this->resource,
+                [
+                    'view' => Capability::OVR_VIEW,
+                    'edit' => Capability::OVR_EDIT,
+                    'investigate' => Capability::OVR_INVESTIGATE,
+                    'close' => Capability::OVR_CLOSE,
+                    'assign' => Capability::OVR_ASSIGN,
+                ]
+            ),
         ];
 
         if ($this->mode === self::MODE_SUMMARY) {
@@ -115,20 +126,6 @@ class IncidentReportResource extends JsonResource
             'patient_file_number' => $this->patient_file_number,
             'patient_gender' => $this->patient_gender,
             'patient_dob' => $this->patient_dob?->toDateString(),
-
-            // Per-record abilities — resolved through AccessDecision so the
-            // frontend never re-derives scope-chain logic.
-            'abilities' => ElementAbilities::resolve(
-                $request?->user() ?? request()->user(),
-                $this->resource,
-                [
-                    'view' => Capability::OVR_VIEW,
-                    'edit' => Capability::OVR_EDIT,
-                    'investigate' => Capability::OVR_INVESTIGATE,
-                    'close' => Capability::OVR_CLOSE,
-                    'assign' => Capability::OVR_ASSIGN,
-                ]
-            ),
         ]);
     }
 }

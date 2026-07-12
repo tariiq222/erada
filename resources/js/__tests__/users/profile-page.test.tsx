@@ -488,7 +488,7 @@ vi.mock('@shared/ui/Toast', () => ({
 const mockRefreshUser = vi.fn();
 vi.mock('@shared/contexts/AuthContext', () => ({
   useAuth: () => ({
-    canAccess: () => true,
+    can: () => true,
     user: {
       id: 1,
       name: 'أحمد محمد',
@@ -496,7 +496,11 @@ vi.mock('@shared/contexts/AuthContext', () => ({
       phone: '0501234567',
       job_title: 'مهندس برمجيات',
       extension: '1234',
-      roles: ['admin', 'project_manager'],
+      role_assignments: [
+        { id: 1, role_id: 2, role: 'admin', label: 'مدير إدارة', scope_type: 'organization', scope_id: 1, organization_id: 1, expires_at: null, inherit_to_children: false, source: 'manual' },
+        { id: 2, role_id: 3, role: 'project_manager', label: 'مدير مشروع', scope_type: 'project', scope_id: 10, organization_id: 1, expires_at: null, inherit_to_children: false, source: 'manual' },
+      ],
+      access: {},
       department: { id: 1, name: 'تقنية المعلومات' },
     },
     isAuthenticated: true,

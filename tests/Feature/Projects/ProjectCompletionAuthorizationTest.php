@@ -3,7 +3,6 @@
 namespace Tests\Feature\Projects;
 
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -67,7 +66,7 @@ class ProjectCompletionAuthorizationTest extends TestCase
     {
         $project = $this->makeProject();
         $manager = $this->makeUser();
-        $manager->assignProjectRole($project, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($manager, 'project_manager', 'project', $project->id);
 
         $this->actingAs($manager, 'sanctum')
             ->putJson("/api/projects/{$project->id}", $this->completePayload())
@@ -81,7 +80,7 @@ class ProjectCompletionAuthorizationTest extends TestCase
     {
         $project = $this->makeProject();
         $member = $this->makeUser();
-        $member->assignProjectRole($project, ScopedRole::PROJECT_MEMBER);
+        $this->assignCanonicalRole($member, 'project_member', 'project', $project->id);
 
         $this->actingAs($member, 'sanctum')
             ->putJson("/api/projects/{$project->id}", $this->completePayload())
@@ -94,7 +93,7 @@ class ProjectCompletionAuthorizationTest extends TestCase
     {
         $project = $this->makeProject();
         $viewer = $this->makeUser();
-        $viewer->assignProjectRole($project, ScopedRole::PROJECT_VIEWER);
+        $this->assignCanonicalRole($viewer, 'project_viewer', 'project', $project->id);
 
         $this->actingAs($viewer, 'sanctum')
             ->putJson("/api/projects/{$project->id}", $this->completePayload())

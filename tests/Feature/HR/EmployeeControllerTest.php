@@ -55,7 +55,7 @@ class EmployeeControllerTest extends TestCase
         //
         // Single combined role covers both HR reads and writes — assigning the
         // capabilities as separate calls would silently revoke HR_VIEW because
-        // HasScopedRoles::assignScopedRole() deletes any prior role on the same
+        // Canonical assignment synchronization preserves the intended role set on the same
         // (scope_type, scope_id) before inserting.
         $this->grantEngineCapability(
             $this->hrManager,

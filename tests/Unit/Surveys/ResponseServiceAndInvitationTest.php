@@ -2,6 +2,8 @@
 
 namespace Tests\Unit\Surveys;
 
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
@@ -98,7 +100,16 @@ class ResponseServiceAndInvitationTest extends TestCase
             'department_id' => $department->id,
             'email' => 'audience@example.test',
         ]);
-        $user->assignRole('member');
+        $role = AuthorizationRole::query()->where('name', 'member')->firstOrFail();
+        AuthorizationRoleAssignment::query()->create([
+            'authorization_role_id' => $role->id,
+            'user_id' => $user->id,
+            'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+            'scope_id' => $this->organization->id,
+            'organization_id' => $this->organization->id,
+            'source' => 'manual',
+            'granted_by' => $this->creator->id,
+        ]);
         $survey = $this->publishedSurvey([
             'privacy_mode' => SurveyPrivacyMode::Anonymous,
             'allow_multiple_responses' => false,

@@ -16,7 +16,7 @@ class UpdateGovernanceRuleRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Route middleware role:super_admin is the gate; nothing extra here.
+        // The enclosing authorization boundary owns this gate.
         return true;
     }
 

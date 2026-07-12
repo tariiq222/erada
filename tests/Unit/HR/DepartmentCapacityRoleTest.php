@@ -2,18 +2,18 @@
 
 namespace Tests\Unit\HR;
 
-use App\Modules\Core\Models\ScopedRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\HR\Models\DepartmentCapacityRole;
 use Database\Seeders\ScopedDepartmentRolesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
- * Covers the source column scopes on ScopedRole, the DepartmentCapacityRole
- * policy model, and the department/cross-cutting role-definition seeding.
+ * Covers canonical assignment provenance, the DepartmentCapacityRole policy
+ * model, and canonical department/cross-cutting role seeding.
  */
 class DepartmentCapacityRoleTest extends TestCase
 {
@@ -23,19 +23,21 @@ class DepartmentCapacityRoleTest extends TestCase
     {
         $user = User::factory()->create();
 
-        ScopedRole::create([
-            'user_id' => $user->id, 'role' => 'dept_member',
+        $autoRole = AuthorizationRole::query()->create(['name' => 'capacity_auto', 'label' => 'Auto']);
+        $manualRole = AuthorizationRole::query()->create(['name' => 'capacity_manual', 'label' => 'Manual']);
+        AuthorizationRoleAssignment::create([
+            'user_id' => $user->id, 'authorization_role_id' => $autoRole->id,
             'scope_type' => 'department', 'scope_id' => 1,
             'inherit_to_children' => true, 'source' => 'auto',
         ]);
-        ScopedRole::create([
-            'user_id' => $user->id, 'role' => 'dept_manager',
+        AuthorizationRoleAssignment::create([
+            'user_id' => $user->id, 'authorization_role_id' => $manualRole->id,
             'scope_type' => 'department', 'scope_id' => 2,
             'inherit_to_children' => true, 'source' => 'manual',
         ]);
 
-        $this->assertSame(1, ScopedRole::auto()->where('user_id', $user->id)->count());
-        $this->assertSame(1, ScopedRole::manual()->where('user_id', $user->id)->count());
+        $this->assertSame(1, AuthorizationRoleAssignment::query()->where('source', 'auto')->where('user_id', $user->id)->count());
+        $this->assertSame(1, AuthorizationRoleAssignment::query()->where('source', 'manual')->where('user_id', $user->id)->count());
     }
 
     public function test_capacity_role_belongs_to_department_and_persists(): void
@@ -56,17 +58,15 @@ class DepartmentCapacityRoleTest extends TestCase
         ]);
     }
 
-    public function test_department_role_definitions_are_seeded(): void
+    public function test_canonical_department_roles_are_seeded(): void
     {
         $this->seed(ScopedDepartmentRolesSeeder::class);
 
-        $deptScopeId = DB::table('scope_types')->where('key', 'department')->value('id');
-
-        $this->assertDatabaseHas('scoped_role_definitions', [
-            'scope_type_id' => $deptScopeId, 'role_key' => 'dept_manager',
+        $this->assertDatabaseHas('authorization_roles', [
+            'scope_type' => 'department', 'name' => 'dept_manager', 'is_active' => true,
         ]);
-        $this->assertDatabaseHas('scoped_role_definitions', [
-            'scope_type_id' => $deptScopeId, 'role_key' => 'dept_member',
+        $this->assertDatabaseHas('authorization_roles', [
+            'scope_type' => 'department', 'name' => 'dept_member', 'is_active' => true,
         ]);
     }
 }

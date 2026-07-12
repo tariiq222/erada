@@ -24,14 +24,14 @@ class MeetingSettingsTest extends TestCase
         $dept = Department::factory()->create();
 
         $this->manager = User::factory()->create(['department_id' => $dept->id, 'is_active' => true]);
-        $this->manager->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->manager);
 
         $this->viewer = User::factory()->create([
             'department_id' => $dept->id,
             'is_active' => true,
             'organization_id' => $this->manager->organization_id,
         ]);
-        $this->viewer->assignRole('viewer');
+        $this->assignCanonicalRole($this->viewer, 'viewer');
     }
 
     public function test_show_creates_defaults_on_first_read(): void

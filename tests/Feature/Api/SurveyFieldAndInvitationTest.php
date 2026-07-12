@@ -34,7 +34,7 @@ class SurveyFieldAndInvitationTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
 
         // إنشاء استبيان في حالة draft
         $this->survey = Survey::factory()->create([

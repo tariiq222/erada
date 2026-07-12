@@ -31,14 +31,14 @@ class AuthControllerExtendedTest extends TestCase
             'is_active' => true,
             'password' => Hash::make('Password123!'),
         ]);
-        $this->admin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->admin);
 
         $this->regularUser = User::factory()->create([
             'department_id' => $this->department->id,
             'is_active' => true,
             'password' => Hash::make('Password123!'),
         ]);
-        $this->regularUser->assignRole('member');
+        $this->assignCanonicalRole($this->regularUser, 'member');
     }
 
     // ========== updateLocale ==========
@@ -101,7 +101,7 @@ class AuthControllerExtendedTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $otherUser->assignRole('member');
+        $this->assignCanonicalRole($otherUser, 'member');
 
         $response = $this->actingAs($this->regularUser, 'sanctum')
             ->getJson("/api/users/{$otherUser->id}/security");
@@ -132,7 +132,7 @@ class AuthControllerExtendedTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $lockedUser->assignRole('member');
+        $this->assignCanonicalRole($lockedUser, 'member');
 
         $response = $this->actingAs($this->regularUser, 'sanctum')
             ->postJson("/api/users/{$lockedUser->id}/unlock");

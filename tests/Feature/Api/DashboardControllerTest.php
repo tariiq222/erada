@@ -3,7 +3,6 @@
 namespace Tests\Feature\Api;
 
 use App\Modules\Core\Authorization\Capability;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -48,7 +47,7 @@ class DashboardControllerTest extends TestCase
             'department_id' => $this->department1->id,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         Project::factory()->count(3)->create([
             'department_id' => $this->department1->id,
@@ -77,8 +76,7 @@ class DashboardControllerTest extends TestCase
             'department_id' => $this->department1->id,
             'is_active' => true,
         ]);
-        // Engine cutover: do NOT assignRole('admin') — its org-scoped definition
-        // has is_admin_role=true and grants projects.view org-wide. We want to
+        // Avoid the canonical admin role because it grants projects.view org-wide. We want to
         // exercise the per-department scope branch of UserProjectScope, so the
         // user has only the dashboard engine grant at org scope plus
         // projects.view at department scope.
@@ -118,7 +116,7 @@ class DashboardControllerTest extends TestCase
             'department_id' => $this->department1->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         Project::factory()->count(7)->create([
             'department_id' => $this->department1->id,
@@ -141,7 +139,7 @@ class DashboardControllerTest extends TestCase
             'department_id' => $this->department1->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         $project = Project::factory()->create([
             'department_id' => $this->department1->id,
@@ -184,7 +182,7 @@ class DashboardControllerTest extends TestCase
             'department_id' => $this->department1->id,
             'is_active' => true,
         ]);
-        $user->assignRole('member');
+        $this->assignCanonicalRole($user, 'member');
 
         $project = Project::factory()->create([
             'department_id' => $this->department1->id,
@@ -223,7 +221,7 @@ class DashboardControllerTest extends TestCase
             'department_id' => $this->department1->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         Project::factory()->count(2)->create([
             'department_id' => $this->department1->id,
@@ -257,7 +255,7 @@ class DashboardControllerTest extends TestCase
             'department_id' => $this->department1->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         Project::factory()->count(3)->create([
             'department_id' => $this->department1->id,
@@ -291,12 +289,8 @@ class DashboardControllerTest extends TestCase
             'department_id' => $this->department1->id,
             'is_active' => true,
         ]);
-        // Engine cutover: any flat Spatie role grants either org-wide view_all
-        // (legacy `member`) or org-wide projects.view via permissions (viewer).
-        // Both bypass the per-project filter we want to exercise. We give the
-        // user the dashboard route permission directly (the route uses Spatie
-        // `view_dashboard`) and rely solely on the per-project scoped role for
-        // visibility — exactly what production grants on a plain member would do.
+        // Grant only dashboard access and rely on the canonical project assignment
+        // for visibility so the per-project filter is exercised.
         $this->grantEngineCapability(
             $user,
             Capability::DASHBOARD_VIEW,
@@ -306,7 +300,7 @@ class DashboardControllerTest extends TestCase
         $ownProject = Project::factory()->create([
             'department_id' => $this->department1->id,
         ]);
-        $user->assignProjectRole($ownProject, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($user, 'project_manager', 'project', $ownProject->id);
 
         // مشاريع أخرى
         Project::factory()->count(3)->create([

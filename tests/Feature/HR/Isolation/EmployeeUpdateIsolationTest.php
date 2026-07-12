@@ -117,7 +117,7 @@ class EmployeeUpdateIsolationTest extends TestCase
             'organization_id' => $orgA->id,
             'department_id' => $deptA->id,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $orgBEmployee = User::factory()->create([
             'organization_id' => $orgB->id,

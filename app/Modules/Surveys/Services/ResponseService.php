@@ -2,6 +2,7 @@
 
 namespace App\Modules\Surveys\Services;
 
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Surveys\Enums\ResponseStatus;
 use App\Modules\Surveys\Models\Survey;
@@ -310,14 +311,17 @@ class ResponseService
 
         // التحقق من الأدوار
         if (! empty($audience['role_names'])) {
-            $hasRole = false;
-            foreach ($audience['role_names'] as $role) {
-                if ($user->hasRole($role)) {
-                    $hasRole = true;
-                    break;
-                }
-            }
-            if (! $hasRole) {
+            $hasCanonicalRole = AuthorizationRoleAssignment::query()
+                ->where('user_id', $user->id)
+                ->where(fn ($query) => $query
+                    ->whereNull('expires_at')
+                    ->orWhere('expires_at', '>', now()))
+                ->whereHas('role', fn ($query) => $query
+                    ->where('is_active', true)
+                    ->whereIn('name', $audience['role_names']))
+                ->exists();
+
+            if (! $hasCanonicalRole) {
                 return false;
             }
         }

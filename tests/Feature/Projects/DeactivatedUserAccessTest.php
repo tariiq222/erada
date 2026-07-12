@@ -49,7 +49,7 @@ class DeactivatedUserAccessTest extends TestCase
             'organization_id' => $this->organization->id,
             'is_active' => false,
         ]);
-        $this->deactivatedUser->assignRole('admin');
+        $this->grantCanonicalAdmin($this->deactivatedUser);
 
         $this->project = Project::factory()->create([
             'department_id' => $this->department->id,
@@ -166,7 +166,7 @@ class DeactivatedUserAccessTest extends TestCase
             'organization_id' => $this->organization->id,
             'is_active' => true,
         ]);
-        $activeUser->assignRole('admin');
+        $this->grantCanonicalAdmin($activeUser);
 
         $response = $this->actingAs($activeUser, 'sanctum')
             ->getJson('/api/projects');

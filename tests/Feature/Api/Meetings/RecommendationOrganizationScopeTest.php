@@ -33,9 +33,9 @@ class RecommendationOrganizationScopeTest extends TestCase
         $this->orgB = Organization::factory()->create();
 
         $this->userA = User::factory()->create(['department_id' => $deptA->id, 'organization_id' => $this->orgA->id, 'is_active' => true]);
-        $this->userA->assignRole('admin');
+        $this->assignCanonicalRole($this->userA, 'admin');
         $this->userB = User::factory()->create(['department_id' => $deptB->id, 'organization_id' => $this->orgB->id, 'is_active' => true]);
-        $this->userB->assignRole('admin');
+        $this->assignCanonicalRole($this->userB, 'admin');
     }
 
     public function test_user_cannot_view_recommendation_in_other_organization(): void

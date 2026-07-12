@@ -56,7 +56,6 @@ class ActivityLogFormatter
         'App\\Modules\\Shared\\Models\\Comment' => 'تعليق',
         'App\\Modules\\Shared\\Models\\Attachment' => 'مرفق',
         'App\\Modules\\Tasks\\Models\\Task' => 'مهمة',
-        'Spatie\\Permission\\Models\\Role' => 'دور نظام',
     ];
 
     /**

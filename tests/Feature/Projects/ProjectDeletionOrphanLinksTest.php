@@ -34,9 +34,10 @@ class ProjectDeletionOrphanLinksTest extends TestCase
         $this->department = Department::factory()->create();
         $this->user = User::factory()->create([
             'department_id' => $this->department->id,
+            'organization_id' => $this->department->organization_id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
 
         $this->service = app(ProjectCrudService::class);
     }

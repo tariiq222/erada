@@ -423,7 +423,7 @@ class OrganizationHierarchyTest extends TestCase
             'department_id' => $deptCluster->id,
             'is_active' => true,
         ]);
-        $userCluster->assignRole('admin');
+        $this->assignCanonicalRole($userCluster, 'admin');
 
         $userHospital = User::factory()->create([
             'organization_id' => $orgHospital->id,
@@ -468,7 +468,7 @@ class OrganizationHierarchyTest extends TestCase
             'department_id' => $deptHospital->id,
             'is_active' => true,
         ]);
-        $userHospital->assignRole('admin');
+        $this->assignCanonicalRole($userHospital, 'admin');
 
         $response = $this->actingAs($userHospital, 'sanctum')
             ->getJson('/api/users')
@@ -500,7 +500,7 @@ class OrganizationHierarchyTest extends TestCase
             'department_id' => $deptCluster->id,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $response = $this->actingAs($superAdmin, 'sanctum')
             ->getJson('/api/organizations')
@@ -529,7 +529,7 @@ class OrganizationHierarchyTest extends TestCase
             'department_id' => $deptCluster->id,
             'is_active' => true,
         ]);
-        $userCluster->assignRole('admin');
+        $this->assignCanonicalRole($userCluster, 'admin');
 
         $userHospital = User::factory()->create([
             'organization_id' => $orgHospital->id,

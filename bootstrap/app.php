@@ -12,8 +12,6 @@ use App\Http\Middleware\SanitizeInput;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SessionTimeout;
 use App\Http\Middleware\SetLocaleMiddleware;
-use App\Modules\Core\Http\Middleware\CheckPermission;
-use App\Modules\Core\Http\Middleware\CheckRole;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Auth\Middleware\Authenticate;
@@ -310,14 +308,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'throttle.api' => ThrottleRequests::class.':api',
         ]);
 
-        // Permission & Role Middleware
         $middleware->alias([
-            'permission' => CheckPermission::class,
-            'role' => CheckRole::class,
             'idempotency' => IdempotencyKey::class,
             'sanitize' => SanitizeInput::class,
-            // engine_capability: replaces 'permission:X' for routes whose authz has
-            // been migrated to Capability constants. Delegates to AccessDecision::can().
+            // Route capability guards delegate canonical Capability constants to
+            // AccessDecision::can().
             'engine_capability' => EnsureEngineCapability::class,
         ]);
     })

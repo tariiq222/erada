@@ -70,7 +70,9 @@ class RecommendationPolicyTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $user->assignRole($role);
+        $role === 'super_admin'
+                ? $this->grantCanonicalSuperAdmin($user)
+                : $this->assignCanonicalRole($user, $role);
 
         return $user;
     }
@@ -206,7 +208,7 @@ class RecommendationPolicyTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
 
         $this->assertFalse($this->policy->view($user, $this->recommendation));
     }
@@ -242,7 +244,7 @@ class RecommendationPolicyTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
 
         $this->assertFalse($this->policy->viewAny($user));
     }
@@ -253,7 +255,7 @@ class RecommendationPolicyTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
 
         $this->assertFalse($this->policy->create($user));
     }
@@ -269,7 +271,7 @@ class RecommendationPolicyTest extends TestCase
             'department_id' => $deptB->id,
             'is_active' => true,
         ]);
-        $outsider->assignRole('admin');
+        $this->grantCanonicalAdmin($outsider);
         $this->grantEngineCapability($outsider, Capability::RECOMMENDATIONS_VIEW, 'organization', $orgB->id);
 
         $this->assertFalse(
@@ -287,7 +289,7 @@ class RecommendationPolicyTest extends TestCase
             'department_id' => $deptB->id,
             'is_active' => true,
         ]);
-        $outsider->assignRole('admin');
+        $this->grantCanonicalAdmin($outsider);
         $this->grantEngineCapability($outsider, Capability::RECOMMENDATIONS_EDIT, 'organization', $orgB->id);
 
         $this->assertFalse(
@@ -305,7 +307,7 @@ class RecommendationPolicyTest extends TestCase
             'department_id' => $deptB->id,
             'is_active' => true,
         ]);
-        $outsider->assignRole('admin');
+        $this->grantCanonicalAdmin($outsider);
         $this->grantEngineCapability($outsider, Capability::RECOMMENDATIONS_DELETE, 'organization', $orgB->id);
 
         $this->assertFalse(
@@ -323,7 +325,7 @@ class RecommendationPolicyTest extends TestCase
             'department_id' => $deptB->id,
             'is_active' => true,
         ]);
-        $outsider->assignRole('admin');
+        $this->grantCanonicalAdmin($outsider);
         $this->grantEngineCapability($outsider, Capability::RECOMMENDATIONS_APPROVE, 'organization', $orgB->id);
 
         $this->assertFalse(
@@ -341,7 +343,7 @@ class RecommendationPolicyTest extends TestCase
             'department_id' => $deptB->id,
             'is_active' => true,
         ]);
-        $outsider->assignRole('admin');
+        $this->grantCanonicalAdmin($outsider);
         $this->grantEngineCapability($outsider, Capability::RECOMMENDATIONS_REJECT, 'organization', $orgB->id);
 
         $this->assertFalse(
@@ -359,7 +361,7 @@ class RecommendationPolicyTest extends TestCase
             'department_id' => $deptB->id,
             'is_active' => true,
         ]);
-        $outsider->assignRole('admin');
+        $this->grantCanonicalAdmin($outsider);
         $this->grantEngineCapability($outsider, Capability::RECOMMENDATIONS_DEFER, 'organization', $orgB->id);
 
         $this->assertFalse(

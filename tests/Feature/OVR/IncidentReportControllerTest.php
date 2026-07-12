@@ -41,7 +41,7 @@ class IncidentReportControllerTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
 
         $this->incidentType = IncidentType::create([
             'name' => 'Medical Error',
@@ -522,7 +522,7 @@ class IncidentReportControllerTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $viewer->assignRole('viewer');
+        $this->grantCanonicalViewer($viewer);
 
         $response = $this->actingAs($viewer, 'sanctum')
             ->postJson('/api/ovr/incidents', $this->incidentData());
@@ -549,7 +549,7 @@ class IncidentReportControllerTest extends TestCase
         // The viewer role carries the org-scoped reporting baseline (ovr.create),
         // so creation is authorized. The reporter snapshot fields below are still
         // ignored and taken from the authenticated user (anti-spoofing).
-        $reporter->assignRole('viewer');
+        $this->grantCanonicalViewer($reporter);
 
         $response = $this->actingAs($reporter, 'sanctum')
             ->postJson('/api/ovr/incidents', $this->incidentData([

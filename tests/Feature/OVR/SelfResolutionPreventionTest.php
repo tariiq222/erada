@@ -61,7 +61,7 @@ class SelfResolutionPreventionTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
 
         // resolver acts as both reporter AND assignee in the self-resolving scenarios.
         // Grant OVR_CHANGE_STATUS so the policy layer lets the request through; the

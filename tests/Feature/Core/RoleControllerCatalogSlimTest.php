@@ -16,7 +16,7 @@ class RoleControllerCatalogSlimTest extends TestCase
     public function test_dead_ladder_string_not_in_catalog(string $legacy): void
     {
         $admin = User::factory()->create();
-        $admin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($admin);
         $response = $this->actingAs($admin, 'sanctum')->getJson('/api/roles/permissions');
         $response->assertStatus(200);
         $payload = $response->json();

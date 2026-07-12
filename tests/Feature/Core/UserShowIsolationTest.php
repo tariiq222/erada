@@ -44,7 +44,7 @@ class UserShowIsolationTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
 
         return $user;
     }
@@ -57,7 +57,7 @@ class UserShowIsolationTest extends TestCase
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $target->assignRole('viewer');
+        $this->grantCanonicalViewer($target);
 
         $this->actingAs($admin, 'sanctum')
             ->getJson("/api/users/{$target->id}")
@@ -73,7 +73,7 @@ class UserShowIsolationTest extends TestCase
             'department_id' => $this->deptB->id,
             'is_active' => true,
         ]);
-        $target->assignRole('viewer');
+        $this->grantCanonicalViewer($target);
 
         $this->actingAs($admin, 'sanctum')
             ->getJson("/api/users/{$target->id}")
@@ -101,14 +101,14 @@ class UserShowIsolationTest extends TestCase
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $target = User::factory()->create([
             'organization_id' => $this->orgB->id,
             'department_id' => $this->deptB->id,
             'is_active' => true,
         ]);
-        $target->assignRole('viewer');
+        $this->grantCanonicalViewer($target);
 
         $this->actingAs($superAdmin, 'sanctum')
             ->getJson("/api/users/{$target->id}")

@@ -3,7 +3,7 @@
  * (ProjectResource, TaskResource, RiskResource, IncidentReportResource,
  * DepartmentController::show). Computed server-side by ElementAbilities
  * via AccessDecision::can. The frontend MUST use this for "can I edit
- * *this* record" rather than inferring from auth/me.permissions.
+ * *this* record" rather than inferring from the current-user access map.
  */
 export interface Abilities {
   view?: boolean;
@@ -29,39 +29,29 @@ export interface User {
   job_title: string | null;
   is_active: boolean;
   preferred_locale?: string | null;
-  roles: string[];
-  /**
-   * Canonical dotted capabilities (`projects.view`, `meetings.record_decisions`, ...).
-   * The single vocabulary maintained by the AuthZ engine. Use this for read-side
-   * displays (e.g. a "Permissions" tab) and as the source of truth going forward.
-   * `permissions[]` below is the legacy flat-key fallback that the access bridge
-   * consults only while `user.access` is stale; it is being phased out per
-   * docs/authz/deprecation-policy.md.
-   */
+  /** Role names on administrative user-list payloads; never use for authorization. */
+  roles?: string[];
   capabilities?: string[];
-  /**
-   * Legacy flat permission names (`view_projects`, `edit_users`, ...).
-   * Retained as a compatibility layer — DO NOT add new reads here; use
-   * `capabilities[]` for display or `useCan('module.action')` for gating.
-   */
-  permissions?: string[];
-  /**
-   * Structured access map derived from canonical dotted capabilities
-   * (e.g. `tasks.assign`). Read `user.access[module][action] === true`
-   * to decide if the current user has a module-level capability. For
-   * per-record decisions use the resource's `abilities` payload, not
-   * this map. See `useCan` / `useAccess` in `@shared/api/access`.
-   */
+  role_assignments?: Array<{
+    id: number;
+    role_id: number;
+    role: string;
+    label: string;
+    scope_type: string;
+    scope_id: number | null;
+    organization_id: number | null;
+    expires_at: string | null;
+    inherit_to_children: boolean;
+    source: string;
+  }>;
   access?: AccessMap;
   department?: Department;
 }
 
 /**
- * Map of canonical dotted capabilities, projected to a nested object
- * with each leaf value set to `true`. Shape:
- *   { projects: { view: true, create: true }, tasks: { assign: true } }
+ * Flat map of canonical dotted capabilities returned by `/api/user`.
  */
-export type AccessMap = Record<string, Record<string, true>>;
+export type AccessMap = Record<string, boolean>;
 
 // إعدادات النظام (واحد فقط في النظام)
 export interface SystemSettings {
@@ -134,7 +124,7 @@ export interface Project {
   technical_resources: string | null;
   financial_resources: string | null;
   // Per-record abilities; see Abilities. Treat as authoritative for record-level
-  // gating. Use hasPermission(user.permissions) for menu/button gating instead.
+  // gating. Use the current user's canonical `can(capability)` for module gates.
   abilities?: Abilities;
   // العلاقات
   department?: Department;

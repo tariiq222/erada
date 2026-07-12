@@ -2,11 +2,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { cn } from "@shared/lib/utils";
-import { useAuth, AccessConfig } from "@shared/contexts/AuthContext";
+import { useAuth } from "@shared/contexts/AuthContext";
+import { meetsAccessRequirement, type AccessRequirement } from '@shared/api/access';
 import { useSystemSettings } from "@shared/contexts/SystemSettingsContext";
 import {IconAlertOctagon, IconAlertTriangle, IconChartBar, IconBriefcase, IconBuilding, IconSquareCheck, IconChevronLeft, IconClipboardList, IconLayoutKanban, IconHistory, IconLayoutDashboard, IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand, IconLifebuoy, IconNetwork, IconPlus, IconRocket, IconSettings, IconShield, IconShieldCheck, IconTag, IconTarget, IconUsers, type LucideIcon} from '@tabler/icons-react';
 import { IconClipboardCheck } from '@shared/ui/icons';
-import { adminUrl } from '@shared/config/urls';
 
 interface SidebarProps {
 	isOpen: boolean;
@@ -17,8 +17,7 @@ interface NavItem {
 	label: string;
 	href: string;
 	icon: LucideIcon;
-	external?: boolean;
-	access?: AccessConfig;
+	access?: AccessRequirement;
 	children?: NavItem[];
 }
 
@@ -40,6 +39,7 @@ interface NavSection {
 }
 
 const deriveSectionId = (pathname: string): SectionId => {
+	if (pathname.startsWith("/admin")) return "admin";
 	if (pathname.startsWith("/ovr")) return "ovr";
 	if (pathname.startsWith("/risk-management")) return "risks";
 	if (pathname.startsWith("/strategy")) return "strategy";
@@ -58,7 +58,7 @@ const shouldUseExactMatch = (href: string) =>
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 	const { t } = useTranslation();
-	const { canAccess, isSuperAdmin = () => false } = useAuth();
+	const { can } = useAuth();
 	const { settings: systemSettings } = useSystemSettings();
 	const location = useLocation();
 	const [railOpen, setRailOpen] = useState(false);
@@ -103,25 +103,25 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 						label: t("nav.portfolios"),
 						href: "/strategy/portfolios",
 						icon: IconBriefcase,
-						access: { permission: "strategy.view" },
+						access: { capability: "strategy.view" },
 						children: [
 							{
 								label: t("strategy.create_new_portfolio"),
 								href: "/strategy/portfolios/new",
 								icon: IconPlus,
-								access: { permission: "strategy.create" },
+								access: { capability: "strategy.create" },
 							},
 							{
 								label: t("strategy.portfolios.allPortfolios"),
 								href: "/strategy/portfolios",
 								icon: IconBriefcase,
-								access: { permission: "strategy.view" },
+								access: { capability: "strategy.view" },
 							},
 							{
 								label: t("nav.statistics"),
 								href: "/strategy/portfolios/statistics",
 								icon: IconChartBar,
-								access: { permission: "strategy.view" },
+								access: { capability: "strategy.view" },
 							},
 						],
 					},
@@ -129,25 +129,25 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 						label: t("nav.programs"),
 						href: "/strategy/programs",
 						icon: IconRocket,
-						access: { permission: "strategy.view" },
+						access: { capability: "strategy.view" },
 						children: [
 							{
 								label: t("strategy.create_new_program"),
 								href: "/strategy/programs/new",
 								icon: IconPlus,
-								access: { permission: "strategy.create" },
+								access: { capability: "strategy.create" },
 							},
 							{
 								label: t("strategy.programs.programs"),
 								href: "/strategy/programs",
 								icon: IconRocket,
-								access: { permission: "strategy.view" },
+								access: { capability: "strategy.view" },
 							},
 							{
 								label: t("nav.statistics"),
 								href: "/strategy/programs/statistics",
 								icon: IconChartBar,
-								access: { permission: "strategy.view" },
+								access: { capability: "strategy.view" },
 							},
 						],
 					},
@@ -155,7 +155,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 						label: t("meetings.resolution.list.header"),
 						href: "/strategy/meetings/resolutions",
 						icon: IconClipboardCheck,
-						access: { permission: "meeting_resolutions.view" },
+						access: { capability: "meeting_resolutions.view" },
 					},
 				],
 			},
@@ -169,7 +169,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 						href: "/projects",
 						icon: IconBriefcase,
 						access: {
-							permissions: ["projects.view", "view_own_projects"],
+							anyCapabilities: ["projects.view", "projects.view"],
 						},
 					},
 				],
@@ -184,7 +184,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 						href: "/tasks",
 						icon: IconSquareCheck,
 						access: {
-							permissions: ["tasks.view", "view_own_tasks"],
+							anyCapabilities: ["tasks.view", "tasks.view"],
 						},
 					},
 				],
@@ -199,9 +199,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 						href: "/ovr/incidents",
 						icon: IconAlertTriangle,
 						access: {
-							permissions: [
-								"ovr.view_own",
-								"ovr.view_department",
+							anyCapabilities: [
+								"ovr.view_all",
+								"ovr.view_all",
 								"ovr.view_all",
 							],
 						},
@@ -210,17 +210,17 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 						label: t("ovr.report_incident"),
 						href: "/ovr/incidents/new",
 						icon: IconPlus,
-						access: { permission: "ovr.create" },
+						access: { capability: "ovr.create" },
 					},
 					{
 						label: t("nav.statistics"),
 						href: "/ovr/statistics",
 						icon: IconChartBar,
 						access: {
-							allPermissions: ["ovr.view_statistics"],
-							permissions: [
-								"ovr.view_own",
-								"ovr.view_department",
+							allCapabilities: ["ovr.view_statistics"],
+							anyCapabilities: [
+								"ovr.view_all",
+								"ovr.view_all",
 								"ovr.view_all",
 							],
 						},
@@ -229,7 +229,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 						label: t("nav.ovr_settings"),
 						href: "/ovr/settings",
 						icon: IconSettings,
-						access: { permission: "ovr.manage_types" },
+						access: { capability: "ovr.manage_types" },
 					},
 				],
 			},
@@ -242,13 +242,13 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 						label: t("nav.risks_list"),
 						href: "/risk-management/risks",
 						icon: IconAlertOctagon,
-						access: { permission: "risks.view" },
+						access: { capability: "risks.view" },
 					},
 					{
 						label: t("nav.statistics"),
 						href: "/risk-management/statistics",
 						icon: IconChartBar,
-						access: { permission: "risks.view" },
+						access: { capability: "risks.view" },
 					},
 				],
 			},
@@ -261,28 +261,20 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 						label: t("nav.surveys"),
 						href: "/surveys",
 						icon: IconClipboardList,
-						access: { permission: "surveys.view" },
+						access: { capability: "surveys.view" },
 					},
 					{
 						label: t("nav.statistics"),
 						href: "/surveys/statistics",
 						icon: IconChartBar,
-						access: { permission: "surveys.view" },
+						access: { capability: "surveys.view" },
 					},
 				],
 			},
 		];
 
-		// Phase 9.3 freeze cleanup (2026-07-06): the admin rail was previously
-		// gated on the legacy `manage_organization` transition-only string
-		// (via `isAdmin()`). It resolves to `false` from Phase 9.3 onward, so
-		// the rail would have vanished for every admin. We now gate on the
-		// canonical `core.view_organizations` capability (the umbrella
-		// org-read key the engine seeds for the org-admin role). The rail
-		// still self-filters its child items via `filterNavItems` so users
-		// who only hold the umbrella capability see only the entries their
-		// own item-level access allows.
-		if (isSuperAdmin()) {
+		// The admin rail and each child entry use explicit canonical capabilities.
+		if (can("core.view_organizations")) {
 			baseSections.push({
 				id: "admin",
 				title: t("nav.admin_section"),
@@ -290,58 +282,55 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 				items: [
 					{
 						label: t("admin.organizations.title"),
-						href: adminUrl("/organizations"),
+						href: "/admin/organizations",
 						icon: IconBuilding,
-						external: true,
 					},
 					{
 						label: t("admin.departments.title"),
-						href: adminUrl("/departments"),
+						href: "/admin/departments",
 						icon: IconNetwork,
-						external: true,
+					},
+					{
+						label: t("hr.departments_statisticsTitle"),
+						href: "/admin/departments/statistics",
+						icon: IconChartBar,
 					},
 					{
 						label: t("admin.users.title"),
-						href: adminUrl("/users"),
+						href: "/admin/users",
 						icon: IconUsers,
-						external: true,
 					},
 					{
 						label: t("admin.roles.title"),
-						href: adminUrl("/access"),
+						href: "/admin/roles",
 						icon: IconShield,
-						external: true,
 					},
 					{
 						label: t("admin.scopeTypes.title"),
-						href: adminUrl("/scope-types"),
+						href: "/admin/scope-types",
 						icon: IconTag,
-						external: true,
 					},
 					{
 						label: t("admin.incidentTypes.title"),
-						href: adminUrl("/incident-types"),
+						href: "/admin/incident-types",
 						icon: IconAlertTriangle,
-						external: true,
 					},
 					{
 						label: t("admin.activityLogs.title"),
-						href: adminUrl("/activity-logs"),
+						href: "/admin/activity-logs",
 						icon: IconHistory,
-						external: true,
 					},
 					{
-						label: t("admin.scopedRolesAudit.title"),
-						href: adminUrl("/scoped-roles/audit-logs"),
+						label: t("admin.authorizationAssignmentAudit.title"),
+						href: "/admin/authorization/audit-logs",
 						icon: IconShieldCheck,
-						external: true,
 					},
 				],
 			});
 		}
 
 		return baseSections;
-	}, [isSuperAdmin, t]);
+	}, [can, t]);
 
 	const expandableItemHrefs = useMemo(
 		() =>
@@ -378,7 +367,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 			items
 				.filter((item) => {
 					if (!item.access) return true;
-					return canAccess(item.access);
+					return meetsAccessRequirement(can, item.access);
 				})
 				.map((item) =>
 					item.children
@@ -392,7 +381,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 				items: filterNavItems(section.items),
 			}))
 			.filter((section) => section.items.length > 0);
-	}, [canAccess, sections]);
+	}, [can, sections]);
 
 	const activeSection =
 		filteredSections.find((section) => section.id === activeSectionId) ??
@@ -500,19 +489,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 						item.children.map((child) => {
 							const ChildIcon = child.icon;
 
-								return child.external ? (
-									<a
-										key={child.href}
-										href={child.href}
-										onClick={closeOnClick ? onToggle : undefined}
-										className="flex min-h-10 items-center gap-3 rounded-md py-2 pe-3 ps-9 text-sm font-medium transition-colors text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
-									>
-										<ChildIcon className="h-[18px] w-[18px] shrink-0 opacity-90" />
-										<span className="min-w-0 truncate">{child.label}</span>
-									</a>
-								) : (
-									<NavLink
-										key={child.href}
+							return (
+								<NavLink
+									key={child.href}
 									to={child.href}
 									end={shouldUseExactMatch(child.href)}
 									onClick={
@@ -531,24 +510,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 									<span className="min-w-0 truncate">
 										{child.label}
 									</span>
-									</NavLink>
-								);
-							})}
+								</NavLink>
+							);
+						})}
 				</div>
-			);
-		}
-
-		if (item.external) {
-			return (
-				<a
-					key={item.href}
-					href={item.href}
-					onClick={closeOnClick ? onToggle : undefined}
-					className="flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
-				>
-					<ItemIcon className="h-[18px] w-[18px] shrink-0 opacity-90" />
-					<span className="min-w-0 truncate">{item.label}</span>
-				</a>
 			);
 		}
 

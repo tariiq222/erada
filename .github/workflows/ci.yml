@@ -288,11 +288,8 @@ jobs:
       - name: Install NPM dependencies
         run: npm ci
 
-      - name: Run independent admin quality gate
-        run: npm run admin:quality
-
-      - name: Build independent admin image
-        run: docker build -f Dockerfile.admin -t erada-admin:ci .
+      - name: Guard canonical authorization architecture
+        run: ./vendor/bin/phpunit tests/Architecture/CanonicalAuthorizationResidualGuardTest.php tests/Architecture/CanonicalAuthorizationAssignmentNamingTest.php
 
       - name: Run PHP Linter (Pint)
         run: ./vendor/bin/pint --test
@@ -364,8 +361,6 @@ jobs:
           DB_USERNAME: iradah
           DB_PASSWORD: secret
           APP_ENV: testing
-          ADMIN_E2E_DB_PORT: '5432'
-          ADMIN_E2E_DB_DATABASE: 'iradah_pmo_test'
         run: npm run test:e2e
 
       - name: Security Audit (Composer)
@@ -374,24 +369,11 @@ jobs:
       - name: Security Audit (NPM)
         run: npm audit --audit-level=high
 
-  # ═══════════════════════════════════════════════════════════════
-  # Job 4: Independent Admin E2E (blocking)
-  # ═══════════════════════════════════════════════════════════════
-  # Runs the Playwright suite against the dedicated independent admin origin
-  # (vite preview on :4174) backed by the same PostgreSQL test service that
-  # the `test` job uses (iradah_pmo_test on 5432). The suite covers:
-  #   admin-auth, admin-governance, admin-organizations, admin-access,
-  #   admin-users-departments.
-  #
-  # This job is blocking (no continue-on-error) — it fails the build whenever
-  # any of those specs regress. The development database on port 5432 is not
-  # touched here: the Playwright config targets the testing postgres service
-  # (iradah_pmo_test), never iradah_pmo on port 5432.
-  admin-e2e:
-    name: 🎭 Admin E2E (Playwright)
+  # Canonical authorization gate, including the browser authentication surface.
+  authorization-enforce:
+    name: Authorization / Enforce Gate
     runs-on: ubuntu-latest
     needs: sqlite-guard
-
     services:
       postgres:
         image: postgres:16-alpine
@@ -400,109 +382,63 @@ jobs:
           POSTGRES_USER: iradah
           POSTGRES_PASSWORD: secret
         ports:
-          - 5432:5432
+          - '5432:5432'
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
       redis:
         image: redis:7-alpine
         ports:
-          - 6379:6379
+          - '6379:6379'
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
+    env:
+      APP_ENV: testing
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: iradah_pmo_test
+      DB_USERNAME: iradah
+      DB_PASSWORD: secret
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
           extensions: pdo, pdo_pgsql, redis
           coverage: none
-
-      - name: Get Composer cache directory
-        id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
-
-      - name: Cache Composer dependencies
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.composer-cache.outputs.dir }}
-          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
-          restore-keys: ${{ runner.os }}-composer-
-
-      - name: Prepare Laravel runtime dirs
-        # Required for `composer install` (post-autoload-dump → artisan
-        # package:discover → BladeCompiler) and for the Playwright Laravel
-        # server's file session driver (storage/framework/sessions).
-        run: |
-          mkdir -p storage/framework/views
-          mkdir -p storage/framework/cache
-          mkdir -p storage/framework/sessions
-          mkdir -p storage/logs
-          mkdir -p storage/fonts
-          mkdir -p bootstrap/cache
-
-      - name: Install Composer dependencies
-        run: composer install --prefer-dist --no-progress
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-
-      - name: Install NPM dependencies
-        run: npm ci
-
-      - name: Install Playwright Browsers
-        run: npx playwright install --with-deps chromium
-
-
-      - name: Copy .env for Admin E2E
-        # .env.testing is gitignored (.env.* is excluded except .env.example),
-        # so fall back to the tracked .env.example.
-        run: cp .env.testing .env 2>/dev/null || cp .env.example .env
-
-      - name: Generate app key for Admin E2E
-        run: php artisan key:generate
-
-      - name: Run migrations for Admin E2E
-        # CI-side Admin E2E reuses the same iradah_pmo_test database that the
-        # main test job uses. The Playwright setup script is `migrate:fresh --seed`
-        # so each CI run gets a deterministic fresh fixture.
-        env:
-          APP_ENV: testing
-          DB_CONNECTION: pgsql
-          DB_HOST: 127.0.0.1
-          DB_PORT: 5432
-          DB_DATABASE: iradah_pmo_test
-          DB_USERNAME: iradah
-          DB_PASSWORD: secret
+          cache: npm
+      - name: Prepare Laravel runtime
+        run: mkdir -p storage/framework/{views,cache,sessions} storage/logs bootstrap/cache storage/fonts
+      - name: Install dependencies
         run: |
-          php artisan config:clear
-          php artisan migrate:fresh --seed --force
-          php artisan db:seed --class=AdminE2ETestSeeder --force
-
-      - name: Run Admin E2E (Playwright)
-        # Blocking: no continue-on-error. The Playwright config boots its own
-        # Laravel server (port 8000) and admin preview server (port 4174) so
-        # no other listener is needed.
-        env:
-          DB_CONNECTION: pgsql
-          DB_HOST: 127.0.0.1
-          DB_PORT: 5432
-          DB_DATABASE: iradah_pmo_test
-          DB_USERNAME: iradah
-          DB_PASSWORD: secret
-          APP_ENV: testing
-          ADMIN_E2E_DB_PORT: '5432'
-          ADMIN_E2E_DB_DATABASE: 'iradah_pmo_test'
-        run: npm run test:e2e:admin
+          composer install --prefer-dist --no-progress
+          npm ci
+      - name: Configure application
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+      - name: Build canonical dataset
+        run: |
+          php artisan migrate --force
+          php artisan db:seed --force
+      - name: Run cutover preflight
+        run: php artisan authz:cutover-preflight
+      - name: Verify canonical auth contracts
+        run: |
+          php artisan test tests/Feature/Auth/AuthMeContractTest.php tests/Feature/Auth/AuthMeCapabilitiesTest.php
+          php artisan test tests/Feature/Core/Authorization/CanonicalAdminGateTest.php tests/Feature/Core/Authorization/CanonicalUserBusinessGateTest.php
+      - name: Build frontend in enforce mode
+        run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run authenticated browser gate
+        run: npx playwright test e2e/core-auth-and-orgs.spec.ts --project=chromium

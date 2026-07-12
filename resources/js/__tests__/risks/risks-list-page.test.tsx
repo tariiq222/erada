@@ -13,11 +13,13 @@ vi.mock("react-i18next", () => ({
 // Surface the canonical dotted form to mirror the live /api/auth/me payload.
 vi.mock("@shared/contexts/AuthContext", () => ({
   useAuth: () => ({
-    hasPermission: (p: string) => ["view_risks", "create_risks", "view_risk_reports"].includes(p),
+    can: (capability: string) => ["risks.view", "risks.create", "risks.view_reports"].includes(capability),
     user: {
       id: 1,
       access: {
-        risks: { view: true, create: true, view_reports: true },
+        "risks.view": true,
+        "risks.create": true,
+        "risks.view_reports": true,
       },
     },
   }),

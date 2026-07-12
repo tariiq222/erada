@@ -17,7 +17,7 @@ use Tests\TestCase;
 
 /**
  * ملاحظة Wave 4-7: محرّك AuthZ هو المسار الوحيد. الأدوار المسطّحة
- * (`assignRole('member' | 'project_manager')`) في بيئة الاختبار تحمل
+ * (canonical `member` / `project_manager`) في بيئة الاختبار تحمل
  * `can_view_all=true` على مستوى المؤسسة عبر scoped_role_definitions؛ استخدامها
  * يُلغي هدف اختبار العزل (يفتح رؤية كل المؤسسة). لذا:
  *   - الحالات التي تريد عضواً بسيطاً يعتمد على الارتباط المباشر فقط: لا منح
@@ -187,7 +187,7 @@ class TaskListVisibilityScopeTest extends TestCase
             'department_id' => $department->id,
             'is_active' => true,
         ]);
-        $user->assignRole($role);
+        $this->assignCanonicalRole($user, $role);
 
         return $user;
     }

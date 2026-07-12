@@ -59,7 +59,7 @@ class DataMappingControllerTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $user->assignRole($role);
+        $this->assignCanonicalRole($user, $role);
 
         return $user;
     }
@@ -279,7 +279,7 @@ class DataMappingControllerTest extends TestCase
             'organization_id' => $orgB->id,
             'is_active' => true,
         ]);
-        $sa->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($sa);
 
         // super_admin from org B accessing org A survey
         $response = $this->actingAs($sa, 'sanctum')
@@ -295,7 +295,7 @@ class DataMappingControllerTest extends TestCase
             'organization_id' => $orgB->id,
             'is_active' => true,
         ]);
-        $sa->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($sa);
 
         $response = $this->actingAs($sa, 'sanctum')
             ->postJson("/api/surveys/{$this->survey->id}/mappings", $this->validStorePayload());
@@ -360,7 +360,7 @@ class DataMappingControllerTest extends TestCase
             'organization_id' => $this->org->id,
             'is_active' => true,
         ]);
-        $sa->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($sa);
 
         $response = $this->actingAs($sa, 'sanctum')
             ->getJson('/api/surveys/mapping-targets');

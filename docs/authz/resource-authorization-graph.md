@@ -27,24 +27,24 @@ pins the contract end-to-end:
 
 ## Primary resources (engine-routed, `AccessDecision::can()`)
 
-| Resource | Status | Scope parent | Notes |
-|---|---|---|---|
-| Portfolio | scope_aware | (none) | Strategy top-level container |
-| Program | scope_aware | Portfolio | Strategy program |
-| Review | scope_aware | (none) | Strategy review |
-| Blocker | scope_aware | (none) | Strategy blocker |
-| Project | scope_aware | Department | Projects root |
-| Department | scope_aware | Organization | HR scope root |
-| Task | scope_aware | Project\|Department\|PersonalOwner | Tasks polymorphic |
-| Risk | scope_aware | Department\|riskable | Risk register |
-| RiskAssessment | scope_aware | Risk | Risk child |
-| RiskAction | scope_aware | Risk | Risk child |
-| IncidentReport | scope_aware | Department\|reporter | OVR |
-| Meeting | scope_aware | Department+subject | Meetings |
-| Recommendation | scope_aware | Meeting | Direction B rulings + action items live on Recommendation |
-| Kpi | scope_aware | Department | Performance |
-| Survey | scope_aware | Organization\|Department | Surveys |
-| DataImportRequest | scope_aware | Organization | Surveys |
+| Resource | Status | Scope parent | Notes | Canonical authorization family |
+|---|---|---|---|---|
+| Portfolio | scope_aware | (none) | Strategy top-level container | Portfolio |
+| Program | scope_aware | Portfolio | Strategy program | Portfolio |
+| Review | scope_aware | (none) | Strategy review | Portfolio |
+| Blocker | scope_aware | (none) | Strategy blocker | Portfolio |
+| Project | scope_aware | Department | Projects root | Project |
+| Department | scope_aware | Organization | HR scope root | Department |
+| Task | scope_aware | Project\|Department\|PersonalOwner | Tasks polymorphic | Task |
+| Risk | scope_aware | Department\|riskable | Risk register | Risk |
+| RiskAssessment | scope_aware | Risk | Risk child | Risk |
+| RiskAction | scope_aware | Risk | Risk child | Risk |
+| IncidentReport | scope_aware | Department\|reporter | OVR | IncidentReport |
+| Meeting | scope_aware | Department+subject | Meetings | Meeting |
+| Recommendation | scope_aware | Meeting | Direction B rulings + action items live on Recommendation | Recommendation |
+| Kpi | scope_aware | Department | Performance | Kpi |
+| Survey | scope_aware | Organization\|Department | Surveys | Survey |
+| DataImportRequest | scope_aware | Organization | Surveys | Survey |
 
 ## Child-only value objects
 
@@ -54,12 +54,12 @@ parent's `scopeParent()` walk. Adding `ScopeAware` to any of these
 would create a competing parent chain and silently break
 authorization.
 
-| Resource | Parent | Owner module |
-|---|---|---|
-| Milestone | Project | Projects |
-| MilestoneDeliverable | Milestone | Projects |
-| ProjectExpense | Project | Projects |
-| KpiMeasurement | Kpi | Performance |
+| Resource | Parent | Owner module | Canonical authorization family |
+|---|---|---|---|
+| Milestone | Project | Projects | Project |
+| MilestoneDeliverable | Milestone | Projects | Project |
+| ProjectExpense | Project | Projects | Project |
+| KpiMeasurement | Kpi | Performance | Kpi |
 
 ## Engine-internal models (NOT primary resources)
 

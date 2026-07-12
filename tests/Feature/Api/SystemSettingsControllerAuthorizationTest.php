@@ -71,7 +71,7 @@ class SystemSettingsControllerAuthorizationTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $user->assignRole('member');
+        $this->assignCanonicalRole($user, 'member');
 
         $response = $this->actingAs($user, 'sanctum')
             ->putJson('/api/settings/system', $this->validPayload());
@@ -87,7 +87,7 @@ class SystemSettingsControllerAuthorizationTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $user->assignRole('viewer');
+        $this->assignCanonicalRole($user, 'viewer');
 
         $response = $this->actingAs($user, 'sanctum')
             ->putJson('/api/settings/system', $this->validPayload());
@@ -122,7 +122,7 @@ class SystemSettingsControllerAuthorizationTest extends TestCase
         ]);
         // M-01: global system settings are platform-wide; an org-scoped admin
         // must NOT write them — only super_admin may.
-        $user->assignRole('admin');
+        $this->assignCanonicalRole($user, 'admin');
 
         $response = $this->actingAs($user, 'sanctum')
             ->putJson('/api/settings/system', $this->validPayload());
@@ -138,7 +138,7 @@ class SystemSettingsControllerAuthorizationTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         $response = $this->actingAs($user, 'sanctum')
             ->putJson('/api/settings/system', $this->validPayload());

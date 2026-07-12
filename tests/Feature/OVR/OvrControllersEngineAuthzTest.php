@@ -34,8 +34,7 @@ use Tests\TestCase;
  *
  * Route middleware: engine_capability:ovr.view / ovr.manage_types — delegates to
  * AccessDecision::can(). Tests grant via Tests\Support\GrantsEngineCapability;
- * legacy givePermissionTo('view_ovr_categories'|'manage_ovr_categories') was removed
- * with the middleware.
+ * the retired flat permission grants were removed with the middleware.
  */
 class OvrControllersEngineAuthzTest extends TestCase
 {

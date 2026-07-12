@@ -32,7 +32,7 @@ class MilestoneDeliverableCascadeTest extends TestCase
         $manager = User::factory()->create([
             'organization_id' => $project->organization_id,
         ]);
-        $manager->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($manager);
 
         $milestone = Milestone::factory()->create([
             'project_id' => $project->id,
@@ -131,7 +131,7 @@ class MilestoneDeliverableCascadeTest extends TestCase
         $viewer = User::factory()->create([
             'organization_id' => $project->organization_id,
         ]);
-        $viewer->assignRole('viewer');
+        $this->grantCanonicalViewer($viewer);
 
         $deliverable = $milestone->deliverables()->create([
             'name' => 'Should still exist',

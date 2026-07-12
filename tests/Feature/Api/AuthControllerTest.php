@@ -6,22 +6,11 @@ use App\Modules\Core\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
-use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class AuthControllerTest extends TestCase
 {
     use RefreshDatabase;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        // إنشاء الأدوار الأساسية
-        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
-        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
-        Role::firstOrCreate(['name' => 'employee', 'guard_name' => 'web']);
-    }
 
     /**
      * اختبار تسجيل دخول ناجح
@@ -45,12 +34,13 @@ class AuthControllerTest extends TestCase
                     'id',
                     'name',
                     'email',
-                    'roles',
                     'capabilities',
                     'access',
-                    'scoped_roles',
+                    'role_assignments',
                 ],
             ])
+            ->assertJsonMissingPath('user.roles')
+            ->assertJsonMissingPath('user.scoped_roles')
             ->assertJsonMissingPath('user.permissions')
             ->assertJsonMissingPath('token')
             ->assertCookie('auth_token');

@@ -8,7 +8,6 @@ use App\Modules\Core\Authorization\Contracts\OwnerEditable;
 use App\Modules\Core\Authorization\Contracts\ScopeAware;
 use App\Modules\Core\Authorization\Contracts\SensitivelyScoped;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRoleDefinition;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Meetings\Models\MeetingResolution;
@@ -236,10 +235,11 @@ class Task extends Model implements OwnerEditable, ScopeAware, SensitivelyScoped
     {
         $orgId = $user->organization_id;
         $deptId = $user->department_id;
-        $isAdmin = $user->isAdmin();
+        $hasAdminCapability = AccessDecision::can($user, Capability::SETTINGS_MANAGE);
         $grantsOrgView = AccessDecision::grantsAtOrganization($user, Capability::TASKS_VIEW);
-        $managedDeptIds = $user->getManagedDepartmentIds();
-        $projectIdsWithRole = $user->getProjectsWithRoles()->pluck('id')->all();
+        $grantingScopes = AccessDecision::grantingScopes($user, Capability::TASKS_VIEW);
+        $managedDeptIds = AccessDecision::subtreeDepartmentIds($grantingScopes['department'] ?? []);
+        $projectIdsWithRole = $grantingScopes['project'] ?? [];
 
         // Phase CFA-08 — Cluster floor widening. When the actor holds BOTH
         // Capability::TASKS_VIEW + Capability::CLUSTER_TREE_VIEW on
@@ -279,7 +279,7 @@ class Task extends Model implements OwnerEditable, ScopeAware, SensitivelyScoped
             $user,
             $orgId,
             $deptId,
-            $isAdmin,
+            $hasAdminCapability,
             $grantsOrgView,
             $managedDeptIds,
             $projectIdsWithRole,
@@ -315,7 +315,7 @@ class Task extends Model implements OwnerEditable, ScopeAware, SensitivelyScoped
             $outer->orWhere(function (Builder $b) use (
                 $user,
                 $deptId,
-                $isAdmin,
+                $hasAdminCapability,
                 $grantsOrgView,
                 $managedDeptIds,
                 $projectIdsWithRole,
@@ -345,11 +345,11 @@ class Task extends Model implements OwnerEditable, ScopeAware, SensitivelyScoped
                     });
                 }
 
-                if ($grantsOrgView && ! $isAdmin) {
+                if ($grantsOrgView && ! $hasAdminCapability) {
                     return;
                 }
 
-                if ($grantsOrgView && $isAdmin) {
+                if ($grantsOrgView && $hasAdminCapability) {
                     $b->where(function (Builder $r) use ($managedDeptIds, $deptId) {
                         $deptSet = array_values(array_unique(array_filter(array_merge($managedDeptIds, [$deptId]))));
 
@@ -576,17 +576,7 @@ class Task extends Model implements OwnerEditable, ScopeAware, SensitivelyScoped
             return true;
         }
 
-        return $user->activeScopedRoles()
-            ->with('roleDefinition')
-            ->get()
-            ->contains(function ($scopedRole) {
-                $def = $scopedRole->roleDefinition
-                    ?? ScopedRoleDefinition::findByKey($scopedRole->scope_type, $scopedRole->role);
-
-                return $def
-                    && is_array($def->permissions ?? null)
-                    && in_array(Capability::OVR_CONFIDENTIAL, $def->permissions, true);
-            });
+        return AccessDecision::can($user, Capability::OVR_CONFIDENTIAL);
     }
 
     // المهام النشطة (غير مكتملة/ملغاة)
@@ -978,19 +968,6 @@ class Task extends Model implements OwnerEditable, ScopeAware, SensitivelyScoped
         // Mirrors TaskPolicy::userMayViewConfidential and
         // IncidentReport::userHasOvrConfidentialCapability so the three
         // decision surfaces agree.
-        return $user->activeScopedRoles()
-            ->with('roleDefinition')
-            ->get()
-            ->contains(function ($scopedRole) {
-                $def = $scopedRole->roleDefinition
-                    ?? ScopedRoleDefinition::findByKey(
-                        $scopedRole->scope_type,
-                        $scopedRole->role
-                    );
-
-                return $def
-                    && is_array($def->permissions ?? null)
-                    && in_array(Capability::OVR_CONFIDENTIAL, $def->permissions, true);
-            });
+        return AccessDecision::can($user, Capability::OVR_CONFIDENTIAL, $this);
     }
 }

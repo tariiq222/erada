@@ -21,12 +21,9 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
  * disable Eloquent timestamp management because the table has neither
  * `created_at` nor `updated_at` columns.
  *
- * Phase 2.1.3 adds the per-pivot `reach` JSON column (nullable). It
- * carries a per-module reach cap (`{projects: own|department|all}`)
- * backfilled from legacy `scoped_role_definitions.reach`. A NULL value
- * means "no cap on this row" and the engine falls back to the legacy
- * definition read. Reach only ever RESTRICTS — never widens — and the
- * new path's `hasNewPermission` enforces it.
+ * The nullable `reach` JSON column carries a per-module reach cap
+ * (`{projects: own|department|all}`). A NULL value means no additional
+ * cap on this row. Reach only ever restricts access; it never widens it.
  *
  * @property int $authorization_role_id
  * @property int $authorization_resource_id

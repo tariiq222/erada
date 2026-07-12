@@ -142,7 +142,7 @@ class ClusterTreeOvrIncidentPolicyStatsTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $super->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($super);
 
         $this->assertTrue($this->policy->viewStats($super));
     }
@@ -209,7 +209,7 @@ class ClusterTreeOvrIncidentPolicyStatsTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $super->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($super);
 
         $this->assertTrue($this->policy->exportsAggregates($super));
     }

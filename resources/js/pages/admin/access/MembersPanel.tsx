@@ -1,5 +1,5 @@
 /**
- * MembersPanel — list every user with their assigned scoped roles, and open a
+ * MembersPanel — list every user with their authorization assignments, and open a
  * side panel with the full access summary on row click. The side panel renders
  * a chrome-less variant of UserAccessSummary so it fits the Drawer layout
  * (no outer PageHeader, no extra padding).
@@ -16,7 +16,10 @@ import { Drawer, DrawerHeader, DrawerBody } from '@shared/ui/Drawer';
 import { Alert } from '@shared/ui/Alert';
 import { Badge } from '@shared/ui/Badge';
 import { usersApi } from '@entities/user';
-import { scopedRolesApi, type AccessSummary } from '@entities/role';
+import {
+  authorizationAssignmentsApi,
+  type AuthorizationAccessSummary,
+} from '@entities/authorization-assignment';
 
 interface MemberRow {
   id: number;
@@ -45,7 +48,7 @@ const REACH_LABEL: Record<string, string> = {
 
 const AccessSummaryView: React.FC<{ userId: number }> = ({ userId }) => {
   const { t } = useTranslation();
-  const [data, setData] = useState<AccessSummary | null>(null);
+  const [data, setData] = useState<AuthorizationAccessSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,8 +56,8 @@ const AccessSummaryView: React.FC<{ userId: number }> = ({ userId }) => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await scopedRolesApi.accessSummary(Number(userId));
-        if (!cancelled) setData((res as { data: AccessSummary }).data);
+        const res = await authorizationAssignmentsApi.accessSummary(Number(userId));
+        if (!cancelled) setData((res as { data: AuthorizationAccessSummary }).data);
       } catch (err) {
         if (!cancelled) {
           setError((err as { message?: string })?.message || t('common.error', 'حدث خطأ'));

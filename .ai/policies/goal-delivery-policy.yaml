@@ -1,0 +1,19 @@
+normal_mode:
+  goal_plugin: disabled
+  push: explicit_request_only
+  merge: explicit_request_only
+auto_mode:
+  delivery_target: auto_pr_merge
+  create_pr: true
+  auto_merge: true
+  merge_strategy: squash
+  delete_branch_after_merge: true
+  cleanup_owned_worktree: true
+human_gates:
+  - major_product_decision
+  - destructive_change
+  - security_sensitive_change
+  - payment_change
+  - secret_handling
+  - first_production_deployment
+  - unapproved_external_cost

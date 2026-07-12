@@ -43,7 +43,7 @@ class TwoFactorRecoveryCodesTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
 
         $this->twoFactorService = app(TwoFactorService::class);
     }

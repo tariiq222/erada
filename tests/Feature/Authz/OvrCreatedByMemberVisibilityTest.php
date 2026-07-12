@@ -3,8 +3,8 @@
 namespace Tests\Feature\Authz;
 
 use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\OVR\Enums\SeverityLevel;
@@ -19,6 +19,7 @@ use Illuminate\Console\OutputStyle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Symfony\Component\Console\Input\ArgvInput;
 use Symfony\Component\Console\Output\NullOutput;
+use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
 /**
@@ -40,7 +41,7 @@ use Tests\TestCase;
  */
 class OvrCreatedByMemberVisibilityTest extends TestCase
 {
-    use RefreshDatabase;
+    use GrantsEngineCapability, RefreshDatabase;
 
     private ?string $incidentId = null;
 
@@ -201,13 +202,10 @@ class OvrCreatedByMemberVisibilityTest extends TestCase
         $aliceDept = Department::where('code', 'AUTHZ2-DEEP-L3')->firstOrFail();
         $bobDept = Department::where('code', 'AUTHZ4-HYB-COLB-L3')->firstOrFail();
 
-        // Bob is a scoped-only user (no flat role) so he's inactive for OVR
-        // create by default — give him 'member' so we can use him as a 2nd
+        // Bob receives the canonical OVR create/view grant needed to act as a
         // reporter from a sibling branch.
         $bob = User::where('email', 'hyb.colB.l3.manager@authz.demo')->firstOrFail();
-        if (! $bob->hasRole('member')) {
-            $bob->assignRole('member');
-        }
+        $this->grantEngineCapability($bob, [Capability::OVR_CREATE, Capability::OVR_VIEW]);
 
         $aliceReport = $this->createIncidentAs($alice, $aliceDept, 'Incident by Alice (colA L3)');
         $bobReport = $this->createIncidentAs($bob, $bobDept, 'Incident by Bob (colB L3)');
@@ -255,12 +253,15 @@ class OvrCreatedByMemberVisibilityTest extends TestCase
             'organization_id' => $governingDept->organization_id,
         ]);
 
-        // No flat admin/super role — the governor's authority must come purely
-        // from the dept_manager scoped role at the governing department.
-        $user->assignScopedRole(
-            role: 'dept_manager',
-            scopeType: ScopedRole::SCOPE_DEPARTMENT,
-            scopeId: $governingDept->id,
+        // The governor's authority comes purely from a canonical department
+        // assignment at the governing department.
+        $this->grantEngineCapability(
+            $user,
+            [Capability::OVR_CREATE, Capability::OVR_VIEW],
+            'department',
+            $governingDept->id,
+            'dept_manager',
+            ['inherit_to_children' => true],
         );
 
         return $user;
@@ -329,9 +330,7 @@ class OvrCreatedByMemberVisibilityTest extends TestCase
             'organization_id' => $safetyDept->organization_id,
         ]);
 
-        if (! $user->hasRole('member')) {
-            $user->assignRole('member');
-        }
+        $this->grantEngineCapability($user, [Capability::OVR_CREATE, Capability::OVR_VIEW]);
 
         return $user;
     }

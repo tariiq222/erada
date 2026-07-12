@@ -25,7 +25,7 @@ use Tests\TestCase;
  *  - super_admin يتجاوز كل شيء عبر before()
  *
  * ملاحظة: scopeVisibleTo في النموذج تعتمد على AccessDecision (المحرّك)،
- * لذا تُمنح الصلاحيات عبر grantEngineCapability بدلاً من givePermissionTo.
+ * لذا تُمنح الصلاحيات عبر grantEngineCapability من الرسم canonical مباشرةً.
  */
 class OVRConfidentialVisibilityTest extends TestCase
 {
@@ -73,14 +73,14 @@ class OVRConfidentialVisibilityTest extends TestCase
      *
      * @param  string|array<int, string>|null  $capabilities  Capability::OVR_* المراد منحها (null = لا منح)
      * @param  bool  $canViewConfidential  هل تُنشئ تعريف دور مؤقت مع can_view_confidential=true؟
-     * @param  string|null  $spatieRole  اسم دور Spatie ('admin' | 'viewer' | null = لا شيء)
+     * @param  string|null  $canonicalRole  اسم الدور canonical ('admin' | 'viewer' | null = لا شيء)
      */
     private function makeUser(
         Organization $organization,
         Department $department,
         string|array|null $capabilities = null,
         bool $canViewConfidential = false,
-        ?string $spatieRole = null
+        ?string $canonicalRole = null
     ): User {
         $user = User::factory()->create([
             'organization_id' => $organization->id,
@@ -88,8 +88,10 @@ class OVRConfidentialVisibilityTest extends TestCase
             'is_active' => true,
         ]);
 
-        if ($spatieRole !== null) {
-            $user->assignRole($spatieRole);
+        if ($canonicalRole !== null) {
+            $canonicalRole === 'super_admin'
+                ? $this->grantCanonicalSuperAdmin($user)
+                : $this->assignCanonicalRole($user, $canonicalRole);
         }
 
         if ($capabilities !== null) {
@@ -103,7 +105,7 @@ class OVRConfidentialVisibilityTest extends TestCase
                 $caps = array_values(array_unique(array_merge($caps, [Capability::OVR_CONFIDENTIAL])));
             }
 
-            // إسناد ScopedRole على مستوى المؤسسة لمنح المحرّك مباشرةً
+            // إسناد دور canonical على مستوى المؤسسة لمنح المحرّك مباشرةً
             $this->grantEngineCapability(
                 $user,
                 $caps,
@@ -237,7 +239,7 @@ class OVRConfidentialVisibilityTest extends TestCase
             $this->departmentA1,
             Capability::OVR_VIEW,
             canViewConfidential: true,
-            spatieRole: 'admin'
+            canonicalRole: 'admin'
         );
         $reporter = $this->makeUser($this->organizationA, $this->departmentA2);
         $report = $this->makeReport($reporter, $this->departmentA2, $this->organizationA, [
@@ -266,7 +268,7 @@ class OVRConfidentialVisibilityTest extends TestCase
             $this->organizationA,
             $this->departmentA1,
             Capability::OVR_VIEW,
-            spatieRole: 'admin'
+            canonicalRole: 'admin'
         );
         $reporter = $this->makeUser($this->organizationA, $this->departmentA2);
         $report = $this->makeReport($reporter, $this->departmentA2, $this->organizationA);
@@ -296,7 +298,7 @@ class OVRConfidentialVisibilityTest extends TestCase
             $this->organizationA,
             $this->departmentA1,
             Capability::OVR_VIEW,
-            spatieRole: 'super_admin'
+            canonicalRole: 'super_admin'
         );
 
         $reporter = $this->makeUser($this->organizationA, $this->departmentA2);

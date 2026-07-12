@@ -6,21 +6,16 @@ import { Badge } from '@shared/ui/Badge';
 import { Skeleton } from '@shared/ui/Skeleton';
 import { formatDate } from '@shared/lib/utils';
 import { usersApi } from '@entities/user';
-import type { UserSecurity, ScopedRole } from '@entities/user';
+import type { UserRoleAssignment, UserSecurity } from '@entities/user';
 import { RequirePermission } from '@features/access-control/ui/RequirePermission';
 
 interface Props {
   userId: number;
 }
 
-interface ScopedRolesData {
-  projects: ScopedRole[];
-  departments: ScopedRole[];
-}
-
 export const UserSecurityCard: React.FC<Props> = ({ userId }) => {
   const [security, setSecurity] = useState<UserSecurity | null>(null);
-  const [scopedRoles, setScopedRoles] = useState<ScopedRolesData | null>(null);
+  const [roleAssignments, setRoleAssignments] = useState<UserRoleAssignment[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [isUnlocking, setIsUnlocking] = useState(false);
@@ -40,10 +35,10 @@ export const UserSecurityCard: React.FC<Props> = ({ userId }) => {
     try {
       const [secRes, rolesRes] = await Promise.all([
         usersApi.getSecurity(userId) as Promise<{ security: UserSecurity }>,
-        usersApi.scopedRoles(userId) as Promise<{ data: ScopedRolesData }>,
+        usersApi.roleAssignments(userId) as Promise<{ data: UserRoleAssignment[] }>,
       ]);
       setSecurity(secRes.security);
-      setScopedRoles(rolesRes.data);
+      setRoleAssignments(rolesRes.data);
     } catch {
       setHasError(true);
     } finally {
@@ -118,10 +113,7 @@ export const UserSecurityCard: React.FC<Props> = ({ userId }) => {
                 </Badge>
               )}
               {security.is_locked && (
-                <RequirePermission
-                  config={{ roles: ['super_admin', 'admin'] }}
-                  fallback={null}
-                >
+                <RequirePermission capability="users.edit" fallback={null}>
                   <Button
                     variant="danger"
                     loading={isUnlocking}
@@ -191,8 +183,8 @@ export const UserSecurityCard: React.FC<Props> = ({ userId }) => {
         </CardContent>
       </Card>
 
-      {/* بطاقة الأدوار السياقية */}
-      {scopedRoles && (
+      {/* بطاقة إسنادات الأدوار */}
+      {roleAssignments && (
         <Card className="p-0">
           <CardContent className="p-6">
             <div className="flex items-center gap-2 mb-4">
@@ -208,18 +200,18 @@ export const UserSecurityCard: React.FC<Props> = ({ userId }) => {
                 <p className="text-sm font-medium text-[var(--text-secondary)] mb-2 border-b border-[var(--border-default)] pb-1">
                   المشاريع
                 </p>
-                {scopedRoles.projects.length > 0 ? (
+                {roleAssignments.some((assignment) => assignment.scope_type === 'project') ? (
                   <ul className="space-y-2">
-                    {scopedRoles.projects.map((item) => (
+                    {roleAssignments.filter((assignment) => assignment.scope_type === 'project').map((item) => (
                       <li
-                        key={`project-${item.scope_id}`}
+                        key={item.id}
                         className="flex items-center justify-between"
                       >
                         <span className="text-[var(--text-primary)] text-sm">
                           {item.scope_name}
                         </span>
                         <div className="flex items-center gap-2">
-                          <Badge variant="accent">{item.role_display}</Badge>
+                          <Badge variant="accent">{item.label}</Badge>
                           {item.expires_at && (
                             <span className="text-xs text-[var(--text-tertiary)]">
                               حتى: {formatDate(item.expires_at)}
@@ -239,18 +231,18 @@ export const UserSecurityCard: React.FC<Props> = ({ userId }) => {
                 <p className="text-sm font-medium text-[var(--text-secondary)] mb-2 border-b border-[var(--border-default)] pb-1">
                   الأقسام
                 </p>
-                {scopedRoles.departments.length > 0 ? (
+                {roleAssignments.some((assignment) => assignment.scope_type === 'department') ? (
                   <ul className="space-y-2">
-                    {scopedRoles.departments.map((item) => (
+                    {roleAssignments.filter((assignment) => assignment.scope_type === 'department').map((item) => (
                       <li
-                        key={`dept-${item.scope_id}`}
+                        key={item.id}
                         className="flex items-center justify-between"
                       >
                         <span className="text-[var(--text-primary)] text-sm">
                           {item.scope_name}
                         </span>
                         <div className="flex items-center gap-2">
-                          <Badge variant="accent">{item.role_display}</Badge>
+                          <Badge variant="accent">{item.label}</Badge>
                           {item.expires_at && (
                             <span className="text-xs text-[var(--text-tertiary)]">
                               حتى: {formatDate(item.expires_at)}

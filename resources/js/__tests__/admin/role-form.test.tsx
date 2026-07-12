@@ -20,10 +20,6 @@ const MOCK_SCOPE_OPTIONS = {
     { key: 'organization', label: 'المؤسسة' },
     { key: 'department', label: 'القسم' },
   ],
-  definitions: {
-    organization: [{ role_key: 'quality_manager', label: 'مدير الجودة' }],
-    department: [{ role_key: 'dept_manager', label: 'مدير القسم' }],
-  },
 };
 
 vi.mock('react-i18next', () => ({
@@ -48,7 +44,6 @@ const MOCK_REGISTRY = {
     {
       key: 'projects',
       label: 'المشاريع',
-      store: 'engine',
       abilities: [
         { id: 'projects.view', label: 'عرض' },
         { id: 'projects.create', label: 'إنشاء' },
@@ -57,7 +52,6 @@ const MOCK_REGISTRY = {
     {
       key: 'meetings',
       label: 'الاجتماعات',
-      store: 'engine',
       abilities: [
         { id: 'meetings.view', label: 'عرض الاجتماعات' },
         { id: 'meetings.create', label: 'إنشاء الاجتماعات' },
@@ -100,7 +94,7 @@ describe('RoleForm', () => {
     expect(screen.getByText('المشاريع')).toBeInTheDocument();
   });
 
-  it('submits create form with label_ar, label_en, and split abilities', async () => {
+  it('submits create form using canonical capability strings', async () => {
     const user = userEvent.setup();
     rolesApiMock.create.mockResolvedValue({ data: { id: 3 } });
 
@@ -126,8 +120,10 @@ describe('RoleForm', () => {
           name: 'reviewer',
           label_ar: 'مراجع',
           label_en: 'Reviewer',
+          label: 'مراجع',
           scope_type: 'organization',
-          permissions_capabilities: ['projects.view'],
+          capabilities: ['projects.view'],
+          is_active: true,
         })
       )
     );
@@ -178,15 +174,16 @@ describe('RoleForm', () => {
       data: {
         id: 5,
         name: 'editor',
-        display_name: 'Editor',
-        guard_name: 'web',
-        permissions: ['projects.create'],
-        permissions_count: 1,
+        label: 'Editor',
         users_count: 2,
         is_system: false,
+        is_admin_role: false,
+        is_active: true,
+        scope_type: 'organization',
         label_ar: 'محرر',
         label_en: 'Editor',
         capabilities: ['projects.view', 'tasks.create'],
+        reach: {},
       },
     });
 
@@ -212,12 +209,14 @@ describe('RoleForm', () => {
       data: {
         id: 1,
         name: 'super_admin',
-        display_name: 'Super Admin',
-        guard_name: 'web',
-        permissions: [],
-        permissions_count: 99,
+        label: 'Super Admin',
         users_count: 1,
         is_system: true,
+        is_admin_role: true,
+        is_active: true,
+        scope_type: 'all',
+        capabilities: [],
+        reach: {},
       },
     });
 

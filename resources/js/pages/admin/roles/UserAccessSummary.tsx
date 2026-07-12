@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
-import { scopedRolesApi, AccessSummary } from '@entities/role';
+import {
+  authorizationAssignmentsApi,
+  type AuthorizationAccessSummary,
+} from '@entities/authorization-assignment';
 import { Card } from '@shared/ui/Card';
 import { Button } from '@shared/ui/Button';
 import { Badge } from '@shared/ui/Badge';
@@ -31,15 +34,15 @@ export const UserAccessSummary: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
 
-  const [data, setData] = useState<AccessSummary | null>(null);
+  const [data, setData] = useState<AuthorizationAccessSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const res = await scopedRolesApi.accessSummary(Number(id));
-        setData((res as { data: AccessSummary }).data);
+        const res = await authorizationAssignmentsApi.accessSummary(Number(id));
+        setData((res as { data: AuthorizationAccessSummary }).data);
       } catch (err) {
         setError((err as { message?: string })?.message || t('common.error', 'حدث خطأ'));
       } finally {

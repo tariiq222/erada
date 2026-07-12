@@ -12,7 +12,7 @@ use Illuminate\Auth\Access\HandlesAuthorization;
 
 /**
  * TaskPolicy — مرحلة هـ: محرّك AuthZ فقط (engine-only)
- * مسارات Spatie flat أُزيلت. المسار الوحيد: AccessDecision::can().
+ * مصدر القرار الوحيد هو AccessDecision::can().
  * استثناء: المهام الشخصية (isPersonalTask) محكومة بطبقة owner_id فوق المحرّك.
  */
 class TaskPolicy
@@ -66,7 +66,8 @@ class TaskPolicy
         // UserTaskScope handle the list endpoint; this method agrees so a
         // confidential task cannot be reached via /api/tasks/{id} even if
         // the list is skipped.
-        if ($this->isConfidentialSource($task) && ! $this->userMayViewConfidential($user)) {
+        if ($this->isConfidentialSource($task)
+            && ! AccessDecision::can($user, Capability::OVR_CONFIDENTIAL, $task)) {
             return false;
         }
 
@@ -121,31 +122,6 @@ class TaskPolicy
 
         return in_array($task->source_type, $sensitiveSources, true)
             && $task->source_sensitivity === 'confidential';
-    }
-
-    /**
-     * Mirrors Task::userMayViewConfidential and IncidentReport's
-     * confidential-view grant check. A user with the OVR_CONFIDENTIAL
-     * capability via any active scoped role can see confidential-source
-     * tasks; everyone else is blocked at the policy boundary.
-     */
-    private function userMayViewConfidential(User $user): bool
-    {
-        if ($user->isSuperAdmin()) {
-            return true;
-        }
-
-        return $user->activeScopedRoles()
-            ->with('roleDefinition')
-            ->get()
-            ->contains(function ($scopedRole) {
-                $def = $scopedRole->roleDefinition;
-                if ($def === null || ! is_array($def->permissions ?? null)) {
-                    return false;
-                }
-
-                return in_array(Capability::OVR_CONFIDENTIAL, $def->permissions, true);
-            });
     }
 
     public function create(User $user): bool

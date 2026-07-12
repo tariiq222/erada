@@ -33,7 +33,7 @@ class GovernanceRulesApiTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
     }
 
     public function test_index_lists_the_three_resource_types_unset_by_default(): void

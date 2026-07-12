@@ -11,24 +11,22 @@ use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
 /**
- * HRCapabilityProviderTest — regression for the Wave 3 P0 ship blocker.
+ * HRCapabilityProviderTest — capability-provider contract pin.
  *
- * The unified AccessDecision engine exposes Capability::HR_VIEW /
- * Capability::HR_MANAGE. The SPA, however, still gates routes, menus,
- * and buttons on the flat legacy strings `view_hr` / `manage_hr`
- * (resources/js/app.tsx, resources/js/shared/nasaq/app.tsx,
- * resources/js/pages/hr/*). After the cutover removes the Spatie
- * `view_hr` / `manage_hr` rows, HRCapabilityProvider is the only path
- * that puts those keys back into auth/me.permissions.
+ * Verified residual (2026-07-12): HRCapabilityProvider is a legacy/advisory
+ * module helper tagged under `engined_capability_providers`. The canonical
+ * /api/user projection (AuthController) does NOT iterate the tag — it derives
+ * capabilities from `User::canonicalCapabilityNames()`, which returns the
+ * canonical dotted strings (`hr.view`, `hr.manage`) backed by
+ * AccessDecision + role grants. The provider itself is kept in place only
+ * because modules still wire it; future cleanup may retire it.
  *
- * If this provider stops returning the wire-format flags (or the
- * service provider stops tagging it), every HR user gets locked out
- * of HR pages. These tests pin the four key states:
- *
- *   - view only      -> view_hr=true,  manage_hr=false
- *   - manage         -> view_hr=true,  manage_hr=true
- *   - no grant       -> view_hr=false, manage_hr=false
- *   - super_admin    -> view_hr=true,  manage_hr=true
+ * These tests document the contract split:
+ *   - The canonical /api/user authority is `User::canonicalCapabilityNames()`,
+ *     which surfaces canonical dotted capabilities (`hr.view`, `hr.manage`).
+ *   - The provider remains a non-authoritative helper that mirrors decisions
+ *     via AccessDecision; its flat `view_hr` / `manage_hr` keys are advisory
+ *     only and MUST NOT be treated as the wire-format source of truth.
  */
 class HRCapabilityProviderTest extends TestCase
 {
@@ -41,8 +39,59 @@ class HRCapabilityProviderTest extends TestCase
         return User::factory()->create(['organization_id' => $org->id]);
     }
 
-    public function test_user_with_view_grant_sees_view_only(): void
+    public function test_canonical_user_projection_returns_dotted_hr_capabilities_for_view_grant(): void
     {
+        $user = $this->makeUser();
+        $this->grantEngineCapability($user, Capability::HR_VIEW);
+
+        $capabilities = $user->canonicalCapabilityNames();
+
+        $this->assertContains('hr.view', $capabilities);
+        $this->assertNotContains('hr.manage', $capabilities);
+        $this->assertNotContains('view_hr', $capabilities);
+        $this->assertNotContains('manage_hr', $capabilities);
+    }
+
+    public function test_canonical_user_projection_returns_dotted_hr_capabilities_for_manage_grant(): void
+    {
+        $user = $this->makeUser();
+        $this->grantEngineCapability(
+            $user,
+            [Capability::HR_VIEW, Capability::HR_MANAGE]
+        );
+
+        $capabilities = $user->canonicalCapabilityNames();
+
+        $this->assertContains('hr.view', $capabilities);
+        $this->assertContains('hr.manage', $capabilities);
+    }
+
+    public function test_canonical_user_projection_is_empty_when_no_engine_grant(): void
+    {
+        $user = $this->makeUser();
+
+        $capabilities = $user->canonicalCapabilityNames();
+
+        $this->assertNotContains('hr.view', $capabilities);
+        $this->assertNotContains('hr.manage', $capabilities);
+    }
+
+    public function test_canonical_user_projection_short_circuits_to_all_capabilities_for_super_admin(): void
+    {
+        $user = $this->makeUser();
+        $this->grantCanonicalSuperAdmin($user);
+
+        $capabilities = $user->canonicalCapabilityNames();
+
+        $this->assertContains('hr.view', $capabilities);
+        $this->assertContains('hr.manage', $capabilities);
+    }
+
+    public function test_provider_is_not_the_api_user_authority_and_mirrors_access_decision(): void
+    {
+        // The provider is a legacy/advisory helper, not the /api/user
+        // authority. The SPA should never rely on its keys; canonical
+        // capabilities are derived via User::canonicalCapabilityNames().
         $user = $this->makeUser();
         $this->grantEngineCapability($user, Capability::HR_VIEW);
 
@@ -50,54 +99,8 @@ class HRCapabilityProviderTest extends TestCase
 
         $this->assertSame(
             ['view_hr' => true, 'manage_hr' => false],
-            $flags
-        );
-    }
-
-    public function test_user_with_manage_grant_sees_both(): void
-    {
-        $user = $this->makeUser();
-        // Single role covers both — see GrantsEngineCapability notes on
-        // single-role-per-scope semantics. HR_MANAGE implies HR_VIEW at
-        // the wire-format level because manage grants full HR access.
-        $this->grantEngineCapability(
-            $user,
-            [Capability::HR_VIEW, Capability::HR_MANAGE]
-        );
-
-        $flags = (new HRCapabilityProvider)->userCapabilities($user);
-
-        $this->assertSame(
-            ['view_hr' => true, 'manage_hr' => true],
-            $flags
-        );
-    }
-
-    public function test_user_with_no_grant_sees_neither(): void
-    {
-        $user = $this->makeUser();
-        // No engine grant, no role bypass.
-
-        $flags = (new HRCapabilityProvider)->userCapabilities($user);
-
-        $this->assertSame(
-            ['view_hr' => false, 'manage_hr' => false],
-            $flags
-        );
-    }
-
-    public function test_super_admin_sees_both(): void
-    {
-        $user = $this->makeUser();
-        $user->assignRole('super_admin');
-        // No engine grant — super_admin short-circuit inside
-        // AccessDecision::can() must produce both flags true.
-
-        $flags = (new HRCapabilityProvider)->userCapabilities($user);
-
-        $this->assertSame(
-            ['view_hr' => true, 'manage_hr' => true],
-            $flags
+            $flags,
+            'HRCapabilityProvider output is non-authoritative — canonical /api/user uses canonicalCapabilityNames().'
         );
     }
 }

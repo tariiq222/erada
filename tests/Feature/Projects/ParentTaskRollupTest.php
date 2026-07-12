@@ -48,7 +48,7 @@ class ParentTaskRollupTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
 
         $this->project = Project::factory()->create([
             'organization_id' => $this->org->id,

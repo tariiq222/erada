@@ -28,7 +28,7 @@ interface ScopeAware
     public function scopeParent(): ?Model;
 
     /**
-     * مفتاح نوع النطاق المستخدم في ScopedRole.scope_type و ScopeType.key.
+     * مفتاح نوع النطاق المستخدم في التفويضات المعيارية.
      * القيم المعتمدة: 'project'|'task'|'department'|'program'|'portfolio'|'risk'|'incident'
      */
     public function scopeTypeKey(): string;

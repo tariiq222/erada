@@ -502,13 +502,11 @@ vi.mock('@shared/ui/Toast', () => ({
 }));
 
 // Mock Auth
-const mockIsSuperAdmin = vi.fn().mockReturnValue(true);
-const mockHasPermission = vi.fn().mockReturnValue(true);
+const mockCan = vi.fn().mockReturnValue(true);
 vi.mock('@shared/contexts/AuthContext', () => ({
   useAuth: () => ({
+    can: mockCan,
     canAccess: () => true,
-    isSuperAdmin: mockIsSuperAdmin,
-    hasPermission: mockHasPermission,
   }),
 }));
 
@@ -616,8 +614,7 @@ import ProjectsList from '@pages/projects/ProjectsList';
 describe('ProjectsList Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockIsSuperAdmin.mockReturnValue(true);
-    mockHasPermission.mockReturnValue(true);
+    mockCan.mockReturnValue(true);
   });
 
   it('renders page title', async () => {
@@ -741,8 +738,7 @@ describe('ProjectsList Filters', () => {
 describe('ProjectsList Delete', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockIsSuperAdmin.mockReturnValue(true);
-    mockHasPermission.mockReturnValue(true);
+    mockCan.mockReturnValue(true);
   });
 
   it('opens delete modal', async () => {
@@ -836,8 +832,7 @@ describe('ProjectsList canManageMembers=false (Phase 9.3 freeze cleanup)', () =>
     // NOT on `isSuperAdmin()`. When the user lacks the capability AND
     // the mock returns no per-record abilities, the delete button MUST
     // stay hidden for every row.
-    mockIsSuperAdmin.mockReturnValue(false);
-    mockHasPermission.mockReturnValue(false);
+    mockCan.mockReturnValue(false);
     render(<ProjectsList />);
 
     await waitFor(() => {
@@ -852,8 +847,7 @@ describe('ProjectsList canManageMembers=false (Phase 9.3 freeze cleanup)', () =>
     // capability-based gate must be authoritative. A super-admin who
     // somehow lacks `projects.delete` on `user.access` must NOT see the
     // delete button — the engine, not the role string, decides.
-    mockIsSuperAdmin.mockReturnValue(true);
-    mockHasPermission.mockReturnValue(false);
+    mockCan.mockReturnValue(false);
     render(<ProjectsList />);
 
     await waitFor(() => {
@@ -864,8 +858,7 @@ describe('ProjectsList canManageMembers=false (Phase 9.3 freeze cleanup)', () =>
   });
 
   it('shows delete buttons when canDeleteProject is true and the per-record abilities.delete is seeded', async () => {
-    mockIsSuperAdmin.mockReturnValue(false);
-    mockHasPermission.mockReturnValue(true);
+    mockCan.mockReturnValue(true);
     render(<ProjectsList />);
 
     await waitFor(() => {
@@ -873,9 +866,8 @@ describe('ProjectsList canManageMembers=false (Phase 9.3 freeze cleanup)', () =>
     });
 
     // The list fixture seeds `abilities.delete: true` on every project, so
-    // when `canDeleteProject` resolves true (the role-string is false but
-    // hasPermission('projects.delete') returns true → useCan || hasPermission
-    // → true) AND the per-record `abilities.delete` is true, the Delete
+    // when `canDeleteProject` resolves true from the canonical
+    // `projects.delete` capability AND per-record `abilities.delete` is true, the Delete
     // button is visible. This pins the new contract end-to-end.
     expect(screen.getAllByText('حذف').length).toBeGreaterThan(0);
   });
@@ -926,8 +918,7 @@ describe('ProjectsList API Errors', () => {
     const { projectsApi } = await import('@entities/project');
     (projectsApi.delete as ReturnType<typeof vi.fn>).mockRejectedValueOnce({ message: 'لا يمكن حذف هذا المشروع' });
 
-    mockIsSuperAdmin.mockReturnValue(true);
-    mockHasPermission.mockReturnValue(true);
+    mockCan.mockReturnValue(true);
     render(<ProjectsList />);
 
     await waitFor(() => {

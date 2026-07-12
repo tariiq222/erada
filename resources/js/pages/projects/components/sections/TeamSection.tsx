@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {IconUsers, IconUserPlus, IconList, IconLayoutGrid, IconTrash} from '@tabler/icons-react';
 import { projectsApi } from '@entities/project';
@@ -20,7 +20,7 @@ import {
 } from '@shared/ui';
 import SectionHeader from '@shared/ui/SectionHeader';
 import { AddMemberModal } from '../modals';
-import { roleIcons, roleOptions } from '../../constants';
+import { roleIcons } from '../../constants';
 import type { ProjectDetails } from '../../types';
 
 interface TeamSectionProps {
@@ -37,7 +37,15 @@ const TeamSection: React.FC<TeamSectionProps> = ({ members, projectId, onMemberA
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
-  const [selectedRole, setSelectedRole] = useState<string>('member');
+  const [selectedRole, setSelectedRole] = useState<string>('');
+  const [roleAssignments, setRoleAssignments] = useState<Array<{
+    id: number;
+    user_id: number;
+    role_id: number;
+    role_name: string;
+    role_display: string;
+  }>>([]);
+  const [availableRoles, setAvailableRoles] = useState<Array<{ id: number; name: string; label: string }>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
 
@@ -49,20 +57,39 @@ const TeamSection: React.FC<TeamSectionProps> = ({ members, projectId, onMemberA
   }>({ isOpen: false, memberId: null, memberName: '' });
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const fetchRoleAssignments = useCallback(async () => {
+    const response = await projectsApi.getRoleAssignments(projectId);
+    setRoleAssignments(response.data.map((assignment) => ({
+      id: assignment.id,
+      user_id: assignment.user_id ?? assignment.user?.id ?? 0,
+      role_id: assignment.role_id,
+      role_name: assignment.role_name,
+      role_display: assignment.role_display,
+    })));
+    setAvailableRoles(response.available_roles);
+    setSelectedRole((current) => current || String(response.available_roles[0]?.id ?? ''));
+  }, [projectId]);
+
+  useEffect(() => {
+    fetchRoleAssignments().catch(() => {
+      showToast('error', t('projects.member_role_update_failed'));
+    });
+  }, [fetchRoleAssignments, showToast, t]);
+
   // جلب قائمة المستخدمين عند فتح الـ Modal
   const fetchUsers = async () => {
     try {
-      // جلب قائمة المستخدمين والأعضاء الحاليين معاً
-      const [allUsers, currentMembers] = await Promise.all([
+      const [allUsers, roleResponse] = await Promise.all([
         usersApi.getList(),
-        projectsApi.getMembers(projectId),
+        projectsApi.getRoleAssignments(projectId),
       ]);
-      // استثناء الأعضاء الموجودين بالفعل
-      const existingIds = (currentMembers as { id: number }[]).map(m => m.id);
+      const existingIds = roleResponse.data.map((assignment) => assignment.user_id ?? assignment.user?.id ?? 0);
       const availableUsers = (allUsers as { id: number; name: string }[]).filter(
         (u: { id: number }) => !existingIds.includes(u.id)
       );
       setUsers(availableUsers);
+      setAvailableRoles(roleResponse.available_roles);
+      setSelectedRole((current) => current || String(roleResponse.available_roles[0]?.id ?? ''));
     } catch (error) {
       console.error('Failed to fetch users:', error);
     }
@@ -74,21 +101,25 @@ const TeamSection: React.FC<TeamSectionProps> = ({ members, projectId, onMemberA
   };
 
   const handleAddMember = async () => {
-    if (!selectedUserId) {
+    if (!selectedUserId || !selectedRole) {
       showToast('error', t('projects.please_select_member'));
       return;
     }
 
     setIsLoading(true);
     try {
-      await projectsApi.addMember(projectId, {
+      const response = await projectsApi.assignRoleAssignment(projectId, {
         user_id: Number(selectedUserId),
-        role: selectedRole,
+        role_id: Number(selectedRole),
       });
+      setRoleAssignments((current) => [
+        ...current.filter((assignment) => assignment.user_id !== Number(selectedUserId)),
+        { ...response.data, user_id: Number(selectedUserId) },
+      ]);
       showToast('success', t('projects.member_added_success'));
       setIsModalOpen(false);
       setSelectedUserId('');
-      setSelectedRole('member');
+      setSelectedRole(String(availableRoles[0]?.id ?? ''));
       onMemberAdded?.();
     } catch {
       showToast('error', t('projects.member_add_failed'));
@@ -105,10 +136,15 @@ const TeamSection: React.FC<TeamSectionProps> = ({ members, projectId, onMemberA
 
     for (const userId of userIds) {
       try {
-        await projectsApi.addMember(projectId, {
+        if (!selectedRole) throw new Error('No canonical role selected');
+        const response = await projectsApi.assignRoleAssignment(projectId, {
           user_id: userId,
-          role: 'member',
+          role_id: Number(selectedRole),
         });
+        setRoleAssignments((current) => [
+          ...current.filter((assignment) => assignment.user_id !== userId),
+          { ...response.data, user_id: userId },
+        ]);
         successCount++;
       } catch {
         failCount++;
@@ -138,7 +174,10 @@ const TeamSection: React.FC<TeamSectionProps> = ({ members, projectId, onMemberA
 
     setIsDeleting(true);
     try {
-      await projectsApi.removeMember(projectId, deleteModal.memberId);
+      const assignment = roleAssignments.find((item) => item.user_id === deleteModal.memberId);
+      if (!assignment) return;
+      await projectsApi.removeMember(projectId, deleteModal.memberId, assignment.role_id);
+      setRoleAssignments((current) => current.filter((item) => item.id !== assignment.id));
       showToast('success', t('projects.member_removed_success'));
       setDeleteModal({ isOpen: false, memberId: null, memberName: '' });
       onMemberRemoved?.();
@@ -149,9 +188,12 @@ const TeamSection: React.FC<TeamSectionProps> = ({ members, projectId, onMemberA
     }
   };
 
-  const handleRoleChange = async (memberId: number, newRole: string) => {
+  const handleRoleChange = async (memberId: number, newRoleId: string) => {
     try {
-      await projectsApi.updateMemberRole(projectId, memberId, newRole);
+      const response = await projectsApi.updateMemberRole(projectId, memberId, Number(newRoleId));
+      setRoleAssignments((current) => current.map((assignment) =>
+        assignment.user_id === memberId ? { ...response.data, user_id: memberId } : assignment
+      ));
       showToast('success', t('projects.member_role_updated'));
       onMemberAdded?.();
     } catch {
@@ -229,7 +271,8 @@ const TeamSection: React.FC<TeamSectionProps> = ({ members, projectId, onMemberA
               </TableHeader>
               <TableBody>
                 {members.map((member) => {
-                  const roleKey = member.pivot?.role || 'member';
+                  const assignment = roleAssignments.find((item) => item.user_id === member.id);
+                  const roleKey = assignment?.role_name || member.pivot?.role || 'member';
                   const RoleIcon = roleIcons[roleKey] || roleIcons.default;
                   return (
                     <TableRow key={member.id}>
@@ -248,13 +291,14 @@ const TeamSection: React.FC<TeamSectionProps> = ({ members, projectId, onMemberA
                           <RoleIcon className="h-3.5 w-3.5 text-[var(--text-tertiary)]" />
                           {canEdit ? (
                             <Select
-                              value={roleKey}
+                              value={assignment ? String(assignment.role_id) : ''}
                               onChange={(e) => handleRoleChange(member.id, e.target.value)}
                               className="min-w-[140px] text-sm"
                               aria-label={t('projects.role')}
-                              options={roleOptions.map((opt) => ({
-                                value: opt.value,
-                                label: opt.label,
+                              disabled={!assignment}
+                              options={availableRoles.map((role) => ({
+                                value: String(role.id),
+                                label: role.label,
                               }))}
                             />
                           ) : (
@@ -285,7 +329,8 @@ const TeamSection: React.FC<TeamSectionProps> = ({ members, projectId, onMemberA
         /* Cards View */
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {members.map((member) => {
-            const roleKey = member.pivot?.role || 'member';
+            const assignment = roleAssignments.find((item) => item.user_id === member.id);
+            const roleKey = assignment?.role_name || member.pivot?.role || 'member';
             const RoleIcon = roleIcons[roleKey] || roleIcons.default;
 
             return (
@@ -306,13 +351,14 @@ const TeamSection: React.FC<TeamSectionProps> = ({ members, projectId, onMemberA
                         <RoleIcon className="h-3.5 w-3.5 text-[var(--text-tertiary)]" />
                         {canEdit ? (
                           <Select
-                            value={roleKey}
+                            value={assignment ? String(assignment.role_id) : ''}
                             onChange={(e) => handleRoleChange(member.id, e.target.value)}
                             className="min-w-[140px] text-sm"
                             aria-label={t('projects.role')}
-                            options={roleOptions.map((opt) => ({
-                              value: opt.value,
-                              label: opt.label,
+                            disabled={!assignment}
+                            options={availableRoles.map((role) => ({
+                              value: String(role.id),
+                              label: role.label,
                             }))}
                           />
                         ) : (
@@ -353,7 +399,7 @@ const TeamSection: React.FC<TeamSectionProps> = ({ members, projectId, onMemberA
           onAdd={handleAddMember}
           onAddMultiple={handleAddMultipleMembers}
           isLoading={isLoading}
-          roleOptions={roleOptions}
+          roleOptions={availableRoles.map((role) => ({ value: String(role.id), label: role.label }))}
         />
       )}
 

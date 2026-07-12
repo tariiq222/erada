@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api;
 
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -15,9 +16,9 @@ use Tests\TestCase;
  *
  * - كل المسارات تحت /api/dashboard/* محمية بـ
  *   `engine_capability:Capability::DASHBOARD_VIEW` على مستوى الـ route group
- *   (Phase 8-C). كانت `can:view_dashboard` (Spatie) قبل ذلك.
+ *   `engine_capability:Capability::DASHBOARD_VIEW`.
  * - المستخدم الذي لا يمتلك القدرة engine-side → 403.
- * - المستخدم الذي يمتلكها عبر scoped_role_definitions.permissions[] → 200.
+ * - المستخدم الذي يمتلكها عبر الرسم canonical → 200.
  * - super_admin يتجاوز دائماً عبر AccessDecision::can().
  */
 class DashboardControllerAuthorizationTest extends TestCase
@@ -27,12 +28,17 @@ class DashboardControllerAuthorizationTest extends TestCase
 
     protected Department $department;
 
+    protected Organization $organization;
+
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->seed(RolesAndPermissionsSeeder::class);
-        $this->department = Department::factory()->create();
+        $this->organization = Organization::factory()->create();
+        $this->department = Department::factory()->create([
+            'organization_id' => $this->organization->id,
+        ]);
     }
 
     private function endpoints(): array
@@ -50,6 +56,7 @@ class DashboardControllerAuthorizationTest extends TestCase
     public function test_user_without_view_dashboard_capability_is_forbidden(): void
     {
         $user = User::factory()->create([
+            'organization_id' => $this->organization->id,
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
@@ -63,13 +70,11 @@ class DashboardControllerAuthorizationTest extends TestCase
     public function test_user_with_dashboard_view_engine_capability_can_access_endpoints(): void
     {
         $user = User::factory()->create([
+            'organization_id' => $this->organization->id,
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        // Phase 8-C: route reads engine capability (scoped_role_definitions.permissions[]).
-        // Use the engine mechanism — givePermissionTo() to the Spatie 'view_dashboard'
-        // string no longer grants the route because EnsureEngineCapability delegates
-        // to AccessDecision::can, which ignores Spatie's model_has_permissions.
+        // Route reads the capability exclusively from canonical assignments.
         $this->grantEngineCapability($user, Capability::DASHBOARD_VIEW);
 
         foreach ($this->endpoints() as $name => $url) {
@@ -88,17 +93,19 @@ class DashboardControllerAuthorizationTest extends TestCase
 
     public function test_member_role_has_dashboard_view_by_default(): void
     {
-        // The seeder's seedLegacyTestRoles() (test env only) provisions a
-        // scoped_role_definitions row for the legacy 'member' Spatie role
-        // whose permissions[] carries every view/view_all/view_reports
-        // Capability::all() entry — `Capability::DASHBOARD_VIEW` is one of
-        // them (action='view'), so a user with the member role is granted
-        // the engine capability automatically.
+        // The canonical member catalog grants dashboard.view by default.
         $user = User::factory()->create([
+            'organization_id' => $this->organization->id,
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $user->assignRole('member');
+        $this->assignCanonicalRole(
+            $user,
+            'member',
+            'organization',
+            $this->organization->id,
+            [Capability::DASHBOARD_VIEW],
+        );
 
         $response = $this->actingAs($user, 'sanctum')
             ->getJson('/api/dashboard/stats');

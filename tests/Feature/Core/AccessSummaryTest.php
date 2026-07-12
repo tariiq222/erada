@@ -22,15 +22,15 @@ class AccessSummaryTest extends TestCase
         $org = Organization::factory()->create();
         $dept = Department::factory()->create(['organization_id' => $org->id]);
         $superAdmin = User::factory()->create(['organization_id' => $org->id]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $target = User::factory()->create(['organization_id' => $org->id, 'department_id' => $dept->id]);
-        $target->assignRole('viewer');
+        $this->grantCanonicalViewer($target);
         // A manual org-scope scoped role.
         $this->grantEngineCapability($target, ['projects.view'], 'organization', $org->id);
 
         $data = $this->actingAs($superAdmin, 'sanctum')
-            ->getJson("/api/scoped-roles/user/{$target->id}/access-summary")
+            ->getJson("/api/authorization-role-assignments/user/{$target->id}/access-summary")
             ->assertStatus(200)
             ->json('data');
 
@@ -45,11 +45,11 @@ class AccessSummaryTest extends TestCase
         $orgA = Organization::factory()->create();
         $orgB = Organization::factory()->create();
         $viewerA = User::factory()->create(['organization_id' => $orgA->id]);
-        $viewerA->assignRole('viewer');
+        $this->grantCanonicalViewer($viewerA);
         $target = User::factory()->create(['organization_id' => $orgB->id]);
 
         $this->actingAs($viewerA, 'sanctum')
-            ->getJson("/api/scoped-roles/user/{$target->id}/access-summary")
+            ->getJson("/api/authorization-role-assignments/user/{$target->id}/access-summary")
             ->assertStatus(403);
     }
 }

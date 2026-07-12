@@ -14,7 +14,7 @@ const scopeTypesApiMock = {
 const rolesApiMock = {
   list: vi.fn(),
 };
-const scopedRolesApiMock = {
+const authorizationAssignmentsApiMock = {
   auditLogs: vi.fn(),
 };
 
@@ -39,9 +39,13 @@ vi.mock('@entities/role', () => ({
   rolesApi: rolesApiMock,
 }));
 
-vi.mock('@entities/scoped-role', () => ({
-  scopedRolesApi: scopedRolesApiMock,
-}));
+vi.mock('@entities/authorization-assignment', async () => {
+  const actual = await vi.importActual<typeof import('@entities/authorization-assignment')>('@entities/authorization-assignment');
+  return {
+    ...actual,
+    authorizationAssignmentsApi: authorizationAssignmentsApiMock,
+  };
+});
 
 describe('admin pages coverage', () => {
   beforeEach(() => {
@@ -49,7 +53,7 @@ describe('admin pages coverage', () => {
     organizationsApiMock.list.mockReset();
     scopeTypesApiMock.list.mockReset();
     rolesApiMock.list.mockReset();
-    scopedRolesApiMock.auditLogs.mockReset();
+    authorizationAssignmentsApiMock.auditLogs.mockReset();
     Element.prototype.scrollIntoView = vi.fn();
   });
 
@@ -106,8 +110,8 @@ describe('admin pages coverage', () => {
     const user = userEvent.setup();
     rolesApiMock.list.mockResolvedValue({
       data: [
-        { id: 1, name: 'super_admin', display_name: 'Super Admin', is_system: true, permissions_count: 10, users_count: 1 },
-        { id: 2, name: 'reviewer', display_name: 'Reviewer', is_system: false, permissions_count: 3, users_count: 4 },
+        { id: 1, name: 'super_admin', label: 'Super Admin', scope_type: 'all', capabilities: ['core.manage'], reach: {}, is_system: true, is_admin_role: true, is_active: true, users_count: 1 },
+        { id: 2, name: 'reviewer', label: 'Reviewer', scope_type: 'organization', capabilities: ['projects.view'], reach: {}, is_system: false, is_admin_role: false, is_active: true, users_count: 4 },
       ],
     });
     const { default: RolesList } = await import('@pages/admin/roles/RolesList');
@@ -138,15 +142,15 @@ describe('admin pages coverage', () => {
     expect(await screen.findByText('roles failure')).toBeInTheDocument();
   });
 
-  it('loads scoped-role audit logs, filters client-side, applies server filters, clears filters, and paginates', async () => {
+  it('loads authorization assignment audit logs, filters client-side, applies server filters, clears filters, and paginates', async () => {
     const user = userEvent.setup();
-    scopedRolesApiMock.auditLogs.mockResolvedValue({
+    authorizationAssignmentsApiMock.auditLogs.mockResolvedValue({
       data: [
         {
           id: 1,
           user: { name: 'Actor One' },
           target_user: { name: 'Target User' },
-          action: 'role_assigned',
+          action: 'canonical_assignment_assigned',
           description: 'Assigned manager role',
           scope_type: 'project',
           role: 'manager',
@@ -157,8 +161,8 @@ describe('admin pages coverage', () => {
           id: 2,
           user: { name: 'Other Actor' },
           target_user: null,
-          action: 'access_denied',
-          description: 'Denied access',
+          action: 'canonical_assignment_revoked',
+          description: 'Revoked manager role',
           scope_type: 'department',
           role: null,
           ip_address: null,
@@ -167,39 +171,120 @@ describe('admin pages coverage', () => {
       ],
       meta: { current_page: 1, last_page: 2, per_page: 25, total: 30 },
     });
-    const { default: ScopedRoleAuditLogs } = await import('@pages/admin/scoped-roles/ScopedRoleAuditLogs');
+    const { default: AuthorizationAssignmentAuditLogs } = await import('@pages/admin/authorization/AuthorizationAssignmentAuditLogs');
 
-    render(<ScopedRoleAuditLogs />);
+    render(<AuthorizationAssignmentAuditLogs />);
 
     expect(await screen.findByText('Assigned manager role')).toBeInTheDocument();
-    expect(screen.getByText('Denied access')).toBeInTheDocument();
+    expect(screen.getByText('Revoked manager role')).toBeInTheDocument();
 
-    await user.type(screen.getByPlaceholderText('admin.scopedRolesAudit.filters.searchPlaceholder'), 'assigned');
-    expect(screen.queryByText('Denied access')).not.toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText('admin.authorizationAssignmentAudit.filters.searchPlaceholder'), 'assigned');
+    expect(screen.queryByText('Revoked manager role')).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'admin.scopedRolesAudit.filters.allActions' }));
-    await user.click(screen.getByRole('option', { name: 'admin.scopedRolesAudit.actions.access_denied' }));
-    await waitFor(() => expect(scopedRolesApiMock.auditLogs).toHaveBeenLastCalledWith(expect.objectContaining({ action: 'access_denied' })));
+    await user.click(screen.getByRole('button', { name: 'admin.authorizationAssignmentAudit.filters.allActions' }));
+    await user.click(screen.getByRole('option', { name: 'admin.authorizationAssignmentAudit.actions.role_revoked' }));
+    await waitFor(() => expect(authorizationAssignmentsApiMock.auditLogs).toHaveBeenLastCalledWith(expect.objectContaining({ action: 'canonical_assignment_revoked' })));
 
-    await user.clear(screen.getByPlaceholderText('admin.scopedRolesAudit.filters.searchPlaceholder'));
-    await user.type(screen.getByPlaceholderText('admin.scopedRolesAudit.filters.userId'), '44');
+    await user.clear(screen.getByPlaceholderText('admin.authorizationAssignmentAudit.filters.searchPlaceholder'));
+    await user.type(screen.getByPlaceholderText('admin.authorizationAssignmentAudit.filters.userId'), '44');
     await user.tab();
-    await waitFor(() => expect(scopedRolesApiMock.auditLogs).toHaveBeenLastCalledWith(expect.objectContaining({ user_id: '44' })));
+    await waitFor(() => expect(authorizationAssignmentsApiMock.auditLogs).toHaveBeenLastCalledWith(expect.objectContaining({ user_id: '44' })));
 
     const clearButton = screen.getByRole('button', { name: 'common.clear' });
     await user.click(clearButton);
-    expect(screen.getByPlaceholderText('admin.scopedRolesAudit.filters.userId')).toHaveValue('');
+    expect(screen.getByPlaceholderText('admin.authorizationAssignmentAudit.filters.userId')).toHaveValue('');
 
     const nextButton = screen.getByRole('button', { name: /next|التالي|common.next/i });
     await user.click(nextButton);
-    await waitFor(() => expect(scopedRolesApiMock.auditLogs).toHaveBeenCalledWith(expect.objectContaining({ page: 2 })));
+    await waitFor(() => expect(authorizationAssignmentsApiMock.auditLogs).toHaveBeenCalledWith(expect.objectContaining({ page: 2 })));
   });
 
-  it('shows scoped-role audit error state', async () => {
-    scopedRolesApiMock.auditLogs.mockRejectedValueOnce(new Error('audit failure'));
-    const { default: ScopedRoleAuditLogs } = await import('@pages/admin/scoped-roles/ScopedRoleAuditLogs');
+  it('authorization audit action filter wires every canonical event value (covers the full backend write set)', async () => {
+    // Verified residual (2026-07-12): the filter UI must POST one of the
+    // exact strings written by AuthorizationAssignmentService::auditMutation,
+    // ScopedDepartmentRoleSyncService::auditMutation, or
+    // RoleController::writeAudit. Every option in the picker must round-trip
+    // its display label → query param wire value, with no Spatie-era dead
+    // options (permission_granted/permission_revoked/access_denied) and no
+    // missing canonical events (canonical_assignment_synced,
+    // role_created, role_disabled).
+    const user = userEvent.setup();
+    authorizationAssignmentsApiMock.auditLogs.mockResolvedValue({
+      data: [
+        {
+          id: 11,
+          user: { name: 'Actor One' },
+          target_user: { name: 'Target User' },
+          action: 'canonical_assignment_assigned',
+          description: 'Assigned manager role',
+          scope_type: 'project',
+          role: 'manager',
+          ip_address: '127.0.0.1',
+          created_at: '2026-07-12T00:00:00Z',
+        },
+      ],
+      meta: { current_page: 1, last_page: 1, per_page: 25, total: 1 },
+    });
+    const { default: AuthorizationAssignmentAuditLogs } = await import('@pages/admin/authorization/AuthorizationAssignmentAuditLogs');
+    const { AUTHORIZATION_ASSIGNMENT_AUDIT_EVENT_LIST } = await import('@entities/authorization-assignment');
 
-    render(<ScopedRoleAuditLogs />);
+    render(<AuthorizationAssignmentAuditLogs />);
+
+    let currentButtonLabel: string | null = null;
+
+    expect(await screen.findByText('Assigned manager role')).toBeInTheDocument();
+
+    // Every canonical event is offered as a picker option with the same
+    // wire value the backend writes; no Spatie-era strings leak through.
+    const expectedWireValues = AUTHORIZATION_ASSIGNMENT_AUDIT_EVENT_LIST;
+    expect(expectedWireValues).toEqual([
+      'canonical_assignment_assigned',
+      'canonical_assignment_revoked',
+      'canonical_assignment_synced',
+      'role_created',
+      'role_updated',
+      'role_disabled',
+    ]);
+    for (const event of expectedWireValues) {
+      expect(event).not.toMatch(/^(role_assigned|role_revoked|permission_granted|permission_revoked|access_denied)$/);
+    }
+
+    // Click each option and assert the request carries the matching
+    // canonical wire value (not the translated display label).
+    const labelLookup: Record<string, string> = {
+      canonical_assignment_assigned: 'admin.authorizationAssignmentAudit.actions.role_assigned',
+      canonical_assignment_revoked: 'admin.authorizationAssignmentAudit.actions.role_revoked',
+      // canonical_assignment_synced has no pre-existing translation; the
+      // picker falls back to the raw event text. Same for role_created and
+      // role_disabled.
+      role_updated: 'admin.authorizationAssignmentAudit.actions.role_updated',
+    };
+
+    for (const event of expectedWireValues) {
+      const optionLabel = labelLookup[event] || event;
+      // The Select button's accessible name tracks the currently-selected
+      // option's label (or the placeholder when nothing is picked). We walk
+      // the cycle: at iteration N the button shows the label of iteration N-1
+      // (or the placeholder on iteration 0). After the click the button
+      // takes on this iteration's label, ready for the next round.
+      const previouslyShownLabel =
+        currentButtonLabel ?? 'admin.authorizationAssignmentAudit.filters.allActions';
+      await user.click(screen.getByRole('button', { name: previouslyShownLabel }));
+      await user.click(screen.getByRole('option', { name: optionLabel }));
+      await waitFor(() =>
+        expect(authorizationAssignmentsApiMock.auditLogs).toHaveBeenLastCalledWith(
+          expect.objectContaining({ action: event }),
+        ),
+      );
+      currentButtonLabel = optionLabel;
+    }
+  });
+
+  it('shows authorization assignment audit error state', async () => {
+    authorizationAssignmentsApiMock.auditLogs.mockRejectedValueOnce(new Error('audit failure'));
+    const { default: AuthorizationAssignmentAuditLogs } = await import('@pages/admin/authorization/AuthorizationAssignmentAuditLogs');
+
+    render(<AuthorizationAssignmentAuditLogs />);
 
     expect(await screen.findByText('audit failure')).toBeInTheDocument();
   });

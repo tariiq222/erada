@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Api;
 
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -36,13 +35,13 @@ class ProjectControllerExtendedTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->admin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->admin);
 
         $this->member = User::factory()->create([
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->member->assignRole('viewer');
+        $this->assignCanonicalRole($this->member, 'viewer');
 
         $this->project = Project::factory()->create([
             'department_id' => $this->department->id,
@@ -125,7 +124,7 @@ class ProjectControllerExtendedTest extends TestCase
 
     public function test_cannot_add_duplicate_member(): void
     {
-        $this->member->assignProjectRole($this->project, ScopedRole::PROJECT_MEMBER);
+        $this->assignCanonicalRole($this->member, 'project_member', 'project', $this->project->id);
 
         $response = $this->actingAs($this->admin, 'sanctum')
             ->postJson("/api/projects/{$this->project->id}/members", [
@@ -148,7 +147,7 @@ class ProjectControllerExtendedTest extends TestCase
 
     public function test_can_remove_member_from_project(): void
     {
-        $this->member->assignProjectRole($this->project, ScopedRole::PROJECT_MEMBER);
+        $this->assignCanonicalRole($this->member, 'project_member', 'project', $this->project->id);
 
         $response = $this->actingAs($this->admin, 'sanctum')
             ->deleteJson("/api/projects/{$this->project->id}/members/{$this->member->id}");

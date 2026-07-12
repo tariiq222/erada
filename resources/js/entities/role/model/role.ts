@@ -5,64 +5,71 @@
 export interface Role {
   id: number;
   name: string;
-  display_name: string;
-  guard_name: string;
-  permissions: string[];
-  permissions_count: number;
-  users_count: number;
-  is_system: boolean;
-  created_at?: string;
-  // New fields (API v2 — optional for backward compat)
-  scope_type?: string;
-  scoped_def_id?: number | null;
+  label: string;
   label_ar?: string;
   label_en?: string;
-  capabilities?: string[];
-  /** Per-module reach cap: { module: 'own' | 'department' | 'all' }. */
-  reach?: Record<string, string>;
-  is_admin_role?: boolean;
+  scope_type: string;
+  capabilities: string[];
+  reach: Record<string, string>;
+  users_count: number;
+  is_system: boolean;
+  is_admin_role: boolean;
+  is_active: boolean;
+  created_at?: string;
 }
 
-export interface PermissionItem {
+export interface RoleWrite {
   name: string;
-  display_name: string;
-}
-
-export interface PermissionCategory {
-  category: string;
-  permissions: PermissionItem[];
-}
-
-// ===== Permission matrix (resource × scope) =====
-
-export interface ScopeOption {
-  key: 'own' | 'department' | 'all';
   label: string;
-  permission: string;
+  label_ar?: string;
+  label_en?: string;
+  scope_type: string;
+  capabilities: string[];
+  reach: Record<string, string>;
+  is_active: boolean;
 }
 
-export interface ScopedAction {
-  key: 'view' | 'edit' | 'create' | 'delete';
-  label: string;
-  permission?: string; // for create/delete
-  scopes?: ScopeOption[]; // for view/edit
+export type AuthorizationAssignmentScopeType =
+  | 'all'
+  | 'organization'
+  | 'department'
+  | 'own'
+  | 'project'
+  | 'program'
+  | 'portfolio'
+  | 'kpi'
+  | 'meeting'
+  | 'survey';
+
+/** Explicit canonical assignment write contract. Server-owned provenance is omitted. */
+export interface AuthorizationRoleAssignmentWrite {
+  role_id: number;
+  scope_type: AuthorizationAssignmentScopeType;
+  scope_id: number | null;
+  inherit_to_children: boolean;
+  expires_at?: string | null;
 }
 
-export interface ScopedResource {
-  key: string;
-  label: string;
-  actions: ScopedAction[];
+export interface AuthorizationRoleAssignmentRequest {
+  user_id: number;
+  replace_all: true;
+  assignments: AuthorizationRoleAssignmentWrite[];
 }
 
-export interface FlatGroup {
-  key: string;
-  label: string;
-  permissions: PermissionItem[];
+/** Canonical assignment returned after the server has resolved tenancy and provenance. */
+export interface AuthorizationRoleAssignment extends AuthorizationRoleAssignmentWrite {
+  id: number;
+  role_name: string;
+  organization_id: number | null;
+  expires_at: string | null;
+  source: string;
 }
 
-export interface PermissionMatrix {
-  scoped: ScopedResource[];
-  flat: FlatGroup[];
+export interface AuthorizationRoleAssignmentResponse {
+  data: {
+    user_id: number;
+    assignments: AuthorizationRoleAssignment[];
+  };
 }
 
 // ===== Unified ability registry (single source for the role builder) =====
@@ -75,7 +82,6 @@ export interface Ability {
 export interface AbilityGroup {
   key: string;
   label: string;
-  store: 'engine' | 'flat';
   abilities: Ability[];
 }
 

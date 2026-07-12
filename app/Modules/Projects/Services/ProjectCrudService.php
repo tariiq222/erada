@@ -4,7 +4,7 @@ namespace App\Modules\Projects\Services;
 
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
-use App\Modules\Core\Models\ScopedRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Performance\Models\Kpi;
@@ -125,7 +125,7 @@ class ProjectCrudService
             // مدير المشروع — يُمثَّل كدور سياقي (scoped role) لا كعمود. قد يكون
             // المنشئ نفسه (السلوك الافتراضي) أو مستخدماً آخر مُعيَّناً صراحةً؛ في
             // الحالة الثانية لا يحصل المنشئ على أي دور سياقي (يبقى created_by فقط).
-            $manager->assignProjectRole($project, ScopedRole::PROJECT_MANAGER, $user->id);
+            $this->teamService->assignAutomaticManager($project, $manager);
 
             // إنشاء المراحل والمهام
             $milestoneIds = $this->milestoneService->createMilestones($project, $milestones);
@@ -407,7 +407,7 @@ class ProjectCrudService
      *  - MilestoneDeliverables: hard-delete (لا SoftDeletes) مع ActivityLog صريح لكل صف.
      *  - ProjectRisks: hard-delete (لا SoftDeletes، LogsActivity يتجاوزه query-builder).
      *  - Stakeholders: hard-delete (لا SoftDeletes ولا LogsActivity) مع ActivityLog صريح لكل صف.
-     *  - ScopedRole: hard-delete ثم flushCache (صحيح كما هو).
+     *  - Canonical project assignments: hard-delete atomically with the project.
      *  - KpiLinks: hard-delete (لا نحتفظ بسجل — الـ KPI نفسه في Performance يبقى).
      *
      * المشروع نفسه soft-delete عبر observer `ProjectObserver::deleted`.
@@ -441,9 +441,11 @@ class ProjectCrudService
             // Stakeholders hard-delete مع ActivityLog لكل صف (لا LogsActivity أصلاً).
             $this->logCascadeDelete($stakeholders, 'project_stakeholder');
 
-            // ScopedRole hard-delete ثم flush الـ decision cache.
-            $project->scopedRoles()->delete();
-            AccessDecision::flushCache();
+            AuthorizationRoleAssignment::query()
+                ->where('scope_type', 'project')
+                ->where('scope_id', $project->id)
+                ->delete();
+            DB::afterCommit(static fn () => AccessDecision::flushCache());
 
             return $project->delete();
         });

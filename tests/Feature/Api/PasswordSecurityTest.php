@@ -41,7 +41,7 @@ class PasswordSecurityTest extends TestCase
             'is_active' => true,
             'password' => Hash::make($this->validPassword),
         ]);
-        $this->user->assignRole('member');
+        $this->assignCanonicalRole($this->user, 'member');
     }
 
     // ========== متطلبات قوة كلمة المرور ==========

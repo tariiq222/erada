@@ -20,7 +20,7 @@ class RiskLifecycleTest extends TestCase
 
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
 
         $risk = Risk::factory()->forOrganization($org)->create([
             'status' => RiskStatus::Open->value,
@@ -52,7 +52,7 @@ class RiskLifecycleTest extends TestCase
 
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
 
         // Closed -> Open is allowed, but Open -> Accepted is NOT in our state
         // machine (only Open->Treating/Accepted/Closed). We use a transition

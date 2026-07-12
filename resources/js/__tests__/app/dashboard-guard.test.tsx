@@ -17,7 +17,7 @@ function renderDashboardRoute() {
         <Route
           path="/dashboard"
           element={
-            <RequirePermission config={{ permission: 'view_dashboard' }}>
+            <RequirePermission capability="dashboard.view">
               <div>Dashboard Content</div>
             </RequirePermission>
           }
@@ -34,22 +34,22 @@ describe('/dashboard route guard (P3-E)', () => {
   });
 
   it('blocks users without view_dashboard permission from rendering the dashboard', () => {
-    const canAccess = vi.fn().mockReturnValue(false);
-    mockUseAuth.mockReturnValue({ isLoading: false, canAccess });
+    const can = vi.fn().mockReturnValue(false);
+    mockUseAuth.mockReturnValue({ isLoading: false, can });
 
     renderDashboardRoute();
 
     expect(screen.queryByText('Dashboard Content')).not.toBeInTheDocument();
-    expect(canAccess).toHaveBeenCalledWith({ permission: 'view_dashboard' });
+    expect(can).toHaveBeenCalledWith('dashboard.view');
   });
 
   it('allows users with view_dashboard permission to access the dashboard', () => {
-    const canAccess = vi.fn().mockReturnValue(true);
-    mockUseAuth.mockReturnValue({ isLoading: false, canAccess });
+    const can = vi.fn().mockReturnValue(true);
+    mockUseAuth.mockReturnValue({ isLoading: false, can });
 
     renderDashboardRoute();
 
     expect(screen.getByText('Dashboard Content')).toBeInTheDocument();
-    expect(canAccess).toHaveBeenCalledWith({ permission: 'view_dashboard' });
+    expect(can).toHaveBeenCalledWith('dashboard.view');
   });
 });

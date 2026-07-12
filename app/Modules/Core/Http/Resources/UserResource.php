@@ -34,15 +34,6 @@ class UserResource extends JsonResource
                 'id' => $this->department->id,
                 'name' => $this->department->name,
             ]),
-            'roles' => $this->whenLoaded('roles', fn () => $this->roles->pluck('name')),
-
-            // Scoped-role pivot (project/department membership role) — kept so the
-            // team UI can render the member's role without exposing raw model columns.
-            'pivot' => $this->whenPivotLoaded('model_has_scoped_roles', fn () => [
-                'role' => $this->pivot->role,
-                'expires_at' => $this->pivot->expires_at,
-            ]),
-
             // التواريخ
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
         ];

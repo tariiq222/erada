@@ -271,7 +271,7 @@ class KpiControllerTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
         $organization = Organization::factory()->create();
 
         $this->actingAs($superAdmin, 'sanctum')
@@ -497,7 +497,7 @@ class KpiControllerTest extends TestCase
             'organization_id' => $organization->id,
             'is_active' => true,
         ]);
-        $admin->assignRole('admin');
+        $this->assignCanonicalRole($admin, 'admin');
 
         return $admin;
     }
@@ -558,7 +558,7 @@ class KpiControllerTest extends TestCase
             'organization_id' => $organization->id,
             'is_active' => true,
         ]);
-        $viewer->assignRole('viewer');
+        $this->assignCanonicalRole($viewer, 'viewer');
         $kpi = $this->makeKpi($organization, $viewer);
 
         $this->actingAs($viewer, 'sanctum')
@@ -606,7 +606,7 @@ class KpiControllerTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $this->actingAs($superAdmin, 'sanctum')
             ->deleteJson("/api/performance/kpis/{$kpi->id}")

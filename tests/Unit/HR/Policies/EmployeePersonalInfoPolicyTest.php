@@ -44,7 +44,7 @@ class EmployeePersonalInfoPolicyTest extends TestCase
             'organization_id' => $orgA->id,
             'department_id' => $deptA->id,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $this->assertTrue($this->policy->view($superAdmin, $infoB));
         $this->assertTrue($this->policy->update($superAdmin, $infoB));

@@ -182,6 +182,18 @@ describe('frontend transition-only allow-list (F3.2)', () => {
 	);
 });
 
+describe('survey responses SPA gate uses canonical capability', () => {
+	// Verified residual (2026-07-12): the /surveys/:id/responses route guard
+	// must require the canonical `surveys.review_responses` capability, not
+	// the legacy flat string `view_survey_responses`. The legacy string is
+	// not in the access bridge's canonical set, so it would silently deny.
+	it('app.tsx requires surveys.review_responses and not view_survey_responses on the responses route', () => {
+		const source = readFileSync(resolve(REPO_ROOT, 'resources/js/app.tsx'), 'utf8');
+		expect(source).toContain('surveys.review_responses');
+		expect(source).not.toContain('view_survey_responses');
+	});
+});
+
 describe('product pages must use canonical capabilities (Phase 9.3 cutover)', () => {
 	// After Phase 9.3, the access bridge no longer reads `user.permissions[]`.
 	// A flat legacy string in a product page is a silent deny (no grant). Pin

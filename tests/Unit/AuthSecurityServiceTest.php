@@ -31,7 +31,7 @@ class AuthSecurityServiceTest extends TestCase
             'is_active' => true,
             'password' => bcrypt('Password@123'),
         ]);
-        $this->user->assignRole('member');
+        $this->assignCanonicalRole($this->user, 'member');
 
         $this->service = app(AuthSecurityService::class);
     }

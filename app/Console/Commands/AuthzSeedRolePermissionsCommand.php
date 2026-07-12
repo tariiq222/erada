@@ -6,15 +6,14 @@ use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Models\AuthorizationResource;
 use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Authorization\Support\CapabilityToAuthorizationRolePermission;
+use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 /**
  * AuthzSeedRolePermissionsCommand -- Phase 1 Task 1.2.1.
  *
- * Seeds the `authorization_role_permissions` pivot (and the
- * `authorization_resources` + `authorization_roles.super_admin` rows it joins
- * against) from the legacy `Capability::all()` catalog.
+ * Seeds the complete canonical authorization role catalog.
  *
  * Behavior:
  *   - No flag        : dry-run preview, writes nothing.
@@ -23,9 +22,7 @@ use Illuminate\Support\Facades\DB;
  *                      super_admin role, and pivot rows in a single DB
  *                      transaction; flushes AccessDecision's cache.
  *
- * Out of scope (HARD): legacy Spatie tables (`roles`, `permissions`,
- * `role_has_permissions`, ...). This command is additive only; it never
- * deletes or modifies Spatie rows.
+ * Legacy Spatie and scoped-role tables are intentionally never read or written.
  */
 class AuthzSeedRolePermissionsCommand extends Command
 {
@@ -33,7 +30,7 @@ class AuthzSeedRolePermissionsCommand extends Command
         {--dry-run : Print the planned seed and exit without writing anything.}
         {--apply : Idempotently write the seed into the new authorization_* tables.}';
 
-    protected $description = 'Phase 1 Task 1.2.1: seed authorization_role_permissions from Capability::all() onto super_admin.';
+    protected $description = 'Seed the canonical authorization resources, roles, and role permissions.';
 
     public function handle(): int
     {
@@ -62,7 +59,7 @@ class AuthzSeedRolePermissionsCommand extends Command
             return $this->preview($mappings, array_keys($distinctResources));
         }
 
-        return $this->apply($mappings, array_keys($distinctResources));
+        return $this->apply();
     }
 
     /**
@@ -76,6 +73,7 @@ class AuthzSeedRolePermissionsCommand extends Command
         $this->info('authz:seed-role-permissions [dry-run preview -- no writes will be performed]');
         $this->line('  Target role        : '.CapabilityToAuthorizationRolePermission::SEED_ROLE_NAME
             .' (label: "'.CapabilityToAuthorizationRolePermission::SEED_ROLE_LABEL.'")');
+        $this->line('  Canonical roles    : '.count(RolesAndPermissionsSeeder::roleCatalog()));
         $this->line('  Capabilities       : '.count($mappings));
         $this->line('  Distinct resources : '.count($distinctResources));
         $this->line('  Pivot rows planned : '.count($mappings));
@@ -100,81 +98,12 @@ class AuthzSeedRolePermissionsCommand extends Command
      * Write the seed into the new authorization_* tables inside a single
      * DB transaction, then flush the AccessDecision cache so the next
      * can() call re-reads from the database.
-     *
-     * @param  list<array{capability: string, resource: class-string, action: string}>  $mappings
-     * @param  list<class-string>  $distinctResources
      */
-    protected function apply(array $mappings, array $distinctResources): int
+    protected function apply(): int
     {
         $this->info('authz:seed-role-permissions --apply');
 
-        DB::transaction(function () use ($mappings, $distinctResources) {
-            // 1. Upsert the super_admin role (composite target for the
-            //    first-pass seed; Phase 2 will introduce additional roles).
-            $role = AuthorizationRole::firstOrCreate(
-                [
-                    'name' => CapabilityToAuthorizationRolePermission::SEED_ROLE_NAME,
-                ],
-                [
-                    'label' => CapabilityToAuthorizationRolePermission::SEED_ROLE_LABEL,
-                ],
-            );
-
-            // 2. Upsert every distinct resource FQCN. We use the model
-            //    short-name as the human label and the FQCN as the unique
-            //    key; the seeded map is the only writer that ever needs
-            //    the resource catalog at this point.
-            foreach ($distinctResources as $fqcn) {
-                $shortName = $this->shortName($fqcn);
-
-                $existing = AuthorizationResource::where('key', $fqcn)->first();
-                if ($existing === null) {
-                    AuthorizationResource::create([
-                        'key' => $fqcn,
-                        'label' => $shortName,
-                    ]);
-                } elseif ($existing->label !== $shortName) {
-                    // Refresh the label so a future rename of the canonical
-                    // model does not leave a stale label behind. Skip when
-                    // unchanged so the timestamp doesn't churn.
-                    $existing->label = $shortName;
-                    $existing->save();
-                }
-            }
-
-            // 3. Resolve every resource id by FQCN (one read after the
-            //    upserts above so we hit the cache), then upsert each
-            //    pivot row against the composite primary key.
-            $resourcesByKey = AuthorizationResource::query()
-                ->whereIn('key', $distinctResources)
-                ->pluck('id', 'key');
-
-            foreach ($mappings as $row) {
-                $resourceId = $resourcesByKey[$row['resource']] ?? null;
-                if ($resourceId === null) {
-                    // Defensive: should be impossible because we just
-                    // upserted every distinct resource above.
-                    continue;
-                }
-
-                // updateOrInsert() returns bool true on both insert and
-                // "no-op update" paths, so its return value is unsafe to
-                // use as a write counter -- it over-counts when the same
-                // (resource, action) pair is mapped by more than one
-                // Capability. The pivot's composite primary key dedupes
-                // the row, but the boolean cannot distinguish the two
-                // branches. We therefore report present counts after the
-                // transaction commits instead of in-loop write deltas.
-                DB::table('authorization_role_permissions')->updateOrInsert(
-                    [
-                        'authorization_role_id' => $role->id,
-                        'authorization_resource_id' => $resourceId,
-                        'action' => $row['action'],
-                    ],
-                    [],
-                );
-            }
-        });
+        app(RolesAndPermissionsSeeder::class)->run();
 
         // Drop every memoized input the engine caches so the freshly seeded
         // pivot rows are visible to the next AccessDecision::can() call.
@@ -186,26 +115,14 @@ class AuthzSeedRolePermissionsCommand extends Command
         // numbers). This also makes the report independent of the
         // updateOrInsert() boolean quirks called out above.
         $resourcesPresent = AuthorizationResource::count();
+        $rolesPresent = AuthorizationRole::count();
         $pivotsPresent = DB::table('authorization_role_permissions')->count();
 
         $this->line(sprintf('  Resources present: %d', $resourcesPresent));
+        $this->line(sprintf('  Roles present: %d', $rolesPresent));
         $this->line(sprintf('  Pivot rows present: %d', $pivotsPresent));
         $this->info('Seed completed successfully (apply mode).');
 
         return self::SUCCESS;
-    }
-
-    /**
-     * Derive a short label from a model FQCN -- the basename without the
-     * `App\Modules\<Module>\Models\` prefix.
-     */
-    private function shortName(string $fqcn): string
-    {
-        $position = strrpos($fqcn, '\\');
-        if ($position === false) {
-            return $fqcn;
-        }
-
-        return substr($fqcn, $position + 1);
     }
 }

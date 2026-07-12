@@ -63,7 +63,7 @@ class RiskNotificationsAndPolicyTest extends TestCase
      * Spatie flat permissions have been removed from the catalog (Wave 3 task 8)
      * and are ignored by the engine even if present.
      *
-     * Cross-org isolation and ScopedRole-based grants are verified in:
+     * Cross-org isolation and canonical assignment grants are verified in:
      *   tests/Unit/RiskManagement/Policies/RiskPolicyTest
      *   tests/Feature/Authorization/RiskPolicyParityTest
      */

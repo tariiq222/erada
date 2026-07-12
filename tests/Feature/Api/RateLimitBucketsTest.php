@@ -4,7 +4,6 @@ namespace Tests\Feature\Api;
 
 use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -93,7 +92,7 @@ class RateLimitBucketsTest extends TestCase
             'organization_id' => $this->organization->id,
             'department_id' => $this->department->id,
         ]);
-        $this->user->assignProjectRole($this->project, ScopedRole::PROJECT_MANAGER, $this->user->id);
+        $this->assignCanonicalRole($this->user, 'project_manager', 'project', $this->project->id);
     }
 
     // ============================================================

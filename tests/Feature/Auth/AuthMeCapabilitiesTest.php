@@ -3,33 +3,16 @@
 namespace Tests\Feature\Auth;
 
 use App\Modules\Core\Authorization\Capability;
-use App\Modules\Core\Contracts\CapabilityProvider;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
-/**
- * AuthMeCapabilitiesTest — Phase 2 of ADR-UNIFIED-ROLE-ACCESS, advanced through
- * Phase 9.3 (2026-07-05).
- *
- * The /api/user (auth/me) payload exposes engine-derived keys:
- *   - `capabilities`: the canonical Capability::all() list the user effectively
- *     holds, plus module-owned provider wire flags kept for compatibility.
- *   - `access`: a structured `{module: {action: true}}` projection derived
- *     only from canonical capabilities — the read-side object consumed by the
- *     SPA `useCan` / `useAccess` hooks.
- *   - `scoped_roles`: the user's scoped role assignments from
- *     model_has_scoped_roles, shape {role, scope_type, scope_id, label}.
- *   - `roles`: the legacy Spatie role names, retained for SPA role-gated UI.
- *
- * After Phase 9.3 the legacy `permissions[]` flat blob is removed from the
- * payload. SPA gating MUST read `access` / `capabilities` (via the access
- * bridge) instead of `permissions`. See docs/authz/deprecation-policy.md.
- */
+/** Verifies the canonical capabilities/access/role_assignments /api/user payload. */
 class AuthMeCapabilitiesTest extends TestCase
 {
     use RefreshDatabase;
@@ -41,32 +24,27 @@ class AuthMeCapabilitiesTest extends TestCase
         $this->seed(RolesAndPermissionsSeeder::class);
     }
 
-    public function test_auth_me_returns_engine_capabilities_key(): void
+    public function test_auth_me_returns_engine_capabilities_and_canonical_assignments(): void
     {
         $user = User::factory()->create(['is_active' => true]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
-        $response = $this->actingAs($user, 'sanctum')
+        $payload = $this->actingAs($user, 'sanctum')
             ->getJson('/api/user')
             ->assertOk()
-            ->assertJsonStructure(['user' => ['capabilities', 'scoped_roles']]);
+            ->assertJsonStructure(['user' => ['capabilities', 'access', 'role_assignments']])
+            ->json('user');
 
-        $capabilities = $response->json('user.capabilities');
-        $this->assertIsArray($capabilities);
-        // Canonical module.action form present.
-        $this->assertContains(Capability::PROJECTS_VIEW, $capabilities);
-        $this->assertContains(Capability::TASKS_VIEW, $capabilities);
-        $this->assertEveryCapabilityIsKnownAuthMeWireKey($capabilities, $user);
+        $this->assertContains(Capability::PROJECTS_VIEW, $payload['capabilities']);
+        $this->assertContains(Capability::TASKS_VIEW, $payload['capabilities']);
+        $this->assertEveryCapabilityIsCanonical($payload['capabilities']);
+        $this->assertCount(1, $payload['role_assignments']);
     }
 
-    public function test_capabilities_is_coherent_with_access_map(): void
+    public function test_access_is_a_truthy_projection_of_capabilities(): void
     {
-        // Phase 9.3: legacy `permissions[]` blob removed. `access` is the
-        // read-side projection derived from `capabilities`; pin that every
-        // `access.module.action` key exists in `capabilities`, so the SPA
-        // `useCan` hook cannot drift from the engine-derived source of truth.
         $user = User::factory()->create(['is_active' => true]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         $payload = $this->actingAs($user, 'sanctum')
             ->getJson('/api/user')
@@ -74,174 +52,72 @@ class AuthMeCapabilitiesTest extends TestCase
             ->json('user');
 
         $this->assertNotEmpty($payload['capabilities']);
-        foreach ($payload['access'] as $module => $actions) {
-            foreach ($actions as $action => $_) {
-                $this->assertContains(
-                    $module.'.'.$action,
-                    $payload['capabilities'],
-                    "user.access key '{$module}.{$action}' must exist in user.capabilities",
-                );
-            }
-        }
+        $this->assertSame(array_fill_keys($payload['capabilities'], true), $payload['access']);
     }
 
-    public function test_auth_me_includes_scoped_role_assignments_for_scoped_user(): void
+    public function test_auth_me_includes_canonical_department_assignment(): void
     {
-        $org = Organization::factory()->create(['is_active' => true]);
-        $department = Department::factory()->create(['organization_id' => $org->id]);
+        $organization = Organization::factory()->create(['is_active' => true]);
+        $department = Department::factory()->create(['organization_id' => $organization->id]);
         $user = User::factory()->create([
             'is_active' => true,
-            'organization_id' => $org->id,
+            'organization_id' => $organization->id,
         ]);
-
-        ScopedRole::create([
-            'user_id' => $user->id,
-            'role' => ScopedRole::DEPARTMENT_MANAGER,
-            'scope_type' => ScopedRole::SCOPE_DEPARTMENT,
-            'scope_id' => $department->id,
-            'source' => 'manual',
-        ]);
-
-        $scoped = $this->actingAs($user, 'sanctum')
-            ->getJson('/api/user')
-            ->assertOk()
-            ->json('user.scoped_roles');
-
-        $this->assertIsArray($scoped);
-        $this->assertCount(1, $scoped);
-        $this->assertSame(ScopedRole::DEPARTMENT_MANAGER, $scoped[0]['role']);
-        $this->assertSame(ScopedRole::SCOPE_DEPARTMENT, $scoped[0]['scope_type']);
-        $this->assertSame($department->id, $scoped[0]['scope_id']);
-        $this->assertArrayHasKey('label', $scoped[0]);
-        $this->assertNotEmpty($scoped[0]['label']);
-    }
-
-    public function test_auth_me_scoped_roles_empty_for_user_without_scoped_role(): void
-    {
-        $user = User::factory()->create(['is_active' => true]);
-
-        $scoped = $this->actingAs($user, 'sanctum')
-            ->getJson('/api/user')
-            ->assertOk()
-            ->json('user.scoped_roles');
-
-        $this->assertIsArray($scoped);
-        $this->assertSame([], $scoped);
-    }
-
-    public function test_auth_me_keeps_legacy_roles_intact_but_drops_permissions(): void
-    {
-        // Phase 9.3 cutover: legacy `roles[]` is still emitted (used by
-        // legacy role-gated UI) but the legacy `permissions[]` flat blob is
-        // removed — engine-derived `capabilities[]` is the single source.
-        $user = User::factory()->create(['is_active' => true]);
-        $user->assignRole('super_admin');
-        $user->givePermissionTo('view_projects');
+        $assignment = $this->createContractRoleAssignment(
+            $user,
+            'dept_manager',
+            AuthorizationRoleAssignment::SCOPE_DEPARTMENT,
+            $department->id,
+        );
 
         $payload = $this->actingAs($user, 'sanctum')
             ->getJson('/api/user')
             ->assertOk()
             ->json('user');
 
-        // Legacy role key still present and populated.
-        $this->assertContains('super_admin', $payload['roles']);
-        // Legacy permissions blob is removed (Phase 9.3 cutover).
+        $assignments = $payload['role_assignments'];
+
+        $this->assertCount(1, $assignments);
+        $this->assertSame($assignment->id, $assignments[0]['id']);
+        $this->assertSame('dept_manager', $assignments[0]['role']);
+        $this->assertSame(AuthorizationRoleAssignment::SCOPE_DEPARTMENT, $assignments[0]['scope_type']);
+        $this->assertSame($department->id, $assignments[0]['scope_id']);
+        $this->assertSame($organization->id, $assignments[0]['organization_id']);
+        $this->assertSame('manual', $assignments[0]['source']);
+        $this->assertContains(Capability::DEPARTMENTS_MANAGE_MEMBERS, $payload['capabilities']);
+        $this->assertContains(Capability::PROJECTS_VIEW, $payload['capabilities']);
+        $this->assertTrue($payload['access'][Capability::DEPARTMENTS_MANAGE_MEMBERS]);
+    }
+
+    public function test_role_assignments_is_empty_for_user_without_assignment(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+
+        $assignments = $this->actingAs($user, 'sanctum')
+            ->getJson('/api/user')
+            ->assertOk()
+            ->json('user.role_assignments');
+
+        $this->assertSame([], $assignments);
+    }
+
+    public function test_auth_me_omits_all_legacy_authorization_payloads(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $this->grantCanonicalSuperAdmin($user);
+
+        $payload = $this->actingAs($user, 'sanctum')
+            ->getJson('/api/user')
+            ->assertOk()
+            ->json('user');
+
+        $this->assertArrayNotHasKey('roles', $payload);
         $this->assertArrayNotHasKey('permissions', $payload);
+        $this->assertArrayNotHasKey('scoped_roles', $payload);
     }
 
-    public function test_auth_me_exposes_structured_user_access_payload(): void
+    public function test_access_and_capabilities_are_empty_for_user_without_assignments(): void
     {
-        // Phase 1 of the master AuthZ unification plan: an additive
-        // `user.access` projection is derived only from canonical
-        // module.action capabilities (e.g. tasks.assign). Legacy
-        // roles/permissions/capabilities keys MUST remain intact.
-        $user = User::factory()->create(['is_active' => true]);
-        $user->assignRole('super_admin');
-
-        $payload = $this->actingAs($user, 'sanctum')
-            ->getJson('/api/user')
-            ->assertOk()
-            ->json('user');
-
-        $this->assertArrayHasKey('access', $payload);
-        $this->assertIsArray($payload['access']);
-        $this->assertNotEmpty($payload['access']);
-    }
-
-    public function test_user_access_is_an_object_map_of_truthy_values(): void
-    {
-        $user = User::factory()->create(['is_active' => true]);
-        $user->assignRole('super_admin');
-
-        $access = $this->actingAs($user, 'sanctum')
-            ->getJson('/api/user')
-            ->assertOk()
-            ->json('user.access');
-
-        $this->assertIsArray($access);
-        foreach ($access as $module => $actions) {
-            $this->assertIsString($module, "access module '{$module}' must be a string");
-            $this->assertIsArray($actions, "access[{$module}] must be an array");
-            foreach ($actions as $action => $value) {
-                $this->assertIsString($action, "access[{$module}][action] key must be a string");
-                $this->assertTrue($value === true, "access[{$module}][{$action}] must be exactly true");
-            }
-        }
-    }
-
-    public function test_every_user_access_key_is_a_real_capability(): void
-    {
-        $user = User::factory()->create(['is_active' => true]);
-        $user->assignRole('super_admin');
-
-        $payload = $this->actingAs($user, 'sanctum')
-            ->getJson('/api/user')
-            ->assertOk()
-            ->json('user');
-
-        $this->assertNotEmpty($payload['capabilities']);
-        foreach ($payload['access'] as $module => $actions) {
-            foreach ($actions as $action => $_) {
-                $key = $module.'.'.$action;
-                $this->assertContains(
-                    $key,
-                    $payload['capabilities'],
-                    "user.access key '{$key}' must exist in user.capabilities"
-                );
-            }
-        }
-    }
-
-    public function test_user_access_does_not_introduce_grants_beyond_capabilities(): void
-    {
-        // The projection is read-side only: keys in user.access must be a
-        // subset of user.capabilities. This pins that the projection does not
-        // bypass the engine decision.
-        $user = User::factory()->create(['is_active' => true]);
-        $user->assignRole('super_admin');
-
-        $payload = $this->actingAs($user, 'sanctum')
-            ->getJson('/api/user')
-            ->assertOk()
-            ->json('user');
-
-        $accessKeys = [];
-        foreach ($payload['access'] ?? [] as $module => $actions) {
-            foreach ($actions as $action => $_) {
-                $accessKeys[] = $module.'.'.$action;
-            }
-        }
-
-        foreach ($accessKeys as $key) {
-            $this->assertContains($key, $payload['capabilities']);
-        }
-    }
-
-    public function test_user_access_is_empty_for_user_without_capabilities(): void
-    {
-        // A user with no roles and no capabilities gets an empty (but still
-        // present and well-shaped) access map. This guards against 500s
-        // when the frontend assumes access is always an object.
         $user = User::factory()->create(['is_active' => true]);
 
         $payload = $this->actingAs($user, 'sanctum')
@@ -249,38 +125,43 @@ class AuthMeCapabilitiesTest extends TestCase
             ->assertOk()
             ->json('user');
 
-        $this->assertArrayHasKey('access', $payload);
-        $this->assertIsArray($payload['access']);
+        $this->assertSame([], $payload['capabilities']);
         $this->assertSame([], $payload['access']);
+        $this->assertSame([], $payload['role_assignments']);
     }
 
-    /**
-     * @param  array<int, string>  $capabilities
-     */
-    private function assertEveryCapabilityIsKnownAuthMeWireKey(array $capabilities, User $user): void
+    /** @param list<string> $capabilities */
+    private function assertEveryCapabilityIsCanonical(array $capabilities): void
     {
         $known = array_fill_keys(Capability::all(), true);
 
-        foreach (app()->tagged('engined_capability_providers') as $provider) {
-            if (! $provider instanceof CapabilityProvider) {
-                continue;
-            }
-
-            foreach (array_keys($provider->userCapabilities($user)) as $wireKey) {
-                $known[$wireKey] = true;
-            }
+        foreach ($capabilities as $capability) {
+            $this->assertArrayHasKey($capability, $known, "capability '{$capability}' is not canonical");
+            $this->assertMatchesRegularExpression(
+                '/^[a-z_]+(?:\.[a-z_]+)+$/',
+                $capability,
+                "capability '{$capability}' is not in canonical dotted form",
+            );
         }
+    }
 
-        foreach ($capabilities as $cap) {
-            $this->assertArrayHasKey($cap, $known, "capability '{$cap}' is not a known auth/me wire key");
+    private function createContractRoleAssignment(
+        User $user,
+        string $roleName,
+        string $scopeType = AuthorizationRoleAssignment::SCOPE_ALL,
+        ?int $scopeId = null,
+    ): AuthorizationRoleAssignment {
+        $role = AuthorizationRole::query()->where('name', $roleName)->firstOrFail();
 
-            if (str_contains($cap, '.')) {
-                $this->assertMatchesRegularExpression('/^[a-z_]+(?:\.[a-z_]+)+$/', $cap, "capability '{$cap}' is not dotted form");
-
-                continue;
-            }
-
-            $this->assertMatchesRegularExpression('/^[a-z_]+(?:_[a-z_]+)+$/', $cap, "capability '{$cap}' is not legacy flat form");
-        }
+        return AuthorizationRoleAssignment::query()->create([
+            'authorization_role_id' => $role->id,
+            'user_id' => $user->id,
+            'scope_type' => $scopeType,
+            'scope_id' => $scopeId,
+            'organization_id' => $scopeType === AuthorizationRoleAssignment::SCOPE_DEPARTMENT
+                ? Department::query()->whereKey($scopeId)->value('organization_id')
+                : null,
+            'source' => 'manual',
+        ]);
     }
 }

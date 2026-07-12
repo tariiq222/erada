@@ -85,9 +85,9 @@ class CoreUnauthenticatedTest extends TestCase
             ['DELETE', '/api/roles/1'],
             ['POST', '/api/roles/assign'],
 
-            // Scoped roles user + audit
-            ['GET', '/api/scoped-roles/user/1'],
-            ['GET', '/api/scoped-roles/audit-logs'],
+            // Canonical authorization-role assignments user + audit
+            ['GET', '/api/authorization-role-assignments/user/1'],
+            ['GET', '/api/authorization-role-assignments/audit-logs'],
 
             // Project-scoped roles (under /projects/{project}/roles)
             ['GET', '/api/projects/1/roles'],

@@ -3,13 +3,12 @@
 namespace Tests\Feature\Api;
 
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
-use Spatie\Permission\Models\Role;
 use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
@@ -38,10 +37,19 @@ class UserCrossOrgAndEscalationTest extends TestCase
         $this->deptA = Department::factory()->create(['organization_id' => $this->orgA->id]);
         $this->deptB = Department::factory()->create(['organization_id' => $this->orgB->id]);
 
-        // Spatie role kept (some legacy code paths still read it) but it carries
-        // no flat permissions — engine capability grants are the only thing the
-        // UserPolicy consults.
-        Role::create(['name' => 'org_viewer', 'guard_name' => 'web']);
+    }
+
+    /** @param list<string> $capabilities */
+    private function makeCapabilityUser(array $capabilities, Organization $org): User
+    {
+        $user = User::factory()->create([
+            'organization_id' => $org->id,
+            'department_id' => $org->id === $this->orgA->id ? $this->deptA->id : $this->deptB->id,
+            'is_active' => true,
+        ]);
+        $this->grantEngineCapability($user, $capabilities, 'organization', $org->id);
+
+        return $user;
     }
 
     private function makeUser(string $role, Organization $org): User
@@ -53,14 +61,14 @@ class UserCrossOrgAndEscalationTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $user->assignRole($role);
+        $this->assignCanonicalRole($user, $role);
 
         return $user;
     }
 
     public function test_non_admin_view_users_holder_cannot_view_cross_org_user(): void
     {
-        $actor = $this->makeUser('org_viewer', $this->orgA);
+        $actor = $this->makeCapabilityUser([Capability::USERS_VIEW], $this->orgA);
         $target = $this->makeUser('member', $this->orgB);
 
         $response = $this->actingAs($actor, 'sanctum')
@@ -71,7 +79,7 @@ class UserCrossOrgAndEscalationTest extends TestCase
 
     public function test_non_admin_edit_users_holder_cannot_update_cross_org_user(): void
     {
-        $actor = $this->makeUser('org_viewer', $this->orgA);
+        $actor = $this->makeCapabilityUser([Capability::USERS_EDIT], $this->orgA);
         $target = $this->makeUser('member', $this->orgB);
 
         $response = $this->actingAs($actor, 'sanctum')
@@ -84,7 +92,7 @@ class UserCrossOrgAndEscalationTest extends TestCase
 
     public function test_non_admin_delete_users_holder_cannot_delete_cross_org_user(): void
     {
-        $actor = $this->makeUser('org_viewer', $this->orgA);
+        $actor = $this->makeCapabilityUser([Capability::USERS_DELETE], $this->orgA);
         $target = $this->makeUser('member', $this->orgB);
 
         $response = $this->actingAs($actor, 'sanctum')
@@ -95,10 +103,7 @@ class UserCrossOrgAndEscalationTest extends TestCase
 
     public function test_non_admin_holder_can_view_same_org_user(): void
     {
-        $actor = $this->makeUser('org_viewer', $this->orgA);
-        // Engine: UserPolicy::view routes through Capability::USERS_VIEW; the
-        // legacy 'view_users' Spatie permission is no longer honored.
-        $this->grantEngineCapability($actor, Capability::USERS_VIEW);
+        $actor = $this->makeCapabilityUser([Capability::USERS_VIEW], $this->orgA);
         $target = $this->makeUser('member', $this->orgA);
 
         $response = $this->actingAs($actor, 'sanctum')
@@ -109,14 +114,13 @@ class UserCrossOrgAndEscalationTest extends TestCase
 
     public function test_index_does_not_include_cross_org_users(): void
     {
-        $actor = $this->makeUser('org_viewer', $this->orgA);
-        $this->grantEngineCapability($actor, Capability::USERS_VIEW);
+        $actor = $this->makeCapabilityUser([Capability::USERS_VIEW], $this->orgA);
         $orgBMember = User::factory()->create([
             'organization_id' => $this->orgB->id,
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $orgBMember->assignRole('member');
+        $this->assignCanonicalRole($orgBMember, 'member');
 
         $response = $this->actingAs($actor, 'sanctum')
             ->getJson('/api/users');
@@ -131,14 +135,11 @@ class UserCrossOrgAndEscalationTest extends TestCase
     public function test_user_store_rejects_cross_org_roles_array(): void
     {
         // Non-super_admin actor in orgA with USERS_CREATE capability.
-        $actor = $this->makeUser('org_viewer', $this->orgA);
-        $this->grantEngineCapability($actor, Capability::USERS_CREATE);
+        $actor = $this->makeCapabilityUser([Capability::USERS_CREATE], $this->orgA);
+        $this->grantCanonicalAdmin($actor, 'organization', $this->orgA->id);
+        $this->grantEngineCapability($actor, Capability::USERS_CREATE, 'organization', $this->orgA->id, 'admin');
 
-        // admin is part of the Spatie compat set, so the assignment helper
-        // still mirrors it there in addition to the org-scoped row.
-        Role::findOrCreate('admin', 'web');
-
-        // Attempt to create a user pinned to orgB AND with roles[] applied.
+        // Attempt to create a user pinned to orgB with a canonical assignment.
         // The controller's org-lock step forces organization_id to the actor's
         // own org (orgA) for non-super_admin actors, AND the new explicit
         // assertSameOrganization guard (defense-in-depth) before applyRoleAssignment
@@ -150,7 +151,11 @@ class UserCrossOrgAndEscalationTest extends TestCase
                 'password' => 'Password123!',
                 'organization_id' => $this->orgB->id,
                 'department_id' => $this->deptB->id,
-                'roles' => ['admin'],
+                'assignments' => [[
+                    'role_id' => $this->roleId('member'),
+                    'scope_type' => 'organization',
+                    'scope_id' => $this->orgB->id,
+                ]],
             ]);
 
         // The org-lock step rejects the cross-org payload before the user is
@@ -162,21 +167,24 @@ class UserCrossOrgAndEscalationTest extends TestCase
         ]);
     }
 
-    public function test_user_store_creates_user_in_actors_own_org_with_roles(): void
+    public function test_user_store_creates_user_in_actors_own_org_with_canonical_assignment(): void
     {
         // Positive case: non-super_admin with admin-tier status can create a
-        // user in their own org with roles[] applied. The org-lock +
+        // user in their own org with a canonical assignment. The org-lock +
         // assertSameOrganization guards pass by construction because the new
         // user is forced into orgA.
-        $actor = $this->makeUser('org_viewer', $this->orgA);
-        // Admin tier (SETTINGS_MANAGE) is required to assign the 'admin' role
-        // per RoleHierarchy::canAssignTo. USERS_CREATE alone is not enough.
-        $this->grantEngineCapability($actor, [
+        $actor = $this->makeCapabilityUser([
             Capability::USERS_CREATE,
-            Capability::SETTINGS_MANAGE,
-        ]);
-
-        Role::findOrCreate('admin', 'web');
+            Capability::CORE_ASSIGN_ROLES,
+        ], $this->orgA);
+        $this->grantCanonicalAdmin($actor, 'organization', $this->orgA->id);
+        $this->grantEngineCapability(
+            $actor,
+            [Capability::USERS_CREATE, Capability::CORE_ASSIGN_ROLES],
+            'organization',
+            $this->orgA->id,
+            'admin',
+        );
 
         $response = $this->actingAs($actor, 'sanctum')
             ->postJson('/api/users', [
@@ -184,7 +192,11 @@ class UserCrossOrgAndEscalationTest extends TestCase
                 'email' => 'same.org.user@example.com',
                 'password' => 'Password123!',
                 'department_id' => $this->deptA->id,
-                'roles' => ['admin'],
+                'assignments' => [[
+                    'role_id' => $this->roleId('member'),
+                    'scope_type' => 'organization',
+                    'scope_id' => $this->orgA->id,
+                ]],
             ]);
 
         $response->assertStatus(201);
@@ -192,21 +204,36 @@ class UserCrossOrgAndEscalationTest extends TestCase
         $created = User::where('email', 'same.org.user@example.com')->first();
         $this->assertNotNull($created);
         $this->assertSame($this->orgA->id, $created->organization_id);
-        $this->assertContains('admin', $created->fresh()->roles->pluck('name')->all());
+        $this->assertDatabaseHas('authorization_role_assignments', [
+            'user_id' => $created->id,
+            'authorization_role_id' => $this->roleId('member'),
+            'scope_type' => 'organization',
+            'scope_id' => $this->orgA->id,
+        ]);
     }
 
-    public function test_user_store_accepts_scoped_definition_role_without_spatie_role(): void
+    public function test_user_store_accepts_custom_canonical_role(): void
     {
-        $actor = $this->makeUser('org_viewer', $this->orgA);
-        $this->grantEngineCapability($actor, [
+        $actor = $this->makeCapabilityUser([
             Capability::USERS_CREATE,
-            Capability::SETTINGS_MANAGE,
-        ]);
-
-        $this->createOrgRoleDefinition('pmo_member', 'عضو مكتب المشاريع', [
+            Capability::CORE_ASSIGN_ROLES,
             Capability::PROJECTS_VIEW,
+        ], $this->orgA);
+        $this->grantCanonicalAdmin($actor, 'organization', $this->orgA->id);
+        $this->grantEngineCapability(
+            $actor,
+            [Capability::USERS_CREATE, Capability::CORE_ASSIGN_ROLES, Capability::PROJECTS_VIEW],
+            'organization',
+            $this->orgA->id,
+            'admin',
+        );
+
+        $role = AuthorizationRole::query()->create([
+            'name' => 'pmo_member',
+            'label' => 'PMO Member',
+            'scope_type' => 'organization',
+            'is_active' => true,
         ]);
-        $this->assertDatabaseMissing('roles', ['name' => 'pmo_member']);
 
         $response = $this->actingAs($actor, 'sanctum')
             ->postJson('/api/users', [
@@ -214,50 +241,28 @@ class UserCrossOrgAndEscalationTest extends TestCase
                 'email' => 'pmo.scoped.user@example.com',
                 'password' => 'Password123!',
                 'department_id' => $this->deptA->id,
-                'roles' => ['pmo_member'],
+                'assignments' => [[
+                    'role_id' => $role->id,
+                    'scope_type' => 'organization',
+                    'scope_id' => $this->orgA->id,
+                ]],
             ]);
 
-        $response->assertStatus(201)
-            ->assertJsonPath('user.roles.0', 'pmo_member');
+        $response->assertStatus(201);
 
         $created = User::where('email', 'pmo.scoped.user@example.com')->first();
         $this->assertNotNull($created);
-        $this->assertDatabaseHas('model_has_scoped_roles', [
+        $this->assertDatabaseHas('authorization_role_assignments', [
             'user_id' => $created->id,
-            'role' => 'pmo_member',
+            'authorization_role_id' => $role->id,
             'scope_type' => 'organization',
             'scope_id' => $this->orgA->id,
             'source' => 'manual',
         ]);
-        $this->assertDatabaseMissing('model_has_roles', [
-            'model_id' => $created->id,
-            'model_type' => User::class,
-        ]);
     }
 
-    /**
-     * @param  array<int, string>  $permissions
-     */
-    private function createOrgRoleDefinition(string $roleKey, string $labelAr, array $permissions): void
+    private function roleId(string $name): int
     {
-        $orgScopeTypeId = DB::table('scope_types')->where('key', 'organization')->value('id');
-        $this->assertNotNull($orgScopeTypeId);
-
-        DB::table('scoped_role_definitions')->updateOrInsert(
-            ['scope_type_id' => $orgScopeTypeId, 'role_key' => $roleKey],
-            [
-                'name' => 'organization.'.$roleKey,
-                'display_name' => $labelAr,
-                'scope_type' => 'organization',
-                'label_ar' => $labelAr,
-                'label_en' => $roleKey,
-                'permissions' => json_encode($permissions),
-                'is_admin_role' => false,
-                'is_active' => true,
-                'sort_order' => 99,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]
-        );
+        return (int) AuthorizationRole::query()->where('name', $name)->valueOrFail('id');
     }
 }

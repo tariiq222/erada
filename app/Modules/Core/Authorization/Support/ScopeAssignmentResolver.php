@@ -144,18 +144,57 @@ final class ScopeAssignmentResolver
             return false;
         }
 
-        // Use the target's DIRECT department only. The ScopeAware chain
-        // also lists ancestor departments (because each Department walks
-        // up via parent_id), but matching against ancestors would let
-        // an `inherit_to_children=false` role at a parent dept leak onto
-        // a child-dept target via the chain. Direct department_id is
-        // the one the brief pins for this slice.
-        $directDeptId = $target->getAttribute('department_id');
+        // Resolve the nearest direct department carried by the target or one
+        // of its non-department scope parents. A Task attached to a Project,
+        // for example, normally has no department_id of its own; the Project's
+        // department is the direct governing department for that task.
+        //
+        // Stop when a Department node is reached instead of using its id as a
+        // fallback. Otherwise an assignment at a parent department with
+        // inherit_to_children=false could match a child target merely because
+        // the chain eventually walks through that parent.
+        $directDeptId = self::nearestDirectDepartmentId($target);
         if ($directDeptId === null) {
             return false;
         }
 
         return in_array((int) $directDeptId, $subtree, true);
+    }
+
+    private static function nearestDirectDepartmentId(Model $target): ?int
+    {
+        $current = $target;
+        $visited = [];
+        $isTarget = true;
+
+        while ($current instanceof Model) {
+            $key = get_class($current).':'.$current->getKey();
+            if (isset($visited[$key])) {
+                return null;
+            }
+            $visited[$key] = true;
+
+            if ($current instanceof Department) {
+                return $isTarget ? (int) $current->getKey() : null;
+            }
+
+            foreach (['department_id', 'reporter_department_id'] as $departmentAttribute) {
+                $departmentId = $current->getAttribute($departmentAttribute);
+                if ($departmentId !== null) {
+                    return (int) $departmentId;
+                }
+            }
+
+            if (! $current instanceof ScopeAware) {
+                return null;
+            }
+
+            $parent = $current->scopeParent();
+            $current = $parent instanceof Model ? $parent : null;
+            $isTarget = false;
+        }
+
+        return null;
     }
 
     // ============================================================

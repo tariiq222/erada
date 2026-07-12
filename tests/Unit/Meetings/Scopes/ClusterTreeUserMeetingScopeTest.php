@@ -171,7 +171,7 @@ class ClusterTreeUserMeetingScopeTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $super->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($super);
 
         $query = Meeting::query();
         $this->scope->applyToMeetings($query, $super);

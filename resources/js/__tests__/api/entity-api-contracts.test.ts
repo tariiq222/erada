@@ -106,31 +106,36 @@ describe('entity API endpoint contracts', () => {
     expect(risksDashboardApi.exportUrl('pdf')).toBe('/api/risk-management/export/pdf');
   });
 
-  it('covers admin, role, and scoped-role API wrappers including export failure behavior', async () => {
+  it('covers admin, role, and authorization-assignment API wrappers including export failure behavior', async () => {
     const { organizationsApi, scopeTypesApi, activityLogsApi } = await import('@entities/admin/api/admin.api');
     const { rolesApi } = await import('@entities/role/api/role.api');
-    const { scopedRolesApi } = await import('@entities/scoped-role/api/scoped-role.api');
+    const { authorizationAssignmentsApi } = await import('@entities/authorization-assignment/api/authorization-assignment.api');
 
     await organizationsApi.list({ active: true, page: 1 });
     await organizationsApi.get(1);
     await organizationsApi.create({ name: 'Org' } as any);
     await organizationsApi.update(1, { name: 'Updated' } as any);
     await organizationsApi.delete(1);
-    await scopeTypesApi.list({ search: 'project' });
-    await scopeTypesApi.get(2);
-    await scopeTypesApi.create({ name: 'scope' } as any);
-    await scopeTypesApi.update(2, { name: 'scope2' } as any);
-    await scopeTypesApi.delete(2);
+    await scopeTypesApi.list();
     await activityLogsApi.list({ action: 'login' });
     await activityLogsApi.get(3);
     await rolesApi.list();
     await rolesApi.get(4);
-    await rolesApi.create({ name: 'reviewer', permissions: ['view_projects'] });
-    await rolesApi.update(4, { permissions: ['edit_projects'] });
+    const roleWrite = {
+      name: 'reviewer',
+      label: 'Reviewer',
+      scope_type: 'organization',
+      capabilities: ['projects.view'],
+      reach: { projects: 'department' },
+      is_active: true,
+    };
+    await rolesApi.create(roleWrite);
+    await rolesApi.update(4, { ...roleWrite, capabilities: ['projects.edit'] });
     await rolesApi.delete(4);
-    await rolesApi.permissions();
-    await rolesApi.assignToUser({ user_id: 9, roles: ['admin'] });
-    await scopedRolesApi.auditLogs({ user_id: 9, role: 'manager', scope_type: '', page: 1 } as any);
+    await rolesApi.abilities();
+    await rolesApi.scopeOptions();
+    await rolesApi.assignToUser({ user_id: 9, replace_all: true, assignments: [] });
+    await authorizationAssignmentsApi.auditLogs({ user_id: 9, role: 'manager', scope_type: '', page: 1 } as any);
 
     const blob = new Blob(['csv']);
     mockApi.blob.mockResolvedValueOnce(blob);
@@ -141,6 +146,6 @@ describe('entity API endpoint contracts', () => {
     await expect(activityLogsApi.exportJson({ action: 'logout' })).rejects.toThrow('Export failed');
 
     expect(mockApi.get).toHaveBeenCalledWith('/organizations?active=true&page=1');
-    expect(mockApi.get).toHaveBeenCalledWith('/scoped-roles/audit-logs?user_id=9&role=manager&page=1');
+    expect(mockApi.get).toHaveBeenCalledWith('/authorization-role-assignments/audit-logs?user_id=9&role=manager&page=1');
   });
 });

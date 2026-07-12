@@ -6,9 +6,6 @@ use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Authorization\Contracts\SensitivelyScoped;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
-use App\Modules\Core\Models\ScopedRoleDefinition;
-use App\Modules\Core\Models\ScopeType;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Services\CoreCapabilityProvider;
 use App\Modules\HR\Models\Department;
@@ -16,9 +13,8 @@ use App\Modules\Projects\Models\Project;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
+use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
 /**
@@ -34,7 +30,7 @@ use Tests\TestCase;
  *
  * Contract under test (mirrors CFA-00 owner decisions, 2026-07-09):
  *   - Both primitives activate the cluster_tree_rescue trace layer.
- *   - Both fail closed without an explicit ScopedRole grant on actor.org.
+ *   - Both fail closed without an explicit canonical grant on actor.org.
  *   - Sibling cluster orgs denied.
  *   - Child → parent denied.
  *   - Null-org actor denied (fail-closed).
@@ -48,6 +44,7 @@ use Tests\TestCase;
  */
 class ClusterTreeManageExportPrimitiveTest extends TestCase
 {
+    use GrantsEngineCapability;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -63,50 +60,17 @@ class ClusterTreeManageExportPrimitiveTest extends TestCase
      * Helper: create a scoped role definition on an organization that grants
      * ONLY the given capability(ies). Returns the role key used.
      */
-    private function grantClusterRoleOnOrganization(User $user, Organization $org, array $capabilities, string $roleKey): ScopedRoleDefinition
+    private function grantClusterRoleOnOrganization(User $user, Organization $org, array $capabilities, string $roleKey): void
     {
-        $scopeType = ScopeType::firstOrCreate(
-            ['key' => 'organization'],
-            [
-                'label_ar' => 'organization',
-                'label_en' => 'organization',
-                'model_class' => Organization::class,
-                'supports_hierarchy' => true,
-                'is_active' => true,
-                'sort_order' => 0,
-            ],
+        $this->grantEngineCapability(
+            $user,
+            $capabilities,
+            'organization',
+            (int) $org->id,
+            $roleKey,
+            ['inherit_to_children' => true],
+            ['core' => 'all'],
         );
-
-        $defId = DB::table('scoped_role_definitions')->insertGetId([
-            'name' => $roleKey,
-            'scope_type' => 'organization',
-            'scope_type_id' => $scopeType->id,
-            'display_name' => $roleKey,
-            'description' => 'CFA-01 test role: grants '.implode(',', $capabilities),
-            'role_key' => $roleKey,
-            'permissions' => json_encode($capabilities),
-            'reach' => json_encode(['core' => 'all']),
-            'is_admin_role' => false,
-            'is_active' => true,
-            'sort_order' => 0,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        DB::table('model_has_scoped_roles')->insert([
-            'user_id' => $user->id,
-            'role' => $roleKey,
-            'scope_type' => ScopedRole::SCOPE_ORGANIZATION,
-            'scope_id' => $org->id,
-            'inherit_to_children' => true,
-            'granted_by' => null,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        Cache::flush();
-
-        return ScopedRoleDefinition::findOrFail($defId);
     }
 
     /**
@@ -661,7 +625,7 @@ class ClusterTreeManageExportPrimitiveTest extends TestCase
         $childProject = $this->makeProjectInOrg($child->id);
 
         $superAdmin = User::factory()->create(['organization_id' => null]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         // super_admin short-circuit returns true regardless of the primitive.
         $this->assertTrue(
@@ -673,12 +637,12 @@ class ClusterTreeManageExportPrimitiveTest extends TestCase
             'super_admin must bypass CLUSTER_TREE_EXPORT'
         );
 
-        // Trace layer is super_admin, not cluster_tree_rescue.
+        // Trace layer is canonical_admin, not cluster_tree_rescue.
         $traceManage = AccessDecision::whyCan($superAdmin, Capability::CLUSTER_TREE_MANAGE, $childProject);
-        $this->assertSame('super_admin', $traceManage['layer']);
+        $this->assertSame('canonical_admin', $traceManage['layer']);
 
         $traceExport = AccessDecision::whyCan($superAdmin, Capability::CLUSTER_TREE_EXPORT, $childProject);
-        $this->assertSame('super_admin', $traceExport['layer']);
+        $this->assertSame('canonical_admin', $traceExport['layer']);
     }
 
     #[Test]
@@ -784,7 +748,7 @@ class ClusterTreeManageExportPrimitiveTest extends TestCase
         $user = User::factory()->create([
             'organization_id' => $org->id,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         $caps = app(CoreCapabilityProvider::class)
             ->userCapabilities($user);

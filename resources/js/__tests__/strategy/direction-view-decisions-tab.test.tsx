@@ -96,19 +96,23 @@ vi.mock('@entities/strategy', () => ({
   },
 }));
 
-const mockAuthState: { permissions: string[] } = {
-  permissions: ['view_strategy', 'create_strategy', 'edit_strategy'],
+const mockAuthState: { capabilities: string[] } = {
+  capabilities: ['strategy.view', 'strategy.create', 'strategy.edit'],
 };
 
-// Phase 9.3: project the legacy `mockAuthState.permissions[]` into the
-// canonical `access` shape that production code now reads via useCan.
-function projectAccess(): Record<string, Record<string, boolean>> {
-  const perms = mockAuthState.permissions;
-  if (perms.includes('edit_strategy')) {
-    return { strategy: { view: true, create: true, edit: true } };
+// Project the canonical capabilities into the access summary returned by
+// /api/auth/me so both authorization surfaces describe the same decisions.
+function projectAccess(): Record<string, boolean> {
+  const capabilities = mockAuthState.capabilities;
+  if (capabilities.includes('strategy.edit')) {
+    return {
+      'strategy.view': true,
+      'strategy.create': true,
+      'strategy.edit': true,
+    };
   }
-  if (perms.length > 0) {
-    return { strategy: { view: true } };
+  if (capabilities.length > 0) {
+    return { 'strategy.view': true };
   }
   return {};
 }
@@ -120,8 +124,7 @@ vi.mock('@shared/contexts/AuthContext', () => ({
       name: 'مستخدم',
       access: projectAccess(),
     },
-    hasPermission: (p: string) => mockAuthState.permissions.includes(p),
-    canAccess: () => true,
+    can: (capability: string) => mockAuthState.capabilities.includes(capability),
     isAdmin: () => false,
     isSuperAdmin: () => false,
   }),
@@ -233,7 +236,7 @@ describe('DirectionView — Decisions tab integration (portfolio)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     lastDecisionsProps = null;
-    mockAuthState.permissions = ['view_strategy', 'create_strategy', 'edit_strategy'];
+    mockAuthState.capabilities = ['strategy.view', 'strategy.create', 'strategy.edit'];
   });
 
   it('renders a TabsTrigger with value="decisions" labeled with strategy.decisions.title', async () => {
@@ -264,7 +267,7 @@ describe('DirectionView — Decisions tab integration (portfolio)', () => {
     expect(lastDecisionsProps!.decidable_name).toBe('الالتزام الاستراتيجي للتحول');
   });
 
-  it('wires permissions from useAuth().hasPermission() (view_strategy / create_strategy / edit_strategy)', async () => {
+  it('wires permissions from useAuth().can() (strategy.view / strategy.create / strategy.edit)', async () => {
     render(<DirectionView />);
     await waitFor(() => {
       expect(lastDecisionsProps).not.toBeNull();
@@ -277,7 +280,7 @@ describe('DirectionView — Decisions tab integration (portfolio)', () => {
   });
 
   it('reflects restricted permissions when the user lacks strategy permissions', async () => {
-    mockAuthState.permissions = [];
+    mockAuthState.capabilities = [];
 
     render(<DirectionView />);
     await waitFor(() => {

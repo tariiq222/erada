@@ -17,11 +17,11 @@ use Tests\TestCase;
 /**
  * Unit tests for MeetingPolicy.
  *
- * The policy uses Spatie permissions (view-meetings, manage-meetings) with an
- * org-isolation sameOrg() guard. Key behaviors:
+ * The policy uses canonical capabilities with an organization-isolation guard.
+ * Key behaviors:
  *   - super_admin: all operations allowed (explicit isSuperAdmin() check)
  *   - admin (has view-meetings + manage-meetings from seeder): allowed with sameOrg
- *   - viewer (no meeting permissions): denied on all operations
+ *   - viewer: may read meetings in scope, but cannot mutate them
  *   - Cross-org: admin from org B denied on org A meeting
  *   - Null org: user with null organization_id → sameOrg() returns false
  */
@@ -60,7 +60,9 @@ class MeetingPolicyTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $user->assignRole($role);
+        $role === 'super_admin'
+                ? $this->grantCanonicalSuperAdmin($user)
+                : $this->assignCanonicalRole($user, $role);
 
         return $user;
     }
@@ -139,20 +141,20 @@ class MeetingPolicyTest extends TestCase
         $this->assertTrue($this->policy->delete($admin, $this->meeting));
     }
 
-    // ========== viewer — no meeting permissions ==========
+    // ========== viewer — read-only meeting capability ==========
 
-    public function test_viewer_cannot_view_any(): void
+    public function test_viewer_can_view_any(): void
     {
         $viewer = $this->makeUser('viewer');
 
-        $this->assertFalse($this->policy->viewAny($viewer));
+        $this->assertTrue($this->policy->viewAny($viewer));
     }
 
-    public function test_viewer_cannot_view_meeting(): void
+    public function test_viewer_can_view_same_org_meeting(): void
     {
         $viewer = $this->makeUser('viewer');
 
-        $this->assertFalse($this->policy->view($viewer, $this->meeting));
+        $this->assertTrue($this->policy->view($viewer, $this->meeting));
     }
 
     public function test_viewer_cannot_create_meeting(): void
@@ -211,7 +213,7 @@ class MeetingPolicyTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
 
         $this->assertFalse($this->policy->view($user, $this->meeting));
     }
@@ -222,7 +224,7 @@ class MeetingPolicyTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
 
         $this->assertFalse($this->policy->update($user, $this->meeting));
     }
@@ -255,7 +257,7 @@ class MeetingPolicyTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
 
         $this->assertFalse($this->policy->viewAny($user));
     }
@@ -266,7 +268,7 @@ class MeetingPolicyTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
 
         $this->assertFalse($this->policy->create($user));
     }
@@ -282,7 +284,7 @@ class MeetingPolicyTest extends TestCase
             'department_id' => $deptB->id,
             'is_active' => true,
         ]);
-        $outsider->assignRole('admin');
+        $this->grantCanonicalAdmin($outsider);
         // Org B admin has MEETINGS_VIEW granted at the org level via the engine.
         // Phase 5.B precheck() must still floor it for an org A meeting.
         $this->grantEngineCapability($outsider, Capability::MEETINGS_VIEW, 'organization', $orgB->id);
@@ -302,7 +304,7 @@ class MeetingPolicyTest extends TestCase
             'department_id' => $deptB->id,
             'is_active' => true,
         ]);
-        $outsider->assignRole('admin');
+        $this->grantCanonicalAdmin($outsider);
         $this->grantEngineCapability($outsider, Capability::MEETINGS_EDIT, 'organization', $orgB->id);
 
         $this->assertFalse(
@@ -320,7 +322,7 @@ class MeetingPolicyTest extends TestCase
             'department_id' => $deptB->id,
             'is_active' => true,
         ]);
-        $outsider->assignRole('admin');
+        $this->grantCanonicalAdmin($outsider);
         $this->grantEngineCapability($outsider, Capability::MEETINGS_DELETE, 'organization', $orgB->id);
 
         $this->assertFalse(

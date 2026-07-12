@@ -41,7 +41,7 @@ class CommentControllerTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
 
         $this->project = Project::factory()->create([
             'department_id' => $this->department->id,
@@ -297,7 +297,7 @@ class CommentControllerTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $regularUser->assignRole('member');
+        $this->assignCanonicalRole($regularUser, 'member');
 
         $comment = Comment::factory()->create([
             'commentable_type' => Project::class,
@@ -407,7 +407,7 @@ class CommentControllerTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $regularUser->assignRole('member');
+        $this->assignCanonicalRole($regularUser, 'member');
 
         $response = $this->actingAs($regularUser, 'sanctum')
             ->postJson('/api/comments', [
@@ -436,7 +436,7 @@ class CommentControllerTest extends TestCase
             'department_id' => $sharedDepartment->id,
             'is_active' => true,
         ]);
-        $admin->assignRole('admin');
+        $this->assignCanonicalRole($admin, 'admin');
 
         $crossOrgProject = Project::factory()->create([
             'organization_id' => $orgB->id,
@@ -488,7 +488,7 @@ class CommentControllerTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $intruder->assignRole('member');
+        $this->assignCanonicalRole($intruder, 'member');
 
         $comment = Comment::factory()->create([
             'commentable_type' => Project::class,
@@ -535,7 +535,7 @@ class CommentControllerTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $intruder->assignRole('member');
+        $this->assignCanonicalRole($intruder, 'member');
 
         $comment = Comment::factory()->create([
             'commentable_type' => Project::class,
@@ -633,7 +633,7 @@ class CommentControllerTest extends TestCase
             'department_id' => $orgADepartment->id,
             'is_active' => true,
         ]);
-        $author->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($author);
 
         $crossOrgProject = Project::factory()->create([
             'organization_id' => $orgB->id,
@@ -677,7 +677,7 @@ class CommentControllerTest extends TestCase
             'department_id' => $orgADepartment->id,
             'is_active' => true,
         ]);
-        $author->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($author);
 
         $crossOrgProject = Project::factory()->create([
             'organization_id' => $orgB->id,

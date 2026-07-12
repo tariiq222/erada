@@ -2,10 +2,11 @@
 
 namespace Tests\Unit\Services;
 
-use App\Modules\Core\Models\ScopedRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
+use App\Modules\Projects\Services\Project\TeamService;
 use App\Modules\Projects\Services\ProjectCrudService;
 use App\Modules\Tasks\Models\Task;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -27,9 +28,17 @@ class ProjectCrudServiceTest extends TestCase
 
         $this->department = Department::factory()->create();
         $this->user = User::factory()->create([
+            'organization_id' => $this->department->organization_id,
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
+
+        foreach (['project_manager', 'project_member', 'project_viewer'] as $name) {
+            AuthorizationRole::query()->updateOrCreate(
+                ['name' => $name],
+                ['label' => $name, 'is_active' => true, 'is_admin_role' => $name === 'project_manager'],
+            );
+        }
 
         $this->service = app(ProjectCrudService::class);
     }
@@ -53,7 +62,7 @@ class ProjectCrudServiceTest extends TestCase
         $this->assertEquals($this->user->id, $project->created_by);
     }
 
-    public function test_create_project_creator_becomes_scoped_manager(): void
+    public function test_create_project_creator_becomes_canonical_automatic_manager(): void
     {
         // بعد التوحيد: منشئ المشروع يصبح مدير المشروع كدور سياقي (scoped manager)،
         // لا كعمود manager_id (الذي حُذف). أي manager_id يُمرَّر في $data يُتجاهَل.
@@ -66,16 +75,15 @@ class ProjectCrudServiceTest extends TestCase
 
         $project = $this->service->createProject($data, $this->user);
 
-        // المنشئ مدير المشروع عبر دور سياقي manager
-        $this->assertTrue($this->user->isProjectAdmin($project));
-        $this->assertDatabaseHas('model_has_scoped_roles', [
+        $this->assertDatabaseHas('authorization_role_assignments', [
+            'authorization_role_id' => AuthorizationRole::where('name', 'project_manager')->value('id'),
             'scope_id' => $project->id,
-            'scope_type' => ScopedRole::SCOPE_PROJECT,
+            'scope_type' => 'project',
             'user_id' => $this->user->id,
-            'role' => ScopedRole::PROJECT_MANAGER,
+            'source' => 'auto',
+            'granted_by' => null,
         ]);
-        // accessor المدير يرجع المنشئ
-        $this->assertEquals($this->user->id, $project->manager?->id);
+        $this->assertDatabaseMissing('authorization_role_assignments', ['scope_type' => 'project', 'scope_id' => $project->id]);
     }
 
     public function test_create_project_with_milestones(): void
@@ -105,7 +113,11 @@ class ProjectCrudServiceTest extends TestCase
 
     public function test_create_project_with_team_members(): void
     {
-        $member = User::factory()->create(['is_active' => true]);
+        $member = User::factory()->create([
+            'organization_id' => $this->department->organization_id,
+            'department_id' => $this->department->id,
+            'is_active' => true,
+        ]);
 
         $data = [
             'name' => 'Team Test',
@@ -119,12 +131,12 @@ class ProjectCrudServiceTest extends TestCase
 
         $project = $this->service->createProject($data, $this->user);
 
-        // Member should appear in model_has_scoped_roles as member
-        $this->assertDatabaseHas('model_has_scoped_roles', [
+        $this->assertDatabaseHas('authorization_role_assignments', [
+            'authorization_role_id' => AuthorizationRole::where('name', 'project_member')->value('id'),
             'scope_id' => $project->id,
-            'scope_type' => ScopedRole::SCOPE_PROJECT,
+            'scope_type' => 'project',
             'user_id' => $member->id,
-            'role' => ScopedRole::PROJECT_MEMBER,
+            'source' => 'auto',
         ]);
     }
 
@@ -146,20 +158,25 @@ class ProjectCrudServiceTest extends TestCase
 
         $project = $this->service->createProject($data, $this->user);
 
-        $count = \DB::table('model_has_scoped_roles')
+        $count = \DB::table('authorization_role_assignments')
             ->where('scope_id', $project->id)
-            ->where('scope_type', ScopedRole::SCOPE_PROJECT)
+            ->where('scope_type', 'project')
             ->where('user_id', $this->user->id)
             ->count();
 
         // صف واحد فقط (manager) — لا تكرار
         $this->assertEquals(1, $count);
-        $this->assertEquals(ScopedRole::PROJECT_MANAGER, $this->user->roleInProject($project));
+        $this->assertDatabaseHas('authorization_role_assignments', [
+            'authorization_role_id' => AuthorizationRole::where('name', 'project_manager')->value('id'),
+            'user_id' => $this->user->id,
+            'scope_id' => $project->id,
+        ]);
     }
 
     public function test_update_project_basic_fields(): void
     {
         $project = Project::factory()->create([
+            'organization_id' => $this->department->organization_id,
             'department_id' => $this->department->id,
         ]);
 
@@ -266,17 +283,23 @@ class ProjectCrudServiceTest extends TestCase
 
     public function test_delete_project_detaches_members(): void
     {
-        $member = User::factory()->create(['is_active' => true]);
+        $member = User::factory()->create([
+            'organization_id' => $this->department->organization_id,
+            'department_id' => $this->department->id,
+            'is_active' => true,
+        ]);
         $project = Project::factory()->create([
+            'organization_id' => $this->department->organization_id,
             'department_id' => $this->department->id,
         ]);
-        $member->assignProjectRole($project, ScopedRole::PROJECT_MEMBER);
+        app(TeamService::class)
+            ->addMember($project, ['user_id' => $member->id, 'role' => 'member']);
 
         $this->service->deleteProject($project);
 
-        $this->assertDatabaseMissing('model_has_scoped_roles', [
+        $this->assertDatabaseMissing('authorization_role_assignments', [
             'scope_id' => $project->id,
-            'scope_type' => ScopedRole::SCOPE_PROJECT,
+            'scope_type' => 'project',
             'user_id' => $member->id,
         ]);
     }

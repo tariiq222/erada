@@ -2,13 +2,15 @@
 
 namespace App\Modules\Projects\Services\Project;
 
-use App\Modules\Core\Models\ScopedRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Projects\Models\Project;
 use App\Modules\Projects\Models\Stakeholder;
 
 class StakeholderService
 {
+    private const PROJECT_MANAGER_ROLE = 'project_manager';
+
     /**
      * القيم المسموحة للـ role (للتوافق مع check constraint في قاعدة البيانات)
      */
@@ -92,9 +94,16 @@ class StakeholderService
             ->pluck('user_id')
             ->toArray();
 
-        $managerIds = $project->members()
-            ->wherePivot('role', ScopedRole::PROJECT_MANAGER)
-            ->pluck('users.id')
+        $managerIds = AuthorizationRoleAssignment::query()
+            ->where('scope_type', 'project')
+            ->where('scope_id', $project->id)
+            ->where(function ($query) {
+                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->whereHas('role', fn ($query) => $query
+                ->where('name', self::PROJECT_MANAGER_ROLE)
+                ->where('is_active', true))
+            ->pluck('user_id')
             ->all();
 
         if (empty($managerIds)) {

@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Projects;
 
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -35,7 +34,7 @@ class ProjectListManagerTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->admin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->admin);
 
         $this->managerUser = User::factory()->create([
             'name' => 'Test Manager Name',
@@ -48,7 +47,7 @@ class ProjectListManagerTest extends TestCase
             'name' => 'Project With Manager',
         ]);
 
-        $this->managerUser->assignProjectRole($this->project, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($this->managerUser, 'project_manager', 'project', $this->project->id);
     }
 
     public function test_list_endpoint_includes_manager_id_and_name(): void
