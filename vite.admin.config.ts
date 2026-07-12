@@ -5,6 +5,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
+const viteSourceModulePath = /\.(?:[cm]?[jt]sx?|map)$/;
 
 export default defineConfig({
   root: path.resolve(projectRoot, 'resources/admin'),
@@ -24,7 +25,17 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': 'http://127.0.0.1:8000',
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        bypass(request) {
+          const pathname = new URL(request.url ?? '/', 'http://vite.local').pathname;
+          if (viteSourceModulePath.test(pathname)) {
+            return pathname;
+          }
+
+          return undefined;
+        },
+      },
       '/sanctum': 'http://127.0.0.1:8000',
     },
   },
