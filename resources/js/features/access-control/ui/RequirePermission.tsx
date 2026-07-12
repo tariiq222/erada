@@ -1,11 +1,12 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@shared/contexts/AuthContext';
-import type { AccessConfig } from '@shared/contexts/AuthContext';
+import { meetsAccessRequirement, type AccessRequirement } from '@shared/api/access';
 
 interface RequirePermissionProps {
   children: React.ReactNode;
-  config?: AccessConfig;
+  capability?: string;
+  requirement?: AccessRequirement;
   fallback?: React.ReactNode;
 }
 
@@ -15,10 +16,11 @@ interface RequirePermissionProps {
  */
 export const RequirePermission: React.FC<RequirePermissionProps> = ({
   children,
-  config,
+  capability,
+  requirement,
   fallback,
 }) => {
-  const { canAccess, isLoading } = useAuth();
+  const { can, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -28,7 +30,11 @@ export const RequirePermission: React.FC<RequirePermissionProps> = ({
     );
   }
 
-  if (!canAccess(config ?? {})) {
+  const allowed = capability
+    ? can(capability)
+    : meetsAccessRequirement(can, requirement ?? {});
+
+  if (!allowed) {
     if (fallback) {
       return <>{fallback}</>;
     }
@@ -39,11 +45,17 @@ export const RequirePermission: React.FC<RequirePermissionProps> = ({
 };
 
 /**
- * Route guard لتير الإدارة — مقاد بصلاحية manage_organization (super_admin يتجاوز)
+ * Admin route guard with an explicit canonical capability.
+ *
+ * There is intentionally no implicit "admin" role or umbrella legacy key:
+ * every deep link must name the same capability enforced by its API surface.
  */
-export const RequireAdmin: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const RequireAdmin: React.FC<{
+  children: React.ReactNode;
+  capability: string;
+}> = ({ children, capability }) => {
   return (
-    <RequirePermission config={{ permissions: ['manage_organization'] }}>
+    <RequirePermission capability={capability}>
       {children}
     </RequirePermission>
   );

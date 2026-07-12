@@ -3,8 +3,8 @@
 namespace Tests\Feature\Tasks;
 
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -42,24 +42,23 @@ class UnifiedTaskControllerTopUpTest extends TestCase
             'organization_id' => $this->department->organization_id,
             'department_id' => $this->department->id,
         ]);
-        $this->admin->assignRole('admin');
+        $this->grantCanonicalAdmin($this->admin);
     }
 
     /**
      * Attach a user to a project as a project member via the project_members
-     * pivot (which is `model_has_scoped_roles` with scope_type='project').
+     * canonical assignment pivot scoped to the project.
      * Mirrors what TeamService::addMember does in production.
      */
-    private function addProjectMember(User $user, Project $project, string $role = 'member'): void
+    private function addProjectMember(User $user, Project $project): void
     {
-        ScopedRole::create([
-            'user_id' => $user->id,
-            'role' => $role,
-            'scope_type' => ScopedRole::SCOPE_PROJECT,
-            'scope_id' => $project->id,
-            'inherit_to_children' => true,
-            'granted_by' => null,
-        ]);
+        $this->grantEngineCapability(
+            $user,
+            Capability::TASKS_VIEW,
+            AuthorizationRoleAssignment::SCOPE_PROJECT,
+            $project->id,
+            'project_member',
+        );
     }
 
     public function test_my_tasks_stats_activity_log_assign_and_destroy_endpoints(): void
@@ -240,7 +239,7 @@ class UnifiedTaskControllerTopUpTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $viewer->assignRole('viewer');
+        $this->grantCanonicalViewer($viewer);
 
         // Personal task: 201 (open-create).
         $personalResponse = $this->actingAs($viewer, 'sanctum')
@@ -272,14 +271,14 @@ class UnifiedTaskControllerTopUpTest extends TestCase
     {
         // The assign() path requires update permission on the task (TaskPolicy
         // → TASKS_EDIT). A project member who is NOT a manager / owner must be
-        // denied. Use a member-level ScopedRole definition so the engine
-        // rejects TASKS_EDIT on this scope.
+        // denied. Use a project-scoped canonical member assignment so the
+        // engine rejects TASKS_EDIT on this scope.
         $member = User::factory()->create([
             'organization_id' => $this->department->organization_id,
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->addProjectMember($member, $this->project, 'member');
+        $this->addProjectMember($member, $this->project);
 
         $assignee = User::factory()->create([
             'organization_id' => $this->department->organization_id,

@@ -18,7 +18,7 @@ class NotificationControllerTest extends TestCase
     private function makeUser(Organization $org, string $role = 'admin'): User
     {
         $user = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
-        $user->assignRole($role);
+        $this->assignCanonicalRole($user, $role);
 
         return $user;
     }

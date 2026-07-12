@@ -41,7 +41,7 @@ class ProjectCompletionSideEffectsTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
     }
 
     /** الحارس: لا يمكن إتمام المشروع وبه مهمة مفتوحة (422 على status). */

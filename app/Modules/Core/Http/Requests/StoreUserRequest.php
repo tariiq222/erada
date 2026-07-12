@@ -2,10 +2,12 @@
 
 namespace App\Modules\Core\Http\Requests;
 
+use App\Modules\Core\Authorization\Data\AssignmentScope;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Rules\AssignableRoleKey;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\Validator;
 
 /**
  * StoreUserRequest - التحقق من بيانات إنشاء مستخدم جديد
@@ -39,16 +41,6 @@ class StoreUserRequest extends FormRequest
             return false;
         }
 
-        // Role-escalation guard: checked here (403) rather than withValidator
-        // (422) because assigning an unauthorized role is an authz violation,
-        // not a malformed payload. Only runs when roles are actually submitted.
-        $roles = $this->input('roles', []);
-        if (is_array($roles) && $roles !== []) {
-            if (! $user->can('canAssignRole', [new User, $roles])) {
-                return false;
-            }
-        }
-
         return true;
     }
 
@@ -67,8 +59,50 @@ class StoreUserRequest extends FormRequest
             'extension' => ['nullable', 'string', 'max:10'],
             'job_title' => ['nullable', 'string', 'max:255'],
             'is_active' => ['boolean'],
-            'roles' => ['array'],
-            'roles.*' => ['string', new AssignableRoleKey],
+            'roles' => ['prohibited'],
+            'assignments' => ['sometimes', 'array'],
+            'assignments.*.role_id' => ['required', 'integer', 'exists:authorization_roles,id'],
+            'assignments.*.scope_type' => ['required', 'string', Rule::in(AssignmentScope::TYPES)],
+            'assignments.*.scope_id' => ['nullable', 'integer', 'min:1'],
+            'assignments.*.inherit_to_children' => ['sometimes', 'boolean'],
+            'assignments.*.expires_at' => ['nullable', 'date', 'after:now'],
         ];
+    }
+
+    public function after(): array
+    {
+        return [$this->validateAssignmentIdentities(...)];
+    }
+
+    private function validateAssignmentIdentities(Validator $validator): void
+    {
+        $identities = [];
+
+        foreach ($this->input('assignments', []) as $index => $assignment) {
+            if (! is_array($assignment)) {
+                continue;
+            }
+
+            $scopeType = $assignment['scope_type'] ?? null;
+            $scopeId = $assignment['scope_id'] ?? null;
+            $allowsNullScope = in_array($scopeType, ['all', 'own'], true);
+
+            if ($allowsNullScope && $scopeId !== null) {
+                $validator->errors()->add("assignments.{$index}.scope_id", 'هذا النطاق لا يقبل معرّف نطاق.');
+            } elseif (is_string($scopeType) && ! $allowsNullScope && $scopeId === null) {
+                $validator->errors()->add("assignments.{$index}.scope_id", 'معرّف النطاق مطلوب لهذا النوع.');
+            }
+
+            $roleId = $assignment['role_id'] ?? null;
+            if (! is_numeric($roleId) || ! is_string($scopeType)) {
+                continue;
+            }
+
+            $identity = implode(':', [(int) $roleId, $scopeType, $scopeId ?? 'null']);
+            if (isset($identities[$identity])) {
+                $validator->errors()->add("assignments.{$index}", 'لا يمكن تكرار الدور والنطاق نفسيهما في الطلب.');
+            }
+            $identities[$identity] = true;
+        }
     }
 }

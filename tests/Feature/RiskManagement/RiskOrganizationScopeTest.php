@@ -47,7 +47,7 @@ class RiskOrganizationScopeTest extends TestCase
     public function test_super_admin_can_read_any_org_risk(): void
     {
         $superAdmin = User::factory()->create(['organization_id' => null, 'is_active' => true]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $orgA = Organization::factory()->create();
         $riskA = Risk::factory()->forOrganization($orgA)->create();

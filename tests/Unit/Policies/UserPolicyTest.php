@@ -48,7 +48,9 @@ class UserPolicyTest extends TestCase
             'is_active' => true,
         ]);
         if ($role !== 'norole') {
-            $user->assignRole($role);
+            $role === 'super_admin'
+                ? $this->grantCanonicalSuperAdmin($user)
+                : $this->assignCanonicalRole($user, $role);
         }
 
         return $user;
@@ -301,7 +303,7 @@ class UserPolicyTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $admin->assignRole('admin');
+        $this->grantCanonicalAdmin($admin);
         $targetUser = $this->makeUser('member');
 
         $this->assertFalse($this->policy->view($admin, $targetUser));

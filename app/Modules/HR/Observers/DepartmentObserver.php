@@ -3,11 +3,12 @@
 namespace App\Modules\HR\Observers;
 
 use App\Modules\Core\Authorization\AccessDecision;
-use App\Modules\Core\Models\ScopedRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\HR\Services\ScopedDepartmentRoleSyncService;
 use App\Modules\Shared\Models\ActivityLog;
+use Illuminate\Support\Facades\DB;
 
 class DepartmentObserver
 {
@@ -143,13 +144,17 @@ class DepartmentObserver
 
     public function deleted(Department $department): void
     {
-        // No FK from model_has_scoped_roles to departments -- drop orphaned scope rows.
-        ScopedRole::where('scope_type', 'department')
+        // Scope ids are polymorphic and therefore cannot carry a department FK.
+        // Remove only assignments belonging to this exact canonical scope; legacy
+        // scoped-role rows remain read-only until their final cutover migration.
+        AuthorizationRoleAssignment::query()
+            ->where('scope_type', AuthorizationRoleAssignment::SCOPE_DEPARTMENT)
             ->where('scope_id', $department->id)
             ->delete();
 
-        // Roles were revoked en masse (bypassing model events) and a node left the
-        // tree; flush the whole decision cache to be safe.
-        AccessDecision::flushCache();
+        // The bulk delete bypasses assignment model events. Defer invalidation so
+        // a surrounding department-delete transaction cannot expose rolled-back
+        // authorization state through the decision cache.
+        DB::afterCommit(static fn () => AccessDecision::flushCache());
     }
 }

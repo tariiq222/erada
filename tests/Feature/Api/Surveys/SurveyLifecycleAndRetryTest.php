@@ -48,14 +48,14 @@ class SurveyLifecycleAndRetryTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
 
         $this->viewer = User::factory()->create([
             'organization_id' => $org,
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->viewer->assignRole('viewer');
+        $this->assignCanonicalRole($this->viewer, 'viewer');
 
         $this->survey = Survey::factory()->published()->create([
             'organization_id' => $org,
@@ -90,7 +90,7 @@ class SurveyLifecycleAndRetryTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $admin->assignRole('admin');
+        $this->assignCanonicalRole($admin, 'admin');
         $this->grantEngineCapability($admin, Capability::SURVEYS_EDIT, 'organization', $this->department->organization_id);
 
         $response = $this->actingAs($admin, 'sanctum')

@@ -22,7 +22,7 @@ use Tests\TestCase;
  *
  * All three endpoints are mounted under `role:super_admin` middleware. The
  * response shapes intentionally AVOID leaking module content (no project text,
- * no OVR body, no survey answers, no permission_audits old/new values); they
+ * no OVR body, no survey answers, no assignment-audit old/new values); they
  * return counts, timestamps, status metadata, and actor/target display
  * fields needed for governance context (per PRD 4 'data minimization').
  *
@@ -57,7 +57,7 @@ class SuperAdminDashboardControllerTest extends TestCase
             'is_active' => true,
         ]);
         if ($role) {
-            $user->assignRole($role);
+            $this->assignCanonicalRole($user, $role);
         }
 
         return $user;

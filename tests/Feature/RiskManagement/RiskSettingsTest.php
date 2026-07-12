@@ -35,13 +35,13 @@ class RiskSettingsTest extends TestCase
             'organization_id' => $this->org->id,
             'is_active' => true,
         ]);
-        $this->admin->assignRole('admin');
+        $this->grantCanonicalAdmin($this->admin);
 
         $this->viewer = User::factory()->create([
             'organization_id' => $this->org->id,
             'is_active' => true,
         ]);
-        $this->viewer->assignRole('viewer');
+        $this->grantCanonicalViewer($this->viewer);
 
         $this->token = $this->admin->createToken('test')->plainTextToken;
     }

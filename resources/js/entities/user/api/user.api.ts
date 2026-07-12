@@ -3,7 +3,7 @@
  */
 
 import { api } from '@shared/api/client';
-import type { UserSecurityResponse, ScopedRolesResponse } from '../model/user';
+import type { UserRoleAssignmentsResponse, UserSecurityResponse } from '../model/user';
 
 export const usersApi = {
   getAll: (params?: Record<string, string>) => {
@@ -29,7 +29,7 @@ export const usersApi = {
   // فك قفل الحساب
   unlock: (id: number) => api.post(`/users/${id}/unlock`),
 
-  // الأدوار السياقية (مشاريع وأقسام)
-  scopedRoles: (id: number) =>
-    api.get<ScopedRolesResponse>(`/scoped-roles/user/${id}`),
+  // Canonical authorization-role assignments.
+  roleAssignments: (id: number) =>
+    api.get<UserRoleAssignmentsResponse>(`/authorization-role-assignments/user/${id}`),
 };

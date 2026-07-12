@@ -49,7 +49,7 @@ class ProjectRiskCoexistenceTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->admin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->admin);
 
         $this->project = Project::factory()->create([
             'department_id' => $this->department->id,

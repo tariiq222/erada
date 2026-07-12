@@ -14,21 +14,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * capability bindings on this model; those live on
  * `authorization_role_permissions`.
  *
- * Phase 2.1.4a adds the per-role `is_admin_role` boolean. It ports the
- * legacy `scoped_role_definitions.is_admin_role` shortcut forward so
- * the unified new-path decision walk
- * (`AccessDecision::hasNewPermission`) can grant every capability
- * through the same assignment/scope gate the rest of the new path uses.
- * The companion migration `2026_07_05_000026_backfill_authorization_roles_is_admin_role`
- * writes the value from the source legacy definition; the engine carve-
- * out that prevents `is_admin_role=true` from silently widening OVR
- * confidential lives in `AccessDecision` (it does NOT live on this
- * column -- the column is just the flag).
+ * `is_admin_role` grants capabilities through the same assignment and
+ * scope checks used for every role. The OVR confidential carve-out lives
+ * in `AccessDecision`; this column only stores the role flag.
  *
  * @property int $id
  * @property string $name
  * @property string $label
  * @property bool $is_admin_role
+ * @property bool $is_active
  */
 class AuthorizationRole extends Model
 {
@@ -37,7 +31,12 @@ class AuthorizationRole extends Model
     protected $fillable = [
         'name',
         'label',
+        'label_ar',
+        'label_en',
+        'scope_type',
         'is_admin_role',
+        'is_system',
+        'is_active',
     ];
 
     protected $casts = [
@@ -46,6 +45,8 @@ class AuthorizationRole extends Model
         // the engine's new-path admin gate (`hasNewPermission`) does
         // not have to remember to cast every read.
         'is_admin_role' => 'boolean',
+        'is_system' => 'boolean',
+        'is_active' => 'boolean',
     ];
 
     protected static function booted(): void

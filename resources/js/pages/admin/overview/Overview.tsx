@@ -53,7 +53,7 @@ const QUICK_LINK_KEYS = [
     subtitleKey: 'admin.overview.quick_links.audit.subtitle',
   },
   {
-    href: '/admin/scoped-roles/audit-logs',
+    href: '/admin/authorization/audit-logs',
     icon: IconUserPlus,
     titleKey: 'admin.overview.quick_links.audit_logs.title',
     subtitleKey: 'admin.overview.quick_links.audit_logs.subtitle',

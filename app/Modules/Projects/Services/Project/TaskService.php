@@ -2,13 +2,15 @@
 
 namespace App\Modules\Projects\Services\Project;
 
-use App\Modules\Core\Models\ScopedRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Projects\Models\Project;
 use App\Modules\Tasks\Models\Task;
 
 class TaskService
 {
+    private const PROJECT_MANAGER_ROLE = 'project_manager';
+
     /**
      * Create the initial set of tasks for a newly-created project.
      *
@@ -43,7 +45,7 @@ class TaskService
             'title' => $data['name'] ?? $data['title'],
             'description' => $data['description'] ?? null,
             'milestone_id' => $milestoneId,
-            'assigned_to' => $data['assigned_to'] ?? $project->members()->wherePivot('role', ScopedRole::PROJECT_MANAGER)->value('users.id'),
+            'assigned_to' => $data['assigned_to'] ?? $this->projectManagerId($project),
             'created_by' => $user->id,
             'priority' => $data['priority'] ?? 'medium',
             'status' => $data['status'] ?? 'todo',
@@ -188,5 +190,21 @@ class TaskService
                 ->where('id', $taskId)
                 ->update(['order' => $order + 1]);
         }
+    }
+
+    private function projectManagerId(Project $project): ?int
+    {
+        $userId = AuthorizationRoleAssignment::query()
+            ->where('scope_type', 'project')
+            ->where('scope_id', $project->id)
+            ->where(function ($query) {
+                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->whereHas('role', fn ($query) => $query
+                ->where('name', self::PROJECT_MANAGER_ROLE)
+                ->where('is_active', true))
+            ->value('user_id');
+
+        return $userId === null ? null : (int) $userId;
     }
 }

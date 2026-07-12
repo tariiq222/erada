@@ -76,10 +76,9 @@ class TasksAssignCapabilityTest extends TestCase
     }
 
     /**
-     * Same-org factory user. Pass a Spatie role string when needed; pass null
-     * for users we'll attach scoped roles to directly (engine path).
+     * Same-org factory user. Pass a canonical role string when needed.
      */
-    private function makeUser(Organization $org, ?string $spatieRole = null): User
+    private function makeUser(Organization $org, ?string $roleName = null): User
     {
         $dept = $org->id === $this->orgA->id ? $this->deptA : $this->deptB;
         $user = User::factory()->create([
@@ -88,8 +87,8 @@ class TasksAssignCapabilityTest extends TestCase
             'is_active' => true,
         ]);
 
-        if ($spatieRole !== null) {
-            $user->assignRole($spatieRole);
+        if ($roleName !== null) {
+            $this->assignCanonicalRole($user, $roleName);
         }
 
         return $user;

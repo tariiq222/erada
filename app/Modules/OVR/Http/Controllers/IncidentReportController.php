@@ -85,7 +85,9 @@ class IncidentReportController extends Controller
             ->paginate(min((int) $request->query('per_page', 15), 100));
 
         return IncidentReportResource::collection($reports->through(
-            fn (IncidentReport $report) => IncidentReportResource::summary($report)
+            fn (IncidentReport $report) => IncidentReportResource::summary(
+                app(OvrAuthorizationService::class)->prepareScopeTarget($report)
+            )
         ))->additional(['success' => true]);
     }
 
@@ -122,7 +124,9 @@ class IncidentReportController extends Controller
 
         return response()->json([
             'message' => __('ovr.api.created'),
-            'data' => IncidentReportResource::detail($report->load(['reporter', 'incidentType'])),
+            'data' => IncidentReportResource::detail(
+                app(OvrAuthorizationService::class)->prepareScopeTarget($report->load(['reporter', 'incidentType']))
+            ),
         ], 201);
     }
 
@@ -180,7 +184,7 @@ class IncidentReportController extends Controller
     {
         $user = $request->user();
 
-        if (! AccessDecision::can($user, Capability::OVR_EDIT, $report)) {
+        if (! app(OvrAuthorizationService::class)->canAccess($user, Capability::OVR_EDIT, $report)) {
             abort(403);
         }
 
@@ -222,7 +226,7 @@ class IncidentReportController extends Controller
     {
         $user = $request->user();
 
-        if (! AccessDecision::can($user, Capability::OVR_EDIT, $report)) {
+        if (! app(OvrAuthorizationService::class)->canAccess($user, Capability::OVR_EDIT, $report)) {
             abort(403);
         }
 
@@ -408,7 +412,11 @@ class IncidentReportController extends Controller
 
         return response()->json([
             'message' => __('ovr.api.status_changed_to', ['status' => $newStatus->label()]),
-            'data' => IncidentReportResource::detail($report->fresh(['reporter', 'incidentType', 'assignee'])),
+            'data' => IncidentReportResource::detail(
+                app(OvrAuthorizationService::class)->prepareScopeTarget(
+                    $report->fresh(['reporter', 'incidentType', 'assignee'])
+                )
+            ),
         ]);
     }
 
@@ -502,7 +510,8 @@ class IncidentReportController extends Controller
         // flat-perm seeding.
         $reviewers = User::where('organization_id', $report->organization_id)
             ->get()
-            ->filter(fn (User $u): bool => AccessDecision::can($u, Capability::OVR_VIEW, $report))
+            ->filter(fn (User $u): bool => app(OvrAuthorizationService::class)
+                ->canAccess($u, Capability::OVR_VIEW, $report))
             ->reject(fn (User $u): bool => $u->id === $request->user()->id)
             ->values();
 
@@ -512,7 +521,9 @@ class IncidentReportController extends Controller
 
         return response()->json([
             'message' => __('ovr.api.submitted'),
-            'data' => IncidentReportResource::detail($report->fresh()),
+            'data' => IncidentReportResource::detail(
+                app(OvrAuthorizationService::class)->prepareScopeTarget($report->fresh())
+            ),
         ]);
     }
 
@@ -1080,7 +1091,9 @@ class IncidentReportController extends Controller
             ->get();
 
         return IncidentReportResource::collection(
-            $reports->map(fn (IncidentReport $report) => IncidentReportResource::summary($report))
+            $reports->map(fn (IncidentReport $report) => IncidentReportResource::summary(
+                app(OvrAuthorizationService::class)->prepareScopeTarget($report)
+            ))
         );
     }
 

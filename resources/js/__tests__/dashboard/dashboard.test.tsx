@@ -481,13 +481,12 @@ vi.mock('react-router-dom', () => ({
 // Mock AuthContext
 vi.mock('@shared/contexts/AuthContext', () => ({
   useAuth: () => ({
+    can: () => true,
     canAccess: () => true,
     user: { id: 1, name: 'أحمد محمد', email: 'ahmed@test.com' },
     isAuthenticated: true,
     isLoading: false,
     isSuperAdmin: () => true,
-    hasRole: () => true,
-    hasPermission: () => true,
   }),
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));

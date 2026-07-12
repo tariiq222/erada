@@ -17,7 +17,6 @@ use App\Modules\Strategy\Models\Review;
 use App\Modules\Surveys\Models\DataImportRequest;
 use App\Modules\Surveys\Models\Survey;
 use App\Modules\Surveys\Models\SurveyResponse;
-use Database\Seeders\AdditionalScopeTypesSeeder;
 use Database\Seeders\ScopedDepartmentRolesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -44,7 +43,6 @@ class Phase51ScopeCoverageTest extends TestCase
         parent::setUp();
 
         $this->seed(ScopedDepartmentRolesSeeder::class);
-        $this->seed(AdditionalScopeTypesSeeder::class);
     }
 
     /**

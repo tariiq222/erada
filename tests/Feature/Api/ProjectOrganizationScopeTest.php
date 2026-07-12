@@ -3,16 +3,13 @@
 namespace Tests\Feature\Api;
 
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
-use App\Modules\Core\Models\ScopeType;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
@@ -54,163 +51,6 @@ class ProjectOrganizationScopeTest extends TestCase
         $this->deptA = Department::factory()->create(['organization_id' => $this->orgA->id]);
         $this->deptB = Department::factory()->create(['organization_id' => $this->orgB->id]);
 
-        Cache::flush();
-        $this->seedProjectScopeDefinitions();
-        $this->seedOrgScopeDefinitions();
-    }
-
-    /**
-     * ينشئ ScopeType=project وتعريفات الأدوار للمحرّك (engine=ON).
-     */
-    private function seedProjectScopeDefinitions(): void
-    {
-        $scopeType = ScopeType::firstOrCreate(
-            ['key' => ScopedRole::SCOPE_PROJECT],
-            [
-                'label_ar' => 'مشروع',
-                'label_en' => 'Project',
-                'model_class' => Project::class,
-                'supports_hierarchy' => true,
-                'supports_expiry' => false,
-                'is_active' => true,
-                'sort_order' => 10,
-            ]
-        );
-
-        $now = now();
-
-        $definitions = [
-            [
-                'name' => 'project_manager',
-                'display_name' => 'Project Manager',
-                'scope_type' => ScopedRole::SCOPE_PROJECT,
-                'level' => 1,
-                'scope_type_id' => $scopeType->id,
-                'role_key' => ScopedRole::PROJECT_MANAGER,
-                'label_ar' => 'مدير المشروع',
-                'label_en' => 'Project Manager',
-                'is_admin_role' => false,
-                'permissions' => json_encode($this->expandFlags(
-                    ['projects.view', 'projects.edit', 'projects.manage_members', 'projects.assign_roles'],
-                    ['can_manage_members' => true, 'can_edit' => true, 'can_delete' => false, 'can_view_all' => true]
-                )),
-                'is_active' => true,
-                'sort_order' => 1,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ],
-            [
-                'name' => 'project_member',
-                'display_name' => 'Project Member',
-                'scope_type' => ScopedRole::SCOPE_PROJECT,
-                'level' => 2,
-                'scope_type_id' => $scopeType->id,
-                'role_key' => ScopedRole::PROJECT_MEMBER,
-                'label_ar' => 'عضو',
-                'label_en' => 'Member',
-                'is_admin_role' => false,
-                'permissions' => json_encode($this->expandFlags(['projects.view'], [
-                    'can_manage_members' => false, 'can_edit' => false, 'can_delete' => false, 'can_view_all' => true,
-                ])),
-                'is_active' => true,
-                'sort_order' => 2,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ],
-        ];
-
-        foreach ($definitions as $def) {
-            $exists = DB::table('scoped_role_definitions')
-                ->where('name', $def['name'])
-                ->where('scope_type', $def['scope_type'])
-                ->exists();
-
-            if (! $exists) {
-                DB::table('scoped_role_definitions')->insert($def);
-            }
-        }
-
-        Cache::flush();
-    }
-
-    /**
-     * ينشئ ScopeType=organization وتعريف دور admin (is_admin_role=true).
-     * اللازم لاختبارات addMember/removeMember حيث manageMembers يمر بالمحرّك.
-     */
-    private function seedOrgScopeDefinitions(): void
-    {
-        $scopeType = ScopeType::firstOrCreate(
-            ['key' => ScopedRole::SCOPE_ORGANIZATION],
-            [
-                'label_ar' => 'المؤسسة',
-                'label_en' => 'Organization',
-                'model_class' => 'App\\Modules\\Core\\Models\\Organization',
-                'supports_hierarchy' => false,
-                'supports_expiry' => false,
-                'is_active' => true,
-                'sort_order' => 1,
-            ]
-        );
-
-        $now = now();
-
-        $exists = DB::table('scoped_role_definitions')
-            ->where('scope_type', ScopedRole::SCOPE_ORGANIZATION)
-            ->where('role_key', 'admin')
-            ->exists();
-
-        if (! $exists) {
-            DB::table('scoped_role_definitions')->insert([
-                'name' => 'organization_admin',
-                'display_name' => 'Admin',
-                'scope_type' => ScopedRole::SCOPE_ORGANIZATION,
-                'level' => 1,
-                'scope_type_id' => $scopeType->id,
-                'role_key' => 'admin',
-                'label_ar' => 'مدير إدارة',
-                'label_en' => 'Admin',
-                'is_admin_role' => true,
-                'permissions' => null,
-                'is_active' => true,
-                'sort_order' => 10,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
-        }
-
-        Cache::flush();
-    }
-
-    /**
-     * يُسند للمستخدم دوراً سياقياً على مستوى المؤسسة (admin).
-     */
-    private function grantOrgAdminScopedRole(User $user): void
-    {
-        if ($user->organization_id === null) {
-            return;
-        }
-
-        $exists = DB::table('model_has_scoped_roles')
-            ->where('user_id', $user->id)
-            ->where('scope_type', ScopedRole::SCOPE_ORGANIZATION)
-            ->where('scope_id', $user->organization_id)
-            ->exists();
-
-        if (! $exists) {
-            DB::table('model_has_scoped_roles')->insert([
-                'user_id' => $user->id,
-                'role' => 'admin',
-                'scope_type' => ScopedRole::SCOPE_ORGANIZATION,
-                'scope_id' => $user->organization_id,
-                'inherit_to_children' => true,
-                'granted_by' => null,
-                'expires_at' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        }
-
-        Cache::flush();
     }
 
     // ========== Helpers ==========
@@ -228,7 +68,7 @@ class ProjectOrganizationScopeTest extends TestCase
             'is_active' => true,
         ]);
         if ($role) {
-            $user->assignRole($role);
+            $this->assignCanonicalRole($user, $role);
         }
 
         return $user;
@@ -260,9 +100,13 @@ class ProjectOrganizationScopeTest extends TestCase
     private function makeProjectAdmin(?Organization $org): User
     {
         $user = $this->makeUser($org, 'admin');
-        $user->givePermissionTo(['view_projects', 'edit_projects', 'delete_projects']);
+        $this->grantEngineCapability($user, [
+            Capability::PROJECTS_VIEW,
+            Capability::PROJECTS_EDIT,
+            Capability::PROJECTS_DELETE,
+        ]);
         $this->grantEngineCapability($user, Capability::SETTINGS_MANAGE);
-        $this->grantOrgAdminScopedRole($user);
+        $this->grantCanonicalAdmin($user);
 
         return $user;
     }
@@ -275,7 +119,11 @@ class ProjectOrganizationScopeTest extends TestCase
     private function makeProjectManagerActor(?Organization $org): User
     {
         $user = $this->makeUser($org, 'viewer');
-        $user->givePermissionTo(['view_projects', 'edit_projects', 'delete_projects']);
+        $this->grantEngineCapability($user, [
+            Capability::PROJECTS_VIEW,
+            Capability::PROJECTS_EDIT,
+            Capability::PROJECTS_DELETE,
+        ]);
 
         return $user;
     }
@@ -406,9 +254,11 @@ class ProjectOrganizationScopeTest extends TestCase
             ])
             ->assertStatus(200);
 
-        $this->assertDatabaseHas('model_has_scoped_roles', [
+        $this->assertDatabaseHas('authorization_role_assignments', [
             'scope_id' => $projectA->id,
             'user_id' => $userA->id,
+            'scope_type' => 'project',
+            'authorization_role_id' => AuthorizationRole::query()->where('name', 'project_member')->valueOrFail('id'),
         ]);
     }
 
@@ -420,10 +270,11 @@ class ProjectOrganizationScopeTest extends TestCase
         $userB = $this->makeUser($this->orgB);
 
         // positive setup: assign a same-org member so the DELETE call has a real member to remove
-        $userA->assignProjectRole($projectA, ScopedRole::PROJECT_MEMBER);
-        $this->assertDatabaseHas('model_has_scoped_roles', [
+        $this->assignCanonicalRole($userA, 'project_member', 'project', $projectA->id);
+        $this->assertDatabaseHas('authorization_role_assignments', [
             'scope_id' => $projectA->id,
             'user_id' => $userA->id,
+            'scope_type' => 'project',
         ]);
 
         // cross-org target → رفض (حتى لو لم يكن مضافاً، D-06)
@@ -437,9 +288,10 @@ class ProjectOrganizationScopeTest extends TestCase
             ->deleteJson("/api/projects/{$projectA->id}/members/{$userA->id}")
             ->assertStatus(200);
 
-        $this->assertDatabaseMissing('model_has_scoped_roles', [
+        $this->assertDatabaseMissing('authorization_role_assignments', [
             'scope_id' => $projectA->id,
             'user_id' => $userA->id,
+            'scope_type' => 'project',
         ]);
     }
 
@@ -534,9 +386,11 @@ class ProjectOrganizationScopeTest extends TestCase
             ])
             ->assertStatus(200);
 
-        $this->assertDatabaseHas('model_has_scoped_roles', [
+        $this->assertDatabaseHas('authorization_role_assignments', [
             'scope_id' => $projectB->id,
             'user_id' => $userA->id,
+            'scope_type' => 'project',
+            'authorization_role_id' => AuthorizationRole::query()->where('name', 'project_member')->valueOrFail('id'),
         ]);
     }
 
@@ -547,7 +401,7 @@ class ProjectOrganizationScopeTest extends TestCase
         $actor = $this->makeProjectAdmin($this->orgA);
         $projectA = $this->makeProject($this->orgA);
         // المدير يُمثَّل كدور سياقي (scoped role) لا كعمود manager_id
-        $actor->assignProjectRole($projectA, ScopedRole::PROJECT_MANAGER, $actor->id);
+        $this->assignCanonicalRole($actor, 'project_manager', 'project', $projectA->id);
 
         // GET → 200 (org-floor نجح، الصلاحية العامة + admin department access يمر)
         $this->actingAs($actor, 'sanctum')
@@ -608,43 +462,5 @@ class ProjectOrganizationScopeTest extends TestCase
         );
 
         $this->assertDatabaseHas('projects', ['id' => $orphan->id, 'deleted_at' => null]);
-    }
-
-    /**
-     * Expand legacy granular flags into the equivalent explicit permissions
-     * (Phase 3, ADR-UNIFIED-ROLE-ACCESS — the flag columns were dropped from
-     * scoped_role_definitions; the engine now reads permissions[] only).
-     *
-     * @param  array<int, string>  $permissions
-     * @param  array<string, bool>  $flags
-     * @return array<int, string>
-     */
-    private function expandFlags(array $permissions, array $flags): array
-    {
-        $byAction = fn (array $actions): array => array_values(array_filter(
-            Capability::all(),
-            function (string $c) use ($actions) {
-                $a = str_contains($c, '.') ? substr($c, strrpos($c, '.') + 1) : $c;
-
-                return in_array($a, $actions, true);
-            }
-        ));
-        if (! empty($flags['can_edit'])) {
-            $permissions = array_merge($permissions, $byAction(['edit', 'update']));
-        }
-        if (! empty($flags['can_delete'])) {
-            $permissions = array_merge($permissions, $byAction(['delete', 'remove']));
-        }
-        if (! empty($flags['can_view_all'])) {
-            $permissions = array_merge($permissions, $byAction(['view', 'view_all', 'view_reports']));
-        }
-        if (! empty($flags['can_manage_members'])) {
-            $permissions = array_merge($permissions, $byAction(['manage_members', 'assign_roles']));
-        }
-        if (! empty($flags['can_view_confidential'])) {
-            $permissions[] = Capability::OVR_VIEW_CONFIDENTIAL;
-        }
-
-        return array_values(array_unique($permissions));
     }
 }

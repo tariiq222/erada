@@ -34,7 +34,7 @@ class SurveyControllerTest extends TestCase
             'organization_id' => $this->department->organization_id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
     }
 
     // ========================================

@@ -237,7 +237,7 @@ class ApiResponseEnvelopeContractTest extends TestCase
         $organization = Organization::factory()->create();
         $department = Department::factory()->create(['organization_id' => $organization->id]);
         $user = $this->makeUserInOrganization($organization, $department->id);
-        $user->assignRole('admin');
+        $this->assignCanonicalRole($user, 'admin');
 
         $project = Project::factory()->create([
             'organization_id' => $organization->id,
@@ -257,7 +257,7 @@ class ApiResponseEnvelopeContractTest extends TestCase
             'department_id' => $departmentId,
             'is_active' => true,
         ]);
-        $user->assignRole('member');
+        $this->assignCanonicalRole($user, 'member');
 
         return $user;
     }
@@ -310,7 +310,7 @@ class ApiResponseEnvelopeContractTest extends TestCase
             'department_id' => $department->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         $report = IncidentReport::create(array_merge([
             'organization_id' => $organization->id,
@@ -349,11 +349,9 @@ class ApiResponseEnvelopeContractTest extends TestCase
             'email' => 'audit-user@example.test',
             'is_active' => true,
         ]);
-        // ActivityLogController now routes through AccessDecision (engine),
-        // which grants audit.view/audit.export to the admin org functional role
-        // (is_admin_role=true in scoped_role_definitions). Flat Spatie permissions
-        // alone are not read by the engine — assign the admin role instead.
-        $user->assignRole('admin');
+        // ActivityLogController routes through AccessDecision, so grant the
+        // canonical organization admin role that carries audit capabilities.
+        $this->assignCanonicalRole($user, 'admin');
 
         $activityLog = ActivityLog::create([
             'user_id' => $user->id,

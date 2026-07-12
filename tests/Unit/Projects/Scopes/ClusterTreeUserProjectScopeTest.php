@@ -191,7 +191,7 @@ class ClusterTreeUserProjectScopeTest extends TestCase
         [$cluster, $hospital, $sibling] = $this->makeClusterTree();
 
         $superAdmin = User::factory()->create(['organization_id' => null, 'is_active' => true]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $this->makeProjectInOrg($cluster->id);
         $this->makeProjectInOrg($cluster->id);

@@ -2,8 +2,8 @@
 
 namespace App\Modules\Core\Support;
 
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Rules\AssignableRoleKey;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 /**
@@ -20,7 +20,7 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
  *   4. cross-org target ⇒ 403.
  *   5. null-org target + actor ليس super_admin ⇒ 403.
  *   6. self-escalation: actor == target و roles يحتوي role أعلى من الحالي ⇒ 403.
- *   7. كل role يجب أن يكون قابلاً للتعيين (AssignableRoleKey) ⇒ 403 إن لم يكن.
+ *   7. كل role يجب أن يكون دورًا canonical نشطًا ⇒ 403 إن لم يكن.
  *   8. RoleHierarchy::canAssignAll ⇒ 403 إن رفض المصفوفة.
  *
  * لا يغيّر payload — يرفض بـ 403 أو يمر. لا يحذف super_admin بصمت.
@@ -34,7 +34,7 @@ class UserRoleAssignmentGuard
      * فحص صلاحية actor لتعيين roles على target. يرمي AccessDeniedHttpException
      * عند أي فشل؛ لا يرمي عند النجاح.
      *
-     * @param  array<int, string>  $roles  قائمة role_keys (Spatie names) المطلوب تعيينها
+     * @param  array<int, string>  $roles  قائمة مفاتيح الأدوار المطلوب تعيينها
      */
     public function assertCanAssign(User $actor, User $target, array $roles): void
     {
@@ -48,7 +48,7 @@ class UserRoleAssignmentGuard
             throw new AccessDeniedHttpException('فقط مدير النظام يمكنه تعيين دور super_admin');
         }
 
-        // 2. super_admin bypass — يُسمح بكل ما هو متاح (وفق RoleHierarchy + AssignableRoleKey).
+        // 2. super_admin bypass — يُسمح بكل دور canonical نشط وفق RoleHierarchy.
         if ($actor->isSuperAdmin()) {
             $this->assertRolesAreValid($roles);
             $this->assertRolesAllowedByHierarchy($actor, $roles);
@@ -92,8 +92,9 @@ class UserRoleAssignmentGuard
     }
 
     /**
-     * فحص أن كل role_key قابل للتعيين — يتحقق من وجوده في
-     * scoped_role_definitions (org scope) أو ضمن COMPAT_SPATIE_ROLES.
+     * Validate against the active canonical role catalog. System roles are
+     * assignable only through their exact canonical definition; a stale or
+     * An inactive role can never pass this gate.
      *
      * @param  array<int, string>  $roles
      */
@@ -104,17 +105,14 @@ class UserRoleAssignmentGuard
                 throw new AccessDeniedHttpException('الدور المحدد غير متاح.');
             }
 
-            $rule = new AssignableRoleKey;
-            $capturedMessage = null;
+            $definition = AuthorizationRole::query()
+                ->where('name', $role)
+                ->where('is_active', true)
+                ->first();
 
-            // AssignableRoleKey->validate() يستدعي $fail($message) عند الرفض.
-            // نلتقط الرسالة ونحوّلها إلى AccessDeniedHttpException لتوحيد شكل الـ 403.
-            $rule->validate('roles.*', $role, function (string $message) use (&$capturedMessage) {
-                $capturedMessage = $message;
-            });
-
-            if ($capturedMessage !== null) {
-                throw new AccessDeniedHttpException($capturedMessage);
+            if ($definition === null
+                || ($role === RoleHierarchy::SUPER_ADMIN && ! $definition->is_system)) {
+                throw new AccessDeniedHttpException('الدور المحدد غير متاح.');
             }
         }
     }

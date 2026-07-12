@@ -250,7 +250,7 @@ class ActivityLogClusterDualSerializerTest extends TestCase
         [, $hospital] = $this->makeClusterTree();
 
         $admin = User::factory()->create();
-        $admin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($admin);
 
         $childUser = User::factory()->create([
             'organization_id' => $hospital->id,

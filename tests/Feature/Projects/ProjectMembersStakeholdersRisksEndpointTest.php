@@ -73,7 +73,7 @@ class ProjectMembersStakeholdersRisksEndpointTest extends TestCase
             'organization_id' => $this->orgA->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
 
         $this->project = Project::factory()->create([
             'department_id' => $this->deptA->id,
@@ -96,7 +96,7 @@ class ProjectMembersStakeholdersRisksEndpointTest extends TestCase
             'is_active' => true,
         ]);
         if ($role) {
-            $user->assignRole($role);
+            $this->assignCanonicalRole($user, $role);
         }
 
         return $user;
@@ -127,7 +127,8 @@ class ProjectMembersStakeholdersRisksEndpointTest extends TestCase
         $response->assertOk()
             ->assertJsonStructure(['message', 'members']);
 
-        $this->assertDatabaseHas('model_has_scoped_roles', [
+        $this->assertDatabaseHas('authorization_role_assignments', [
+            'scope_type' => 'project',
             'scope_id' => $this->project->id,
             'user_id' => $newUser->id,
         ]);
@@ -140,7 +141,7 @@ class ProjectMembersStakeholdersRisksEndpointTest extends TestCase
             'organization_id' => $this->orgA->id,
             'is_active' => true,
         ]);
-        $existingUser->assignProjectRole($this->project, 'member');
+        $this->assignCanonicalRole($existingUser, 'project_member', 'project', $this->project->id);
 
         $response = $this->actingAs($this->superAdmin, 'sanctum')
             ->withHeader('X-Skip-Csrf', '1')
@@ -180,7 +181,7 @@ class ProjectMembersStakeholdersRisksEndpointTest extends TestCase
             'organization_id' => $this->orgA->id,
             'is_active' => true,
         ]);
-        $orgScopedAdmin->assignRole('admin');
+        $this->grantCanonicalAdmin($orgScopedAdmin);
         Cache::flush();
 
         $foreignUser = User::factory()->create([
@@ -206,7 +207,7 @@ class ProjectMembersStakeholdersRisksEndpointTest extends TestCase
             'organization_id' => $this->orgA->id,
             'is_active' => true,
         ]);
-        $member->assignProjectRole($this->project, 'member');
+        $this->assignCanonicalRole($member, 'project_member', 'project', $this->project->id);
 
         $response = $this->actingAs($this->superAdmin, 'sanctum')
             ->withHeader('X-Skip-Csrf', '1')
@@ -215,10 +216,10 @@ class ProjectMembersStakeholdersRisksEndpointTest extends TestCase
             ]);
 
         $response->assertOk();
-        $this->assertDatabaseHas('model_has_scoped_roles', [
+        $this->assertDatabaseHas('authorization_role_assignments', [
+            'scope_type' => 'project',
             'scope_id' => $this->project->id,
             'user_id' => $member->id,
-            'role' => 'viewer',
         ]);
     }
 
@@ -229,7 +230,7 @@ class ProjectMembersStakeholdersRisksEndpointTest extends TestCase
             'organization_id' => $this->orgA->id,
             'is_active' => true,
         ]);
-        $member->assignProjectRole($this->project, 'member');
+        $this->assignCanonicalRole($member, 'project_member', 'project', $this->project->id);
 
         $response = $this->actingAs($this->superAdmin, 'sanctum')
             ->withHeader('X-Skip-Csrf', '1')

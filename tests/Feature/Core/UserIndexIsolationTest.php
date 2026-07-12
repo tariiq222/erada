@@ -44,7 +44,7 @@ class UserIndexIsolationTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
 
         return $user;
     }
@@ -87,7 +87,7 @@ class UserIndexIsolationTest extends TestCase
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $this->adminUser($this->orgA, $this->deptA);
         $this->adminUser($this->orgB, $this->deptB);
@@ -112,7 +112,7 @@ class UserIndexIsolationTest extends TestCase
             'is_active' => true,
             'name' => 'Ahmed SameName',
         ]);
-        $orgAUser->assignRole('viewer');
+        $this->grantCanonicalViewer($orgAUser);
 
         $orgBUser = User::factory()->create([
             'organization_id' => $this->orgB->id,
@@ -120,7 +120,7 @@ class UserIndexIsolationTest extends TestCase
             'is_active' => true,
             'name' => 'Ahmed SameName',
         ]);
-        $orgBUser->assignRole('viewer');
+        $this->grantCanonicalViewer($orgBUser);
 
         $response = $this->actingAs($admin, 'sanctum')
             ->getJson('/api/users?search=SameName')

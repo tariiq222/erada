@@ -5,19 +5,15 @@ namespace Tests\Feature\Authorization;
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
-use App\Modules\Core\Models\ScopeType;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
-use App\Modules\HR\Models\DepartmentCapacityRole;
 use App\Modules\OVR\Enums\ReportStatus;
 use App\Modules\OVR\Enums\SeverityLevel;
 use App\Modules\OVR\Models\IncidentReport;
 use App\Modules\OVR\Models\IncidentType;
-use Database\Seeders\ScopedDepartmentRolesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
+use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
 /**
@@ -26,11 +22,12 @@ use Tests\TestCase;
  * A sensitive record (an OVR incident with is_confidential=true) must not be
  * visible to a hierarchy ancestor by scope-chain inheritance alone. Access to a
  * sensitive record is need-to-know: reporter/assigned, a can_view_confidential
- * scoped role, super_admin, or the owner floor. Non-sensitive records are
+ * canonical confidential capability, super_admin, or the owner floor. Non-sensitive records are
  * unaffected (the engine override is skipped entirely).
  */
 class SensitiveDenyOverrideTest extends TestCase
 {
+    use GrantsEngineCapability;
     use RefreshDatabase;
 
     private IncidentType $incidentType;
@@ -38,7 +35,6 @@ class SensitiveDenyOverrideTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(ScopedDepartmentRolesSeeder::class);
         Cache::flush();
 
         $this->incidentType = IncidentType::create([
@@ -77,9 +73,11 @@ class SensitiveDenyOverrideTest extends TestCase
         $org = Organization::factory()->create();
         $sector = Department::factory()->create(['organization_id' => $org->id]);
         $child = Department::factory()->create(['organization_id' => $org->id, 'parent_id' => $sector->id]);
-        DepartmentCapacityRole::create(['department_id' => $sector->id, 'capacity' => 'manager', 'role_key' => 'dept_manager']);
         $mgr = User::factory()->create(['organization_id' => $org->id]);
         $sector->update(['manager_id' => $mgr->id]);
+        $this->grantEngineCapability($mgr, Capability::OVR_VIEW, 'department', $sector->id, 'dept_manager', [
+            'inherit_to_children' => true,
+        ]);
 
         // a sensitive clinical record in the child department
         $report = $this->makeReport($org, $child, ['is_confidential' => true]);
@@ -97,16 +95,18 @@ class SensitiveDenyOverrideTest extends TestCase
         $org = Organization::factory()->create();
         $sector = Department::factory()->create(['organization_id' => $org->id]);
         $child = Department::factory()->create(['organization_id' => $org->id, 'parent_id' => $sector->id]);
-        DepartmentCapacityRole::create(['department_id' => $sector->id, 'capacity' => 'manager', 'role_key' => 'dept_manager']);
         $mgr = User::factory()->create(['organization_id' => $org->id]);
         $sector->update(['manager_id' => $mgr->id]);
+        $this->grantEngineCapability($mgr, Capability::OVR_VIEW, 'department', $sector->id, 'dept_manager', [
+            'inherit_to_children' => true,
+        ]);
 
         // same setup, but NOT confidential -> normal scope-chain visibility holds
         $report = $this->makeReport($org, $child, ['is_confidential' => false]);
 
         $why = AccessDecision::whyCan($mgr->fresh(), Capability::OVR_VIEW, $report);
         $this->assertTrue($why['granted']);
-        $this->assertSame('scope_chain', $why['layer']);
+        $this->assertSame('canonical_assignment', $why['layer']);
     }
 
     public function test_reporter_sees_own_sensitive_record(): void
@@ -141,10 +141,14 @@ class SensitiveDenyOverrideTest extends TestCase
     {
         $org = Organization::factory()->create();
         $dept = Department::factory()->create(['organization_id' => $org->id]);
-        $this->seedConfidentialViewerDef();
-
         $cleared = User::factory()->create(['organization_id' => $org->id]);
-        $cleared->assignScopedRole('confidential_viewer', ScopedRole::SCOPE_ORGANIZATION, $org->id, $cleared->id);
+        $this->grantEngineCapability(
+            $cleared,
+            [Capability::OVR_VIEW, Capability::OVR_CONFIDENTIAL],
+            'organization',
+            $org->id,
+            'confidential_viewer',
+        );
 
         $report = $this->makeReport($org, $dept, ['is_confidential' => true]);
 
@@ -156,85 +160,10 @@ class SensitiveDenyOverrideTest extends TestCase
         $org = Organization::factory()->create();
         $dept = Department::factory()->create(['organization_id' => $org->id]);
         $admin = User::factory()->create(['organization_id' => $org->id]);
-        $admin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($admin);
 
         $report = $this->makeReport($org, $dept, ['is_confidential' => true]);
 
         $this->assertTrue(AccessDecision::can($admin->fresh(), Capability::OVR_VIEW, $report));
-    }
-
-    private function seedConfidentialViewerDef(): void
-    {
-        $orgScopeType = ScopeType::firstOrCreate(
-            ['key' => ScopedRole::SCOPE_ORGANIZATION],
-            [
-                'label_ar' => 'المؤسسة',
-                'label_en' => 'Organization',
-                'model_class' => Organization::class,
-                'supports_hierarchy' => false,
-                'supports_expiry' => false,
-                'is_active' => true,
-                'sort_order' => 1,
-            ]
-        );
-
-        $exists = DB::table('scoped_role_definitions')
-            ->where('scope_type_id', $orgScopeType->id)
-            ->where('role_key', 'confidential_viewer')
-            ->exists();
-
-        if (! $exists) {
-            DB::table('scoped_role_definitions')->insert([
-                'name' => 'organization.confidential_viewer',
-                'display_name' => 'Confidential Viewer',
-                'scope_type' => ScopedRole::SCOPE_ORGANIZATION,
-                'scope_type_id' => $orgScopeType->id,
-                'role_key' => 'confidential_viewer',
-                'label_ar' => 'مشاهد سري',
-                'label_en' => 'Confidential Viewer',
-                'is_admin_role' => false,
-                'permissions' => json_encode($this->expandFlags(['ovr.view', 'ovr.view_all'], [
-                    'can_manage_members' => false,
-                    'can_edit' => false,
-                    'can_delete' => false,
-                    'can_view_all' => true,
-                    'can_view_confidential' => true,
-                ])),
-                'is_active' => true,
-                'sort_order' => 99,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-            Cache::flush();
-        }
-    }
-
-    private function expandFlags(array $permissions, array $flags): array
-    {
-        $byAction = fn (array $actions): array => array_values(array_filter(
-            Capability::all(),
-            function (string $c) use ($actions) {
-                $a = str_contains($c, '.') ? substr($c, strrpos($c, '.') + 1) : $c;
-
-                return in_array($a, $actions, true);
-            }
-        ));
-        if (! empty($flags['can_edit'])) {
-            $permissions = array_merge($permissions, $byAction(['edit', 'update']));
-        }
-        if (! empty($flags['can_delete'])) {
-            $permissions = array_merge($permissions, $byAction(['delete', 'remove']));
-        }
-        if (! empty($flags['can_view_all'])) {
-            $permissions = array_merge($permissions, $byAction(['view', 'view_all', 'view_reports']));
-        }
-        if (! empty($flags['can_manage_members'])) {
-            $permissions = array_merge($permissions, $byAction(['manage_members', 'assign_roles']));
-        }
-        if (! empty($flags['can_view_confidential'])) {
-            $permissions[] = Capability::OVR_CONFIDENTIAL;
-        }
-
-        return array_values(array_unique($permissions));
     }
 }

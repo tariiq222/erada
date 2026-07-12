@@ -54,7 +54,7 @@ class DataImportNotificationTest extends TestCase
             'organization_id' => $org->id,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->assignCanonicalRole($user, 'admin');
 
         return $user;
     }

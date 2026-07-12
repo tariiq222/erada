@@ -5,7 +5,6 @@ namespace Tests\Feature\Authorization;
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\HR\Models\DepartmentCapacityRole;
@@ -28,12 +27,12 @@ class WhyCanTest extends TestCase
     public function test_super_admin_layer(): void
     {
         $admin = User::factory()->create();
-        $admin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($admin);
 
         $why = AccessDecision::whyCan($admin->fresh(), Capability::PROJECTS_EDIT);
 
         $this->assertTrue($why['granted']);
-        $this->assertSame('super_admin', $why['layer']);
+        $this->assertSame('canonical_admin', $why['layer']);
     }
 
     public function test_org_isolation_denied_layer(): void
@@ -68,24 +67,6 @@ class WhyCanTest extends TestCase
         $this->assertSame('owner_floor', $why['layer']);
     }
 
-    public function test_org_functional_role_layer(): void
-    {
-        $this->seed(ScopedDepartmentRolesSeeder::class);
-        $org = Organization::factory()->create();
-        $dept = Department::factory()->create(['organization_id' => $org->id]);
-        $project = Project::factory()->create(['organization_id' => $org->id, 'department_id' => $dept->id]);
-
-        $pmo = User::factory()->create(['organization_id' => $org->id]);
-        $pmo->assignScopedRole('pmo_manager', ScopedRole::SCOPE_ORGANIZATION, $org->id, $pmo->id);
-        // org-functional bridge reads Spatie role names; grant the matching Spatie role.
-        $pmo->assignRole('admin');
-
-        $why = AccessDecision::whyCan($pmo->fresh(), Capability::PROJECTS_EDIT, $project);
-
-        $this->assertTrue($why['granted']);
-        $this->assertSame('org_functional_role', $why['layer']);
-    }
-
     public function test_scope_chain_layer_reports_role_and_scope(): void
     {
         $this->seed(ScopedDepartmentRolesSeeder::class);
@@ -100,7 +81,7 @@ class WhyCanTest extends TestCase
         $why = AccessDecision::whyCan($mgr->fresh(), Capability::PROJECTS_EDIT, $project);
 
         $this->assertTrue($why['granted']);
-        $this->assertSame('scope_chain', $why['layer']);
+        $this->assertSame('canonical_assignment', $why['layer']);
         $this->assertSame('dept_manager', $why['role']);
         $this->assertSame('department', $why['scope_type']);
         $this->assertSame($sector->id, $why['scope_id']);

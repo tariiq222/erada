@@ -263,7 +263,7 @@ class ClusterTreeOvrStatsTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $super->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($super);
 
         $this->makeReports($hospital, 4, 'HO', false);
 

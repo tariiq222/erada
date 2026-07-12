@@ -2,68 +2,60 @@
 
 namespace Database\Seeders\Meetings;
 
-use App\Modules\Core\Enums\Permission;
+use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Models\AuthorizationResource;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Support\CapabilityToAuthorizationRolePermission;
 use Illuminate\Database\Seeder;
-use Spatie\Permission\Models\Permission as SpatiePermission;
-use Spatie\Permission\Models\Role;
-use Spatie\Permission\PermissionRegistrar;
+use Illuminate\Support\Facades\DB;
 
-/**
- * MeetingsPermissionsSeeder — Phase 9 of master AuthZ unification plan.
- *
- * Phase 5 introduced canonical dotted capabilities (meetings.view/create/
- * edit/delete/record_decisions) and kept the legacy kebab strings
- * (view-meetings / manage-meetings / record-decisions) for the
- * compatibility window. Phase 9 retires the legacy strings: this
- * seeder only creates canonical permissions and grants the admin role
- * the canonical names.
- *
- * RolesAndPermissionsSeeder's orphan-permission sweep deletes any
- * legacy kebab permissions left over from previous installs, so the
- * end state after Phase 9 is canonical-only.
- */
 class MeetingsPermissionsSeeder extends Seeder
 {
+    /** @var list<string> */
+    private const CAPABILITIES = [
+        Capability::MEETINGS_VIEW,
+        Capability::MEETINGS_CREATE,
+        Capability::MEETINGS_EDIT,
+        Capability::MEETINGS_DELETE,
+        Capability::MEETINGS_RECORD_DECISIONS,
+    ];
+
     public function run(): void
     {
-        app()[PermissionRegistrar::class]->forgetCachedPermissions();
+        DB::transaction(function (): void {
+            $admin = AuthorizationRole::query()->updateOrCreate(
+                ['name' => 'admin'],
+                [
+                    'label' => 'Organization Admin',
+                    'is_admin_role' => true,
+                    'is_active' => true,
+                ],
+            );
 
-        // 1. Canonical dotted capabilities (Phase 5 new-install path;
-        //    Phase 9 is the only install path because legacy kebab
-        //    cases were retired from Permission.php).
-        foreach ([
-            Permission::MEETINGS_VIEW->value,
-            Permission::MEETINGS_CREATE->value,
-            Permission::MEETINGS_EDIT->value,
-            Permission::MEETINGS_DELETE->value,
-            Permission::MEETINGS_RECORD_DECISIONS->value,
-        ] as $name) {
-            SpatiePermission::firstOrCreate([
-                'name' => $name,
-                'guard_name' => 'web',
-            ]);
-        }
+            foreach (self::CAPABILITIES as $capability) {
+                $mapping = CapabilityToAuthorizationRolePermission::map($capability);
+                if ($mapping === null) {
+                    continue;
+                }
 
-        // 2. super_admin: مغطى تلقائياً بـ SpatiePermission::all() في RolesAndPermissionsSeeder.
+                $resource = AuthorizationResource::query()->updateOrCreate(
+                    ['key' => $mapping['resource']],
+                    ['label' => class_basename($mapping['resource'])],
+                );
 
-        // 3. admin: منح الصلاحيات صراحةً (idempotent عبر givePermissionTo).
-        //    Phase 9 drops the legacy kebab grants; admin carries the
-        //    canonical dotted names only.
-        $admin = Role::where('name', 'admin')->where('guard_name', 'web')->first();
-        if ($admin) {
-            $admin->givePermissionTo([
-                Permission::MEETINGS_VIEW->value,
-                Permission::MEETINGS_CREATE->value,
-                Permission::MEETINGS_EDIT->value,
-                Permission::MEETINGS_DELETE->value,
-                Permission::MEETINGS_RECORD_DECISIONS->value,
-            ]);
-        }
+                DB::table('authorization_role_permissions')->updateOrInsert(
+                    [
+                        'authorization_role_id' => $admin->id,
+                        'authorization_resource_id' => $resource->id,
+                        'action' => $mapping['action'],
+                    ],
+                    ['reach' => null],
+                );
+            }
+        });
 
-        // 4. viewer: لا يحصل على أي صلاحية من المجموعة الجديدة (مطابقاً لـ spec §11.3).
-
-        app()[PermissionRegistrar::class]->forgetCachedPermissions();
-
-        $this->command?->info('تم إنشاء/تحديث صلاحيات الاجتماعات بنجاح');
+        AccessDecision::flushCache();
+        $this->command?->info('Canonical meeting permissions seeded successfully.');
     }
 }

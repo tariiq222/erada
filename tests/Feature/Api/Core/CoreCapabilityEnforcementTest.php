@@ -18,7 +18,7 @@ use Tests\TestCase;
  *
  *   core.view_organizations — OrganizationController + ScopeTypeController
  *   core.assign_roles       — RoleController::assignToUser
- *   audit.view              — ActivityLogController + ScopedRoleController
+ *   audit.view              — ActivityLogController + AuthorizationRoleAssignmentController
  *   audit.export            — ActivityLogController::export
  *
  * The test that simply asserts "with capability → 200 / without → 403" is
@@ -61,7 +61,7 @@ class CoreCapabilityEnforcementTest extends TestCase
             'is_active' => true,
         ]);
         if ($role) {
-            $user->assignRole($role);
+            $this->assignCanonicalRole($user, $role);
         }
 
         return $user;

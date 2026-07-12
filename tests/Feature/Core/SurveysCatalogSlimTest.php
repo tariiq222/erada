@@ -13,7 +13,7 @@ class SurveysCatalogSlimTest extends TestCase
     public function test_dead_surveys_strings_not_in_catalog(): void
     {
         $admin = User::factory()->create();
-        $admin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($admin);
         $response = $this->actingAs($admin, 'sanctum')->getJson('/api/roles/permissions');
         $response->assertStatus(200);
         $payload = $response->json();

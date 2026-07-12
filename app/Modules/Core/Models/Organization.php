@@ -164,15 +164,6 @@ class Organization extends Model
     }
 
     /**
-     * الأدوار السياقية المرتبطة بهذه المؤسسة
-     */
-    public function scopedRoles(): HasMany
-    {
-        return $this->hasMany(ScopedRole::class, 'scope_id')
-            ->where('scope_type', ScopedRole::SCOPE_ORGANIZATION);
-    }
-
-    /**
      * الاستبيانات التابعة للمؤسسة
      */
     public function surveys(): HasMany

@@ -7,7 +7,6 @@ use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Authorization\Contracts\ScopeAware;
 use App\Modules\Core\Authorization\Contracts\SensitivelyScoped;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRoleDefinition;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\OVR\Enums\ReportStatus;
@@ -353,17 +352,7 @@ class IncidentReport extends Model implements ScopeAware, SensitivelyScoped
      */
     private function userHasOvrConfidentialCapability(User $user): bool
     {
-        return $user->activeScopedRoles()
-            ->with('roleDefinition')
-            ->get()
-            ->contains(function ($scopedRole) {
-                $def = $scopedRole->roleDefinition
-                    ?? ScopedRoleDefinition::findByKey($scopedRole->scope_type, $scopedRole->role);
-
-                return $def
-                    && is_array($def->permissions)
-                    && in_array(Capability::OVR_CONFIDENTIAL, $def->permissions, true);
-            });
+        return AccessDecision::can($user, Capability::OVR_CONFIDENTIAL);
     }
 
     public function scopeByStatus($query, ReportStatus $status)

@@ -5,7 +5,7 @@ namespace App\Modules\Projects\Models;
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Contracts\OwnerEditable;
 use App\Modules\Core\Authorization\Contracts\ScopeAware;
-use App\Modules\Core\Models\ScopedRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Meetings\Models\Recommendation;
@@ -155,7 +155,13 @@ class Project extends Model implements OwnerEditable, ScopeAware
     public function getManagerAttribute(): ?User
     {
         return $this->members()
-            ->wherePivot('role', ScopedRole::PROJECT_MANAGER)
+            ->whereExists(function ($query) {
+                $query->selectRaw('1')
+                    ->from('authorization_roles')
+                    ->whereColumn('authorization_roles.id', 'authorization_role_assignments.authorization_role_id')
+                    ->where('authorization_roles.name', 'project_manager')
+                    ->where('authorization_roles.is_active', true);
+            })
             ->select('users.*')
             ->first();
     }
@@ -207,12 +213,22 @@ class Project extends Model implements OwnerEditable, ScopeAware
     {
         return $this->belongsToMany(
             User::class,
-            'model_has_scoped_roles',
+            'authorization_role_assignments',
             'scope_id',
             'user_id'
         )
-            ->wherePivot('scope_type', ScopedRole::SCOPE_PROJECT)
-            ->withPivot('role', 'expires_at')
+            ->wherePivot('scope_type', 'project')
+            ->where(function ($query) {
+                $query->whereNull('authorization_role_assignments.expires_at')
+                    ->orWhere('authorization_role_assignments.expires_at', '>', now());
+            })
+            ->whereExists(function ($query) {
+                $query->selectRaw('1')
+                    ->from('authorization_roles')
+                    ->whereColumn('authorization_roles.id', 'authorization_role_assignments.authorization_role_id')
+                    ->where('authorization_roles.is_active', true);
+            })
+            ->withPivot('authorization_role_id', 'expires_at', 'source')
             ->withTimestamps();
     }
 
@@ -255,11 +271,15 @@ class Project extends Model implements OwnerEditable, ScopeAware
         return $this->morphMany(Recommendation::class, 'decidable');
     }
 
-    // الأدوار السياقية المرتبطة بهذا المشروع
-    public function scopedRoles(): HasMany
+    // Canonical role assignments associated with this project.
+    public function roleAssignments(): HasMany
     {
-        return $this->hasMany(ScopedRole::class, 'scope_id')
-            ->where('scope_type', ScopedRole::SCOPE_PROJECT);
+        return $this->hasMany(AuthorizationRoleAssignment::class, 'scope_id')
+            ->where('scope_type', 'project')
+            ->where(function ($query) {
+                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->whereHas('role', fn ($query) => $query->where('is_active', true));
     }
 
     // حساب نسبة الإنجاز تلقائياً من المهام (تُستبعد المهام الملغاة)

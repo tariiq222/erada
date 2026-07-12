@@ -64,6 +64,7 @@ class AuthorizationSchemaTest extends TestCase
         $columns = $this->columnList('authorization_roles');
         $this->assertContains('is_admin_role', $columns,
             'authorization_roles must carry is_admin_role after Phase 2.1.4a.');
+        $this->assertContains('is_active', $columns);
         $this->assertContains('id', $columns);
         $this->assertContains('name', $columns);
         $this->assertContains('label', $columns);
@@ -105,8 +106,9 @@ class AuthorizationSchemaTest extends TestCase
     {
         $this->assertTableExists('authorization_resources');
 
-        DB::table('authorization_resources')->insert([
+        DB::table('authorization_resources')->updateOrInsert([
             'key' => 'App\\Modules\\Projects\\Models\\Project',
+        ], [
             'label' => 'Project',
             'created_at' => now(),
             'updated_at' => now(),
@@ -127,7 +129,7 @@ class AuthorizationSchemaTest extends TestCase
         $this->assertTableExists('authorization_role_assignments');
         $columns = $this->columnList('authorization_role_assignments');
 
-        foreach (['id', 'authorization_role_id', 'user_id', 'scope_type', 'scope_id', 'organization_id', 'created_at', 'updated_at'] as $required) {
+        foreach (['id', 'authorization_role_id', 'user_id', 'scope_type', 'scope_id', 'organization_id', 'expires_at', 'created_at', 'updated_at'] as $required) {
             $this->assertContains($required, $columns, "authorization_role_assignments missing column [{$required}]");
         }
     }
@@ -204,7 +206,7 @@ class AuthorizationSchemaTest extends TestCase
     public function test_authorization_role_assignments_scoped_types_require_non_null_scope_id(): void
     {
         // Every scope_type other than 'all' / 'own' references a concrete row
-        // (org / cluster / hospital / department / team). scope_id MUST be NOT NULL
+        // (organization or a supported resource scope). scope_id MUST be NOT NULL
         // for those; inserting NULL must trip the CHECK constraint. We use a
         // savepoint per scope_type via DB::transaction() so the first CHECK
         // violation does NOT poison the surrounding RefreshDatabase transaction
@@ -218,7 +220,7 @@ class AuthorizationSchemaTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        foreach (['organization', 'cluster', 'hospital', 'department', 'team'] as $scopeType) {
+        foreach (['organization', 'department', 'project', 'program', 'portfolio', 'kpi', 'meeting', 'survey'] as $scopeType) {
             $userId = DB::table('users')->insertGetId([
                 'name' => "{$scopeType} null-user",
                 'email' => "non-null-{$scopeType}@example.test",
@@ -251,18 +253,21 @@ class AuthorizationSchemaTest extends TestCase
         }
     }
 
-    public function test_authorization_role_assignments_allows_each_reserved_scope_type(): void
+    public function test_authorization_role_assignments_allows_each_supported_scope_type(): void
     {
         $this->assertTableExists('authorization_role_assignments');
 
-        $roleId = DB::table('authorization_roles')->insertGetId([
-            'name' => 'r-each-scope',
-            'label' => 'Each scope',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        $scopeTypes = ['all', 'organization', 'department', 'own', 'project', 'program', 'portfolio', 'kpi', 'meeting', 'survey'];
 
-        foreach (['all', 'organization', 'cluster', 'hospital', 'department', 'team', 'own'] as $index => $scopeType) {
+        foreach ($scopeTypes as $index => $scopeType) {
+            $roleId = DB::table('authorization_roles')->insertGetId([
+                'name' => "r-each-scope-{$scopeType}",
+                'label' => "Each scope {$scopeType}",
+                'scope_type' => $scopeType,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
             $userId = DB::table('users')->insertGetId([
                 'name' => "scope user {$index}",
                 'email' => "scope-{$scopeType}-{$index}@example.test",
@@ -283,7 +288,7 @@ class AuthorizationSchemaTest extends TestCase
             ]);
         }
 
-        $this->assertSame(7, DB::table('authorization_role_assignments')->count());
+        $this->assertSame(count($scopeTypes), DB::table('authorization_role_assignments')->count());
     }
 
     public function test_authorization_role_assignments_requires_unique_combination(): void
@@ -455,12 +460,11 @@ class AuthorizationSchemaTest extends TestCase
     {
         $this->assertTableExists('authorization_record_rules');
 
-        $resourceId = DB::table('authorization_resources')->insertGetId([
-            'key' => 'App\\Modules\\Projects\\Models\\Project',
-            'label' => 'Project',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        $resourceId = DB::table('authorization_resources')
+            ->where('key', 'App\\Modules\\Projects\\Models\\Project')
+            ->value('id');
+
+        $this->assertNotNull($resourceId);
 
         DB::table('authorization_record_rules')->insert([
             'authorization_role_id' => null,

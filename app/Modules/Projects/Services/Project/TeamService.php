@@ -3,17 +3,19 @@
 namespace App\Modules\Projects\Services\Project;
 
 use App\Modules\Core\Authorization\AccessDecision;
-use App\Modules\Core\Models\ScopedRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Projects\Exceptions\ProjectMemberAlreadyExistsException;
 use App\Modules\Projects\Models\Project;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
+use RuntimeException;
 
 class TeamService
 {
-    /**
-     * تحويل الأدوار العربية إلى القيم المقبولة في قاعدة البيانات
-     */
+    /** @var array<string, string> */
     protected const ROLE_MAPPING = [
         'مطور' => 'member',
         'محلل' => 'member',
@@ -25,49 +27,38 @@ class TeamService
         'member' => 'member',
         'manager' => 'manager',
         'viewer' => 'viewer',
+        'project_member' => 'member',
+        'project_manager' => 'manager',
+        'project_viewer' => 'viewer',
     ];
 
-    /**
-     * Resolve a free-text role label (Arabic or English) to the canonical
-     * ScopedRole::PROJECT_* constant. Single source of truth for callers that
-     * need the constant for downstream checks (e.g. the manager-escalation guard).
-     */
     public static function resolveRoleConstant(string $rawRole): string
     {
-        $resolved = self::ROLE_MAPPING[$rawRole] ?? 'member';
-
-        return match ($resolved) {
-            'manager' => ScopedRole::PROJECT_MANAGER,
-            'viewer' => ScopedRole::PROJECT_VIEWER,
-            default => ScopedRole::PROJECT_MEMBER,
-        };
+        return self::canonicalRoleName($rawRole);
     }
 
     /**
-     * إضافة أعضاء الفريق لمشروع
+     * Project create/update derives these assignments from the project aggregate.
+     * They are system-owned (`auto`) and therefore deliberately do not impersonate
+     * the initiating user or bypass the manual assignment actor guard.
+     *
+     * @param  array<int, array<string, mixed>>  $teamMembers
      */
     public function createTeamMembers(Project $project, array $teamMembers): void
     {
-        foreach ($teamMembers as $memberData) {
-            // During project creation the creator is already attached as the
-            // scoped manager, so a duplicate in the supplied team list is
-            // expected and tolerated here (addMember itself stays strict for
-            // the direct add-member API).
-            $userId = $memberData['user_id'] ?? null;
-            if ($userId && $project->members()->where('user_id', $userId)->exists()) {
-                continue;
-            }
+        DB::transaction(function () use ($project, $teamMembers): void {
+            foreach ($teamMembers as $memberData) {
+                $userId = $memberData['user_id'] ?? null;
+                if ($userId && $this->isMember($project, (int) $userId)) {
+                    continue;
+                }
 
-            $this->addMember($project, $memberData);
-        }
+                $this->addMember($project, $memberData);
+            }
+        });
     }
 
-    /**
-     * إضافة عضو واحد للفريق
-     *
-     * يُرمى ProjectMemberAlreadyExistsException عند محاولة إضافة عضو موجود مسبقاً،
-     * وInvalidArgumentException عند تمرير دور غير معروف.
-     */
+    /** @param array<string, mixed> $data */
     public function addMember(Project $project, array $data): bool
     {
         $userId = $data['user_id'] ?? null;
@@ -75,107 +66,163 @@ class TeamService
             return false;
         }
 
-        if ($project->members()->where('user_id', $userId)->exists()) {
-            throw new ProjectMemberAlreadyExistsException;
-        }
+        return DB::transaction(function () use ($project, $data, $userId): bool {
+            $user = User::query()->whereKey($userId)->lockForUpdate()->first();
+            if ($user === null) {
+                return false;
+            }
 
-        $rawRole = $data['role'] ?? 'member';
-        if (! array_key_exists($rawRole, self::ROLE_MAPPING)) {
-            throw new \InvalidArgumentException("دور غير معروف: {$rawRole}");
-        }
-        $mapped = self::ROLE_MAPPING[$rawRole];
+            if ($this->isMember($project, (int) $userId)) {
+                throw new ProjectMemberAlreadyExistsException;
+            }
 
-        $user = User::find($userId);
-        if (! $user) {
-            return false;
-        }
+            $this->syncAutomaticProjectRole($project, $user, self::canonicalRoleName((string) ($data['role'] ?? 'member')));
 
-        $user->assignProjectRole($project, $mapped);
-
-        return true;
+            return true;
+        });
     }
 
-    /**
-     * استبدال جميع أعضاء الفريق (حذف القدامى وإضافة الجدد)
-     */
+    /** @param array<int, array<string, mixed>> $teamMembers */
     public function replaceTeamMembers(Project $project, array $teamMembers): void
     {
-        $project->scopedRoles()->whereIn('role', ['member', 'viewer'])->delete();
+        DB::transaction(function () use ($project, $teamMembers): void {
+            $protectedRoleId = AuthorizationRole::query()
+                ->where('name', 'project_manager')
+                ->value('id');
 
-        // Mass delete bypasses ScopedRole model events; flush the decision cache.
-        AccessDecision::flushCache();
+            AuthorizationRoleAssignment::query()
+                ->where('scope_type', 'project')
+                ->where('scope_id', $project->id)
+                ->where('source', 'auto')
+                ->when($protectedRoleId !== null, fn ($query) => $query->where('authorization_role_id', '!=', $protectedRoleId))
+                ->delete();
 
-        $this->createTeamMembers($project, $teamMembers);
+            $this->createTeamMembers($project, $teamMembers);
+            DB::afterCommit(static fn () => AccessDecision::flushCache());
+        });
     }
 
-    /**
-     * تحديث دور عضو في المشروع
-     *
-     * يُرجع false إذا المستخدم غير موجود أو ليس عضواً في المشروع.
-     */
     public function updateMemberRole(Project $project, int $userId, string $role): bool
     {
-        $user = User::find($userId);
-        if (! $user) {
-            return false;
-        }
+        return DB::transaction(function () use ($project, $userId, $role): bool {
+            $user = User::query()->whereKey($userId)->lockForUpdate()->first();
+            if ($user === null || ! $this->isMember($project, $userId)) {
+                return false;
+            }
 
-        if (! $project->members()->where('user_id', $userId)->exists()) {
-            return false;
-        }
+            $this->syncAutomaticProjectRole($project, $user, self::canonicalRoleName($role));
 
-        $mapped = self::ROLE_MAPPING[$role] ?? null;
-        if ($mapped === null) {
-            throw new \InvalidArgumentException("دور غير معروف: {$role}");
-        }
-
-        $constant = self::resolveRoleConstant($mapped);
-        $user->assignProjectRole($project, $constant);
-
-        return true;
+            return true;
+        });
     }
 
-    /**
-     * إزالة عضو من المشروع
-     *
-     * يُرجع false إذا المستخدم غير موجود أو ليس عضواً في المشروع.
-     * بعد التوحيد: المدير دور سياقي أيضاً، فيُزال عبر revokeProjectRole.
-     */
     public function removeMember(Project $project, int $userId): bool
     {
-        $user = User::find($userId);
-        if (! $user) {
-            return false;
-        }
+        return DB::transaction(function () use ($project, $userId): bool {
+            User::query()->whereKey($userId)->lockForUpdate()->first();
 
-        if (! $project->members()->where('user_id', $userId)->exists()) {
-            return false;
-        }
+            $deleted = AuthorizationRoleAssignment::query()
+                ->where('user_id', $userId)
+                ->where('scope_type', 'project')
+                ->where('scope_id', $project->id)
+                ->where('source', 'auto')
+                ->delete() > 0;
 
-        return $user->revokeProjectRole($project);
+            if ($deleted) {
+                DB::afterCommit(static fn () => AccessDecision::flushUserCache($userId));
+            }
+
+            return $deleted;
+        });
     }
 
-    /**
-     * الأعضاء الذين يحملون دوراً معيناً في المشروع
-     */
     public function getMembersByRole(Project $project, string $role): Collection
     {
-        return $project->members()->wherePivot('role', $role)->get();
+        $roleName = self::canonicalRoleName($role);
+
+        return User::query()
+            ->whereIn('id', $this->assignmentQuery($project)->whereHas('role', fn ($query) => $query->where('name', $roleName))->select('user_id'))
+            ->get();
     }
 
-    /**
-     * عدد أعضاء المشروع
-     */
     public function getMembersCount(Project $project): int
     {
-        return $project->members()->count();
+        return $this->assignmentQuery($project)->distinct()->count('user_id');
     }
 
-    /**
-     * هل المستخدم عضو في المشروع؟
-     */
     public function isMember(Project $project, int $userId): bool
     {
-        return $project->members()->where('user_id', $userId)->exists();
+        return $this->assignmentQuery($project)->where('user_id', $userId)->exists();
+    }
+
+    public function assignAutomaticManager(Project $project, User $manager): void
+    {
+        DB::transaction(fn () => $this->syncAutomaticProjectRole($project, $manager, 'project_manager'));
+    }
+
+    private function syncAutomaticProjectRole(Project $project, User $user, string $roleName): void
+    {
+        if ($project->organization_id === null
+            || $user->organization_id === null
+            || (int) $project->organization_id !== (int) $user->organization_id) {
+            throw new RuntimeException('Automatic project roles cannot cross organization boundaries.');
+        }
+
+        $role = AuthorizationRole::query()
+            ->where('name', $roleName)
+            ->where('is_active', true)
+            ->lockForUpdate()
+            ->first();
+        if ($role === null) {
+            throw new RuntimeException("Missing active canonical project role [{$roleName}].");
+        }
+
+        AuthorizationRoleAssignment::query()
+            ->where('user_id', $user->id)
+            ->where('scope_type', 'project')
+            ->where('scope_id', $project->id)
+            ->where('source', 'auto')
+            ->where('authorization_role_id', '!=', $role->id)
+            ->delete();
+
+        $identity = [
+            'authorization_role_id' => $role->id,
+            'user_id' => $user->id,
+            'scope_type' => 'project',
+            'scope_id' => $project->id,
+        ];
+
+        if (! AuthorizationRoleAssignment::query()->where($identity)->exists()) {
+            AuthorizationRoleAssignment::query()->create($identity + [
+                'organization_id' => $project->organization_id,
+                'inherit_to_children' => false,
+                'expires_at' => null,
+                'source' => 'auto',
+                'granted_by' => null,
+            ]);
+        }
+
+        DB::afterCommit(static fn () => AccessDecision::flushUserCache((int) $user->id));
+    }
+
+    private function assignmentQuery(Project $project)
+    {
+        return AuthorizationRoleAssignment::query()
+            ->where('scope_type', 'project')
+            ->where('scope_id', $project->id)
+            ->where(function ($query) {
+                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->whereHas('role', fn ($query) => $query->where('is_active', true));
+    }
+
+    private static function canonicalRoleName(string $rawRole): string
+    {
+        $mapped = self::ROLE_MAPPING[$rawRole] ?? null;
+        if ($mapped === null) {
+            throw new InvalidArgumentException("دور غير معروف: {$rawRole}");
+        }
+
+        return 'project_'.$mapped;
     }
 }

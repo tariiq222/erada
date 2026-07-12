@@ -62,8 +62,10 @@ class UserRoleAssignmentGuardTest extends TestCase
             'is_active' => true,
         ]);
 
-        if ($role !== 'norole') {
-            $user->assignRole($role);
+        if ($role === 'super_admin') {
+            $this->grantCanonicalSuperAdmin($user);
+        } elseif ($role !== 'norole') {
+            $this->assignCanonicalRole($user, $role);
         }
 
         return $user;
@@ -222,7 +224,7 @@ class UserRoleAssignmentGuardTest extends TestCase
             'department_id' => null,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $target = $this->makeUser('viewer', $this->orgB, $this->deptB);
 

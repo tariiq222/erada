@@ -56,7 +56,7 @@ class ProjectMethodologyTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
     }
 
     // =========================================================================
@@ -446,7 +446,7 @@ class ProjectMethodologyTest extends TestCase
             'department_id' => $deptB->id,
             'is_active' => true,
         ]);
-        $adminInOrgB->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($adminInOrgB);
 
         $payload = [
             'name' => 'مشروع خاص بمؤسسة B',

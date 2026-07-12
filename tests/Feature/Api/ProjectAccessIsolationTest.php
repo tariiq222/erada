@@ -2,17 +2,14 @@
 
 namespace Tests\Feature\Api;
 
-use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
-use App\Modules\Core\Models\ScopeType;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -22,10 +19,7 @@ use Tests\TestCase;
  * - صلاحية مستخدم في مشروع/منظمة A لا تمنحه وصولاً لمشروع/منظمة B.
  * - الإسناد السياقي للأدوار محصور بالمشروع نفسه ولا يعبر المنظمات.
  *
- * ملاحظة Wave 4-7: محرّك AuthZ هو المسار الوحيد. `assignRole('viewer')` يمنح
- * صلاحية مسطّحة `projects.view` على مستوى المؤسسة (عبر scoped_role_definitions
- * للـ viewer)، لذا اختبارات العزل تتجنّب الأدوار المسطّحة وتستخدم أدواراً سياقية
- * على المشروع فقط.
+ * تستخدم الاختبارات إسنادات canonical محددة على المشروع.
  */
 class ProjectAccessIsolationTest extends TestCase
 {
@@ -52,81 +46,6 @@ class ProjectAccessIsolationTest extends TestCase
         $this->deptB = Department::factory()->create(['organization_id' => $this->orgB->id]);
 
         Cache::flush();
-        $this->seedProjectScopeDefinitions();
-    }
-
-    /**
-     * ينشئ ScopeType=project وتعريفات الأدوار للمحرّك (engine=ON).
-     */
-    private function seedProjectScopeDefinitions(): void
-    {
-        $scopeType = ScopeType::firstOrCreate(
-            ['key' => ScopedRole::SCOPE_PROJECT],
-            [
-                'label_ar' => 'مشروع',
-                'label_en' => 'Project',
-                'model_class' => Project::class,
-                'supports_hierarchy' => true,
-                'supports_expiry' => false,
-                'is_active' => true,
-                'sort_order' => 10,
-            ]
-        );
-
-        $now = now();
-
-        $definitions = [
-            [
-                'name' => 'project_manager',
-                'display_name' => 'Project Manager',
-                'scope_type' => ScopedRole::SCOPE_PROJECT,
-                'level' => 1,
-                'scope_type_id' => $scopeType->id,
-                'role_key' => ScopedRole::PROJECT_MANAGER,
-                'label_ar' => 'مدير المشروع',
-                'label_en' => 'Project Manager',
-                'is_admin_role' => false,
-                'permissions' => json_encode($this->expandFlags(
-                    ['projects.view', 'projects.edit', 'projects.manage_members', 'projects.assign_roles'],
-                    ['can_manage_members' => true, 'can_edit' => true, 'can_delete' => false, 'can_view_all' => true]
-                )),
-                'is_active' => true,
-                'sort_order' => 1,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ],
-            [
-                'name' => 'project_member',
-                'display_name' => 'Project Member',
-                'scope_type' => ScopedRole::SCOPE_PROJECT,
-                'level' => 2,
-                'scope_type_id' => $scopeType->id,
-                'role_key' => ScopedRole::PROJECT_MEMBER,
-                'label_ar' => 'عضو',
-                'label_en' => 'Member',
-                'is_admin_role' => false,
-                'permissions' => json_encode($this->expandFlags(['projects.view'], [
-                    'can_manage_members' => false, 'can_edit' => false, 'can_delete' => false, 'can_view_all' => true,
-                ])),
-                'is_active' => true,
-                'sort_order' => 2,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ],
-        ];
-
-        foreach ($definitions as $def) {
-            $exists = DB::table('scoped_role_definitions')
-                ->where('name', $def['name'])
-                ->where('scope_type', $def['scope_type'])
-                ->exists();
-
-            if (! $exists) {
-                DB::table('scoped_role_definitions')->insert($def);
-            }
-        }
-
-        Cache::flush();
     }
 
     private function makeUser(Organization $org, Department $dept, ?string $role = null): User
@@ -137,7 +56,7 @@ class ProjectAccessIsolationTest extends TestCase
             'is_active' => true,
         ]);
         if ($role) {
-            $user->assignRole($role);
+            $this->assignCanonicalRole($user, $role);
         }
 
         return $user;
@@ -152,7 +71,7 @@ class ProjectAccessIsolationTest extends TestCase
 
         // المدير يُمثَّل كدور سياقي (scoped role) لا كعمود manager_id
         if ($manager) {
-            $manager->assignProjectRole($project, ScopedRole::PROJECT_MANAGER, $manager->id);
+            $this->assignCanonicalRole($manager, 'project_manager', 'project', $project->id);
         }
 
         return $project;
@@ -194,14 +113,14 @@ class ProjectAccessIsolationTest extends TestCase
         $response = $this->actingAs($adminA, 'sanctum')
             ->postJson("/api/projects/{$projectB->id}/roles", [
                 'user_id' => $adminA->id,
-                'role' => ScopedRole::PROJECT_MANAGER,
+                'role_id' => $this->roleId('project_manager'),
             ]);
 
         $response->assertStatus(403);
 
-        $this->assertDatabaseMissing('model_has_scoped_roles', [
+        $this->assertDatabaseMissing('authorization_role_assignments', [
             'user_id' => $adminA->id,
-            'scope_type' => ScopedRole::SCOPE_PROJECT,
+            'scope_type' => 'project',
             'scope_id' => $projectB->id,
         ]);
     }
@@ -215,21 +134,21 @@ class ProjectAccessIsolationTest extends TestCase
         $projectA = $this->makeProject($this->orgA, $this->deptA);
         $projectB = $this->makeProject($this->orgA, $this->deptA);
 
-        $leader->assignProjectRole($projectA, ScopedRole::PROJECT_MANAGER, $leader->id);
+        $this->assignCanonicalRole($leader, 'project_manager', 'project', $projectA->id);
 
         $target = $this->makeUser($this->orgA, $this->deptA);
 
         $response = $this->actingAs($leader, 'sanctum')
             ->postJson("/api/projects/{$projectB->id}/roles", [
                 'user_id' => $target->id,
-                'role' => ScopedRole::PROJECT_MEMBER,
+                'role_id' => $this->roleId('project_member'),
             ]);
 
         $response->assertStatus(403);
 
-        $this->assertDatabaseMissing('model_has_scoped_roles', [
+        $this->assertDatabaseMissing('authorization_role_assignments', [
             'user_id' => $target->id,
-            'scope_type' => ScopedRole::SCOPE_PROJECT,
+            'scope_type' => 'project',
             'scope_id' => $projectB->id,
         ]);
     }
@@ -239,9 +158,7 @@ class ProjectAccessIsolationTest extends TestCase
      */
     public function test_member_of_project_a_cannot_view_project_b(): void
     {
-        // Engine cutover: لا منح المستخدم دور `viewer` المسطّح (يمنح projects.view
-        // على مستوى المؤسسة عبر scoped_role_definitions)، بل نكتفي بالدور السياقي
-        // على مشروع A لاختبار العزل P0-07 بين المشاريع داخل نفس المؤسسة.
+        // نكتفي بالدور canonical على مشروع A لاختبار العزل داخل المؤسسة.
         $member = $this->makeUser($this->orgA, $this->deptA);
         // مدير مشروعه A (دور سياقي manager يمنح رؤية المشروع عبر members)
         $projectA = $this->makeProject($this->orgA, $this->deptA, $member);
@@ -259,41 +176,8 @@ class ProjectAccessIsolationTest extends TestCase
         $this->assertContains($response->status(), [403, 404], 'يجب منع مدير مشروع A من رؤية مشروع B');
     }
 
-    /**
-     * Expand legacy granular flags into the equivalent explicit permissions
-     * (Phase 3, ADR-UNIFIED-ROLE-ACCESS — the flag columns were dropped from
-     * scoped_role_definitions; the engine now reads permissions[] only).
-     *
-     * @param  array<int, string>  $permissions
-     * @param  array<string, bool>  $flags
-     * @return array<int, string>
-     */
-    private function expandFlags(array $permissions, array $flags): array
+    private function roleId(string $name): int
     {
-        $byAction = fn (array $actions): array => array_values(array_filter(
-            Capability::all(),
-            function (string $c) use ($actions) {
-                $a = str_contains($c, '.') ? substr($c, strrpos($c, '.') + 1) : $c;
-
-                return in_array($a, $actions, true);
-            }
-        ));
-        if (! empty($flags['can_edit'])) {
-            $permissions = array_merge($permissions, $byAction(['edit', 'update']));
-        }
-        if (! empty($flags['can_delete'])) {
-            $permissions = array_merge($permissions, $byAction(['delete', 'remove']));
-        }
-        if (! empty($flags['can_view_all'])) {
-            $permissions = array_merge($permissions, $byAction(['view', 'view_all', 'view_reports']));
-        }
-        if (! empty($flags['can_manage_members'])) {
-            $permissions = array_merge($permissions, $byAction(['manage_members', 'assign_roles']));
-        }
-        if (! empty($flags['can_view_confidential'])) {
-            $permissions[] = Capability::OVR_VIEW_CONFIDENTIAL;
-        }
-
-        return array_values(array_unique($permissions));
+        return (int) AuthorizationRole::query()->where('name', $name)->valueOrFail('id');
     }
 }

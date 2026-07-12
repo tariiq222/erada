@@ -57,18 +57,14 @@ const emptyForm: CategoryFormData = {
 const IconSettings: React.FC = () => {
   const { t } = useTranslation();
   const { showToast } = useToast();
-  const { canAccess } = useAuth();
+  const { can } = useAuth();
 
   const [categories, setCategories] = useState<IncidentCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [tab, setTab] = useState('categories');
-  // Phase 9.3 freeze cleanup (2026-07-06): governing-department tab is gated
-  // on the canonical `core.view_organizations` capability (umbrella org-read
-  // gate). The legacy `manage_organization` transition-only string resolves
-  // to `false` from Phase 9.3 onward and is kept in TRANSITION_ONLY_PERMISSIONS
-  // only to fail loudly for any stray consumer.
-  const canGovern = canAccess({ permission: 'core.view_organizations' });
+  // Governing-department settings use the canonical organization capability.
+  const canGovern = can('core.view_organizations');
 
   const [formModal, setFormModal] = useState<{ open: boolean; category: IncidentCategory | null }>({
     open: false,

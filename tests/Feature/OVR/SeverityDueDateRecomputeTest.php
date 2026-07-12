@@ -56,7 +56,7 @@ class SeverityDueDateRecomputeTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
 
         $this->incidentType = IncidentType::create([
             'name' => 'Medical Error',

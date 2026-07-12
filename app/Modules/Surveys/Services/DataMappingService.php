@@ -104,7 +104,9 @@ class DataMappingService
 
         // إرسال لكل المشرفين في نفس المؤسسة
         $admins = User::where('organization_id', $survey->organization_id)
-            ->whereHas('roles', fn ($q) => $q->whereIn('name', ['super_admin', 'admin']))
+            ->whereHas('activeCanonicalRoleAssignments.role', fn ($query) => $query
+                ->whereIn('name', ['super_admin', 'admin'])
+                ->where('is_active', true))
             ->get();
 
         foreach ($admins as $admin) {

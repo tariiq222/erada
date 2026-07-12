@@ -12,8 +12,8 @@ use LogicException;
  * Phase 1 Task 1.1.2 — `authorization_decision_audits` Eloquent model.
  *
  * Append-only audit log of authorization decisions emitted by the
- * engine. The legacy `permission_audits` table is left untouched;
- * this is additive and lives alongside it during Phase 1.
+ * engine. Assignment mutations are tracked separately in the canonical
+ * `authorization_assignment_audits` store.
  *
  * Append-only: only `created_at` exists, no `updated_at`, and the
  * model does NOT use Eloquent timestamp management — the DB populates

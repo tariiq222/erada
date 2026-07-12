@@ -492,6 +492,7 @@ vi.mock('react-router-dom', () => ({
 
 vi.mock('@shared/contexts/AuthContext', () => ({
   useAuth: () => ({
+    can: () => true,
     canAccess: () => true,
     user: { name: 'محمد', email: 'test@test.com' },
     isSuperAdmin: () => true,
@@ -689,7 +690,8 @@ describe('Dashboard Non-SuperAdmin', () => {
   it('hides users stat for non-super admin', async () => {
     vi.doMock('@shared/contexts/AuthContext', () => ({
       useAuth: () => ({
-    canAccess: () => true,
+        can: () => false,
+        canAccess: () => true,
         user: { name: 'أحمد', email: 'ahmed@test.com' },
         isSuperAdmin: () => false,
       }),

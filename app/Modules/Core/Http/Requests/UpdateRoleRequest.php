@@ -2,6 +2,9 @@
 
 namespace App\Modules\Core\Http\Requests;
 
+use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -17,28 +20,29 @@ class UpdateRoleRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->isSuperAdmin() ?? false;
+        $user = $this->user();
+
+        return $user !== null && AccessDecision::can($user, Capability::ROLES_EDIT);
     }
 
     public function rules(): array
     {
-        $def = $this->route('roleDefinition');
-        $scopeKey = $def?->scope_type ?? $this->input('scope_type', 'organization');
+        $role = $this->route('roleDefinition');
+        $roleId = $role instanceof AuthorizationRole ? $role->id : $role;
 
         return [
             'name' => [
                 'sometimes', 'string', 'max:50',
-                Rule::unique('scoped_role_definitions', 'role_key')
-                    ->where(fn ($q) => $q->where('scope_type', $scopeKey)->where('is_active', true))
-                    ->ignore($def?->id),
+                Rule::unique('authorization_roles', 'name')->ignore($roleId),
             ],
-            'scope_type' => ['sometimes', 'string', 'exists:scope_types,key'],
-            'permissions' => ['array'],
-            'permissions.*' => ['string', 'exists:permissions,name'],
+            'label' => ['nullable', 'string', 'max:100'],
+            'scope_type' => ['sometimes', 'string', Rule::in(['all', 'organization', 'department', 'project', 'program', 'portfolio', 'kpi', 'meeting', 'survey'])],
             'label_ar' => ['nullable', 'string', 'max:100'],
             'label_en' => ['nullable', 'string', 'max:100'],
-            'permissions_capabilities' => ['nullable', 'array'],
-            'permissions_capabilities.*' => ['string', 'max:100'],
+            'capabilities' => ['nullable', 'array'],
+            'capabilities.*' => ['string', Rule::in(Capability::all())],
+            'is_active' => ['sometimes', 'boolean'],
+            'reassign_to_role_id' => ['nullable', 'integer', 'exists:authorization_roles,id'],
             // Per-module reach cap: { module: own|department|all } (Phase 6).
             'reach' => ['nullable', 'array'],
             'reach.*' => ['string', 'in:own,department,all'],

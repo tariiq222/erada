@@ -3,7 +3,6 @@
 namespace Tests\Unit\Policies;
 
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -47,7 +46,7 @@ class SuperAdminBypassTest extends TestCase
             'organization_id' => null,
             'department_id' => null,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $org = Organization::factory()->create();
         $dept = Department::factory()->create(['organization_id' => $org->id]);
@@ -79,7 +78,7 @@ class SuperAdminBypassTest extends TestCase
             'organization_id' => $org->id,
             'department_id' => $dept->id,
         ]);
-        $member->assignRole('member');
+        $this->assignCanonicalRole($member, 'member');
 
         $project = Project::factory()->create([
             'organization_id' => $org->id,
@@ -87,7 +86,7 @@ class SuperAdminBypassTest extends TestCase
         ]);
         $project->members()->attach($member->id, [
             'role' => 'member',
-            'scope_type' => ScopedRole::SCOPE_PROJECT,
+            'scope_type' => 'project',
         ]);
         $risk = Risk::factory()->forOrganization($org)->create();
 

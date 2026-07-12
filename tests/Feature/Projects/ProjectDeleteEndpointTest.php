@@ -59,7 +59,7 @@ class ProjectDeleteEndpointTest extends TestCase
             'organization_id' => $this->organization->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
 
         $this->member = User::factory()->create([
             'department_id' => $this->department->id,
@@ -77,7 +77,7 @@ class ProjectDeleteEndpointTest extends TestCase
             'organization_id' => $this->foreignOrganization->id,
             'is_active' => true,
         ]);
-        $this->foreignUser->assignRole('admin');
+        $this->grantCanonicalAdmin($this->foreignUser);
 
         Cache::flush();
     }

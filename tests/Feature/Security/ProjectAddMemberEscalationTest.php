@@ -4,8 +4,8 @@ namespace Tests\Feature\Security;
 
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -38,7 +38,7 @@ class ProjectAddMemberEscalationTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $owner->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($owner);
 
         $project = Project::factory()->create([
             'organization_id' => $org->id,
@@ -53,7 +53,12 @@ class ProjectAddMemberEscalationTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $mallory->assignProjectRole($project, ScopedRole::PROJECT_MANAGER, $owner->id);
+        $this->assignCanonicalRole(
+            $mallory,
+            'project_manager',
+            AuthorizationRoleAssignment::SCOPE_PROJECT,
+            $project->id,
+        );
 
         $frank = User::factory()->create(['organization_id' => $org->id, 'department_id' => $dept->id, 'is_active' => true]);
         $eve = User::factory()->create(['organization_id' => $org->id, 'department_id' => $dept->id, 'is_active' => true]);

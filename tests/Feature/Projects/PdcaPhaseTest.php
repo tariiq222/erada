@@ -63,7 +63,7 @@ class PdcaPhaseTest extends TestCase
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $manager->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($manager);
 
         return [$manager, $project];
     }
@@ -76,7 +76,7 @@ class PdcaPhaseTest extends TestCase
             'is_active' => true,
         ]);
         if ($role) {
-            $user->assignRole($role);
+            $this->assignCanonicalRole($user, $role);
         }
 
         return $user;

@@ -61,7 +61,7 @@ class ClusterTreeRecommendationPolicyViewTest extends TestCase
             'organization_id' => $cluster->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($user, [
+        $this->grantClusterCapabilities($user, [
             Capability::RECOMMENDATIONS_VIEW,
             Capability::CLUSTER_TREE_VIEW,
         ]);
@@ -88,7 +88,7 @@ class ClusterTreeRecommendationPolicyViewTest extends TestCase
             'organization_id' => $cluster->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($user, Capability::RECOMMENDATIONS_VIEW);
+        $this->grantClusterCapabilities($user, Capability::RECOMMENDATIONS_VIEW);
 
         $childRec = Recommendation::factory()->create([
             'organization_id' => $hospital->id,
@@ -112,7 +112,7 @@ class ClusterTreeRecommendationPolicyViewTest extends TestCase
             'organization_id' => $cluster->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($user, Capability::CLUSTER_TREE_VIEW);
+        $this->grantClusterCapabilities($user, Capability::CLUSTER_TREE_VIEW);
 
         $childRec = Recommendation::factory()->create([
             'organization_id' => $hospital->id,
@@ -138,7 +138,7 @@ class ClusterTreeRecommendationPolicyViewTest extends TestCase
             'organization_id' => $clusterA->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($userA, [
+        $this->grantClusterCapabilities($userA, [
             Capability::RECOMMENDATIONS_VIEW,
             Capability::CLUSTER_TREE_VIEW,
         ]);
@@ -185,7 +185,7 @@ class ClusterTreeRecommendationPolicyViewTest extends TestCase
             'organization_id' => $hospital->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($childUser, [
+        $this->grantClusterCapabilities($childUser, [
             Capability::RECOMMENDATIONS_VIEW,
             Capability::CLUSTER_TREE_VIEW,
         ]);
@@ -215,7 +215,7 @@ class ClusterTreeRecommendationPolicyViewTest extends TestCase
             'organization_id' => $cluster->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($user, [
+        $this->grantClusterCapabilities($user, [
             Capability::RECOMMENDATIONS_VIEW,
             Capability::CLUSTER_TREE_VIEW,
             Capability::RECOMMENDATIONS_APPROVE,
@@ -250,7 +250,7 @@ class ClusterTreeRecommendationPolicyViewTest extends TestCase
             'organization_id' => $cluster->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($user, [
+        $this->grantClusterCapabilities($user, [
             Capability::RECOMMENDATIONS_VIEW,
             Capability::CLUSTER_TREE_VIEW,
             Capability::RECOMMENDATIONS_ACCEPT,
@@ -283,7 +283,7 @@ class ClusterTreeRecommendationPolicyViewTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $super->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($super);
 
         $childRec = Recommendation::factory()->create([
             'organization_id' => $hospital->id,
@@ -336,7 +336,7 @@ class ClusterTreeRecommendationPolicyViewTest extends TestCase
             'organization_id' => $cluster->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($user, [
+        $this->grantClusterCapabilities($user, [
             Capability::RECOMMENDATIONS_VIEW,
             Capability::CLUSTER_TREE_VIEW,
         ]);
@@ -359,5 +359,17 @@ class ClusterTreeRecommendationPolicyViewTest extends TestCase
         $sibling = Organization::factory()->create(['name' => 'sibling of '.$hospitalName]);
 
         return [$cluster, $hospital, $sibling];
+    }
+
+    private function grantClusterCapabilities(User $user, string|array $capabilities): void
+    {
+        $this->grantEngineCapability(
+            $user,
+            $capabilities,
+            'organization',
+            (int) $user->organization_id,
+            null,
+            ['inherit_to_children' => true],
+        );
     }
 }

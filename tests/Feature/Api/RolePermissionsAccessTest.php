@@ -59,7 +59,7 @@ class RolePermissionsAccessTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $user->assignRole($role);
+        $this->assignCanonicalRole($user, $role);
 
         return $user;
     }
@@ -125,12 +125,12 @@ class RolePermissionsAccessTest extends TestCase
 
         $this->assertContains($response->status(), [403, 200]);
         // نتحقق من الـ permission الفعلية
-        $this->assertFalse($this->projectManager->hasPermissionTo('view_users'));
+        $this->assertFalse(AccessDecision::can($this->projectManager, Capability::USERS_VIEW));
     }
 
     public function test_member_cannot_list_users(): void
     {
-        $this->assertFalse($this->member->hasPermissionTo('view_users'));
+        $this->assertFalse(AccessDecision::can($this->member, Capability::USERS_VIEW));
 
         $response = $this->actingAs($this->member, 'sanctum')
             ->getJson('/api/users');
@@ -140,29 +140,29 @@ class RolePermissionsAccessTest extends TestCase
 
     public function test_viewer_cannot_list_users(): void
     {
-        $this->assertFalse($this->viewer->hasPermissionTo('view_users'));
+        $this->assertFalse(AccessDecision::can($this->viewer, Capability::USERS_VIEW));
     }
 
     // ========== /api/users (create_users permission) ==========
 
     public function test_admin_can_create_users(): void
     {
-        $this->assertTrue($this->admin->hasPermissionTo('create_users'));
+        $this->assertTrue(AccessDecision::can($this->admin, Capability::USERS_CREATE));
     }
 
     public function test_member_cannot_create_users(): void
     {
-        $this->assertFalse($this->member->hasPermissionTo('create_users'));
+        $this->assertFalse(AccessDecision::can($this->member, Capability::USERS_CREATE));
     }
 
     public function test_viewer_cannot_create_users(): void
     {
-        $this->assertFalse($this->viewer->hasPermissionTo('create_users'));
+        $this->assertFalse(AccessDecision::can($this->viewer, Capability::USERS_CREATE));
     }
 
     public function test_project_manager_cannot_create_users(): void
     {
-        $this->assertFalse($this->projectManager->hasPermissionTo('create_users'));
+        $this->assertFalse(AccessDecision::can($this->projectManager, Capability::USERS_CREATE));
     }
 
     // ========== /api/settings/system (edit_settings permission) ==========
@@ -208,12 +208,12 @@ class RolePermissionsAccessTest extends TestCase
 
     public function test_admin_has_create_projects_permission(): void
     {
-        $this->assertTrue($this->admin->hasPermissionTo('create_projects'));
+        $this->assertTrue(AccessDecision::can($this->admin, Capability::PROJECTS_CREATE));
     }
 
     public function test_admin_has_delete_projects_permission(): void
     {
-        $this->assertTrue($this->admin->hasPermissionTo('delete_projects'));
+        $this->assertTrue(AccessDecision::can($this->admin, Capability::PROJECTS_DELETE));
     }
 
     public function test_project_manager_has_view_own_projects_permission(): void
@@ -226,7 +226,7 @@ class RolePermissionsAccessTest extends TestCase
 
     public function test_project_manager_cannot_delete_projects(): void
     {
-        $this->assertFalse($this->projectManager->hasPermissionTo('delete_projects'));
+        $this->assertFalse(AccessDecision::can($this->projectManager, Capability::PROJECTS_DELETE));
     }
 
     public function test_member_has_view_own_projects(): void
@@ -237,14 +237,14 @@ class RolePermissionsAccessTest extends TestCase
 
     public function test_member_cannot_create_projects(): void
     {
-        $this->assertFalse($this->member->hasPermissionTo('create_projects'));
+        $this->assertFalse(AccessDecision::can($this->member, Capability::PROJECTS_CREATE));
     }
 
     public function test_viewer_can_only_view_own_projects(): void
     {
         $this->grantEngineCapability($this->viewer, Capability::PROJECTS_VIEW);
         $this->assertTrue(AccessDecision::can($this->viewer->fresh(), Capability::PROJECTS_VIEW));
-        $this->assertFalse($this->viewer->hasPermissionTo('create_projects'));
+        $this->assertFalse(AccessDecision::can($this->viewer, Capability::PROJECTS_CREATE));
         // Engine path: legacy `edit_own_projects` removed in Wave 4; viewer has
         // no PROJECTS_EDIT, which is the post-cutover equivalent.
         $this->assertFalse(AccessDecision::can($this->viewer->fresh(), Capability::PROJECTS_EDIT));
@@ -258,8 +258,8 @@ class RolePermissionsAccessTest extends TestCase
         // create/delete. The flat `view_department_tasks` / `edit_department_tasks`
         // strings were pruned in Wave 4; the equivalent engine check is TASKS_VIEW /
         // TASKS_EDIT at the org scope (admin already has both via the seeder).
-        $this->assertTrue($this->admin->hasPermissionTo('create_tasks'));
-        $this->assertTrue($this->admin->hasPermissionTo('delete_tasks'));
+        $this->assertTrue(AccessDecision::can($this->admin, Capability::TASKS_CREATE));
+        $this->assertTrue(AccessDecision::can($this->admin, Capability::TASKS_DELETE));
 
         // Engine-level: admin can view and edit tasks in its own organization.
         $this->assertTrue(AccessDecision::can($this->admin, Capability::TASKS_VIEW));
@@ -272,49 +272,49 @@ class RolePermissionsAccessTest extends TestCase
         // Capability::TASKS_VIEW at org scope.
         $this->grantEngineCapability($this->viewer, Capability::TASKS_VIEW);
         $this->assertTrue(AccessDecision::can($this->viewer->fresh(), Capability::TASKS_VIEW));
-        $this->assertFalse($this->viewer->hasPermissionTo('create_tasks'));
-        $this->assertFalse($this->viewer->hasPermissionTo('edit_tasks'));
-        $this->assertFalse($this->viewer->hasPermissionTo('delete_tasks'));
+        $this->assertFalse(AccessDecision::can($this->viewer, Capability::TASKS_CREATE));
+        $this->assertFalse(AccessDecision::can($this->viewer, Capability::TASKS_EDIT));
+        $this->assertFalse(AccessDecision::can($this->viewer, Capability::TASKS_DELETE));
     }
 
     // ========== صلاحيات التعليقات ==========
 
     public function test_all_roles_can_create_comments(): void
     {
-        $this->assertTrue($this->admin->hasPermissionTo('create_comments'));
-        $this->assertTrue($this->projectManager->hasPermissionTo('create_comments'));
-        $this->assertTrue($this->member->hasPermissionTo('create_comments'));
-        $this->assertTrue($this->viewer->hasPermissionTo('create_comments'));
+        $this->assertTrue(AccessDecision::can($this->admin, Capability::COMMENTS_CREATE));
+        $this->assertTrue(AccessDecision::can($this->projectManager, Capability::COMMENTS_CREATE));
+        $this->assertTrue(AccessDecision::can($this->member, Capability::COMMENTS_CREATE));
+        $this->assertTrue(AccessDecision::can($this->viewer, Capability::COMMENTS_CREATE));
     }
 
     public function test_admin_can_delete_comments(): void
     {
-        $this->assertTrue($this->admin->hasPermissionTo('delete_comments'));
+        $this->assertTrue(AccessDecision::can($this->admin, Capability::COMMENTS_DELETE));
     }
 
     public function test_member_cannot_delete_comments(): void
     {
-        $this->assertFalse($this->member->hasPermissionTo('delete_comments'));
+        $this->assertFalse(AccessDecision::can($this->member, Capability::COMMENTS_DELETE));
     }
 
     public function test_viewer_cannot_delete_comments(): void
     {
-        $this->assertFalse($this->viewer->hasPermissionTo('delete_comments'));
+        $this->assertFalse(AccessDecision::can($this->viewer, Capability::COMMENTS_DELETE));
     }
 
     // ========== صلاحيات المرفقات ==========
 
     public function test_all_roles_can_download_attachments(): void
     {
-        $this->assertTrue($this->admin->hasPermissionTo('download_attachments'));
-        $this->assertTrue($this->projectManager->hasPermissionTo('download_attachments'));
-        $this->assertTrue($this->member->hasPermissionTo('download_attachments'));
-        $this->assertTrue($this->viewer->hasPermissionTo('download_attachments'));
+        $this->assertTrue(AccessDecision::can($this->admin, Capability::ATTACHMENTS_VIEW));
+        $this->assertTrue(AccessDecision::can($this->projectManager, Capability::ATTACHMENTS_VIEW));
+        $this->assertTrue(AccessDecision::can($this->member, Capability::ATTACHMENTS_VIEW));
+        $this->assertTrue(AccessDecision::can($this->viewer, Capability::ATTACHMENTS_VIEW));
     }
 
     public function test_viewer_cannot_upload_attachments(): void
     {
-        $this->assertFalse($this->viewer->hasPermissionTo('upload_attachments'));
+        $this->assertFalse(AccessDecision::can($this->viewer, Capability::ATTACHMENTS_UPLOAD));
     }
 
     // ========== صلاحيات الإدارة العليا ==========
@@ -322,26 +322,26 @@ class RolePermissionsAccessTest extends TestCase
     public function test_only_admin_and_above_have_delete_users_permission(): void
     {
         // delete_users هي صلاحية super_admin فقط (تبعاً للـ Seeder)
-        $this->assertFalse($this->admin->hasPermissionTo('delete_users'));
-        $this->assertFalse($this->projectManager->hasPermissionTo('delete_users'));
-        $this->assertFalse($this->member->hasPermissionTo('delete_users'));
-        $this->assertFalse($this->viewer->hasPermissionTo('delete_users'));
+        $this->assertFalse(AccessDecision::can($this->admin, Capability::USERS_DELETE));
+        $this->assertFalse(AccessDecision::can($this->projectManager, Capability::USERS_DELETE));
+        $this->assertFalse(AccessDecision::can($this->member, Capability::USERS_DELETE));
+        $this->assertFalse(AccessDecision::can($this->viewer, Capability::USERS_DELETE));
     }
 
     public function test_only_admin_and_above_have_view_audit_logs(): void
     {
-        $this->assertTrue($this->admin->hasPermissionTo('view_audit_logs'));
-        $this->assertFalse($this->projectManager->hasPermissionTo('view_audit_logs'));
-        $this->assertFalse($this->member->hasPermissionTo('view_audit_logs'));
-        $this->assertFalse($this->viewer->hasPermissionTo('view_audit_logs'));
+        $this->assertTrue(AccessDecision::can($this->admin, Capability::AUDIT_VIEW));
+        $this->assertFalse(AccessDecision::can($this->projectManager, Capability::AUDIT_VIEW));
+        $this->assertFalse(AccessDecision::can($this->member, Capability::AUDIT_VIEW));
+        $this->assertFalse(AccessDecision::can($this->viewer, Capability::AUDIT_VIEW));
     }
 
     public function test_only_admin_and_above_have_strategy_permissions(): void
     {
-        $this->assertTrue($this->admin->hasPermissionTo('view_strategy'));
-        $this->assertTrue($this->admin->hasPermissionTo('create_strategy'));
-        $this->assertFalse($this->member->hasPermissionTo('create_strategy'));
-        $this->assertFalse($this->viewer->hasPermissionTo('create_strategy'));
+        $this->assertTrue(AccessDecision::can($this->admin, Capability::STRATEGY_VIEW));
+        $this->assertTrue(AccessDecision::can($this->admin, Capability::STRATEGY_CREATE));
+        $this->assertFalse(AccessDecision::can($this->member, Capability::STRATEGY_CREATE));
+        $this->assertFalse(AccessDecision::can($this->viewer, Capability::STRATEGY_CREATE));
     }
 
     // ========== اختبار API للتحقق من الوصول الفعلي ==========

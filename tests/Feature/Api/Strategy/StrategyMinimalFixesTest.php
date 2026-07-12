@@ -53,7 +53,7 @@ class StrategyMinimalFixesTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         $portfolio = Portfolio::factory()->create(['organization_id' => $org->id]);
         $program = Program::factory()->create([
@@ -90,7 +90,7 @@ class StrategyMinimalFixesTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         $portfolio = Portfolio::factory()->create(['organization_id' => $org->id]);
         $program = Program::factory()->create([
@@ -132,7 +132,7 @@ class StrategyMinimalFixesTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $orphanSuperAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($orphanSuperAdmin);
 
         $response = $this->actingAs($orphanSuperAdmin, 'sanctum')
             ->postJson('/api/strategy/portfolios', [
@@ -153,7 +153,7 @@ class StrategyMinimalFixesTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         // An orphan portfolio — organization_id is null. The new guard
         // refuses to create a program that would inherit null.
@@ -180,7 +180,7 @@ class StrategyMinimalFixesTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         // ProjectObserver::saving auto-corrects project.organization_id from
         // its department's organization_id; bypass the correction by leaving
@@ -212,7 +212,7 @@ class StrategyMinimalFixesTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         $orphanProject = Project::factory()->create([
             'organization_id' => null,
@@ -335,7 +335,7 @@ class StrategyMinimalFixesTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $response = $this->actingAs($superAdmin, 'sanctum')
             ->deleteJson("/api/strategy/programs/{$program->id}/unlink-project/{$project->id}");
@@ -379,7 +379,7 @@ class StrategyMinimalFixesTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $reporter->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($reporter);
 
         $blocker = $this->makeBlockerFor($reporter, $project, $org->id);
 
@@ -411,7 +411,7 @@ class StrategyMinimalFixesTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $reporter->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($reporter);
 
         $blocker = $this->makeBlockerFor($reporter, $project, $org->id);
 
@@ -446,7 +446,7 @@ class StrategyMinimalFixesTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $reporter->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($reporter);
 
         $blocker = $this->makeBlockerFor($reporter, $project, $org->id);
 
@@ -482,7 +482,7 @@ class StrategyMinimalFixesTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $blocker = $this->makeBlockerFor($superAdmin, $project, $org->id);
 

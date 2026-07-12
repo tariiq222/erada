@@ -34,7 +34,7 @@ use Illuminate\Support\Facades\DB;
  *       data minimization (per PRD 4).
  *
  * Authorization model:
- *   - Routes are wrapped in auth:sanctum + role:super_admin middleware
+ *   - Routes are wrapped in auth:sanctum and canonical capability guards
  *     (the engine already grants super_admin blanket bypass for
  *     engineering capabilities per the unified-authz spec). No new
  *     Capability constant is introduced — super_admin role membership

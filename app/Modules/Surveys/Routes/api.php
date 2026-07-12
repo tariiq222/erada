@@ -144,7 +144,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // ========================================
         // الإجابات
         // ========================================
-        // Phase 8-D: `permission:view_survey_responses` (Spatie) → engine_capability.
+        // Survey response access is enforced by the canonical capability guard.
         // تصحيح Phase 1 القديم: الـ route يعرض response data (PII) لا survey metadata،
         // فالـ capability الصحيح هو SURVEYS_REVIEW_RESPONSES (نفسه المستخدم في
         // SurveyResponseController::authorize() و SurveyController::export::authorize()).
@@ -211,8 +211,8 @@ Route::middleware('auth:sanctum')->group(function () {
             ->name('data-imports.show');
 
         // العمليات المؤثّرة (مراجعة/تطبيق) تتطلب القدرة engine-only surveys.review_data_imports
-        // (super_admin يتجاوز عبر AccessDecision::can). Phase 8-C: كانت permission:review_data_imports
-        // (Spatie) ثم نُقلت إلى engine_capability: Capability::SURVEYS_REVIEW_DATA_IMPORTS.
+        // super_admin يتجاوز عبر AccessDecision::can؛ بقية المستخدمين يحتاجون
+        // Capability::SURVEYS_REVIEW_DATA_IMPORTS.
         Route::middleware('engine_capability:'.Capability::SURVEYS_REVIEW_DATA_IMPORTS)->group(function () {
             Route::post('/{request}/approve', [DataImportController::class, 'approve'])
                 ->name('data-imports.approve');

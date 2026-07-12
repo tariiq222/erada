@@ -3,7 +3,10 @@
 namespace App\Modules\HR\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Core\Models\ScopedRoleDefinition;
+use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRolePermission;
+use App\Modules\Core\Authorization\Support\CapabilityToAuthorizationRolePermission;
 use App\Modules\HR\Http\Requests\UpdateDepartmentCapacityRoleRequest;
 use App\Modules\HR\Models\Department;
 use App\Modules\HR\Models\DepartmentCapacityRole;
@@ -14,7 +17,7 @@ use Illuminate\Http\Request;
 
 /**
  * Manages the per-department capacity-role policy (member/manager) that drives
- * the automatic scoped-role sync. The backend is the sole decision source; the
+ * the automatic canonical-assignment sync. The backend is the sole decision source; the
  * UI only reads `available` and writes the policy, never the sync logic.
  */
 class DepartmentCapacityRoleController extends Controller
@@ -84,24 +87,40 @@ class DepartmentCapacityRoleController extends Controller
     }
 
     /**
-     * Department-scoped and organization-scoped active definitions a department
-     * may assign (a department can hold its own dept roles or a cross-cutting
-     * org role such as quality_manager).
+     * Department-scoped active canonical roles that may be materialized as
+     * automatic department assignments.
      *
-     * @return array<int, array{role_key: string, label: string, scope: ?string}>
+     * @return array<int, array{role_id: int, role_key: string, name: string, label: string, scope: string, capabilities: list<string>}>
      */
     protected function availableDefinitions(): array
     {
-        return ScopedRoleDefinition::query()
-            ->whereHas('scopeType', fn ($q) => $q->whereIn('key', ['department', 'organization']))
+        return AuthorizationRole::query()
+            ->where('scope_type', 'department')
             ->where('is_active', true)
-            ->with('scopeType:id,key')
-            ->orderBy('sort_order')
+            ->with('permissions.resource')
+            ->orderBy('name')
             ->get()
-            ->map(fn ($d) => [
-                'role_key' => $d->role_key,
-                'label' => $d->label_ar ?: $d->role_key,
-                'scope' => $d->scopeType?->key,
+            ->map(fn (AuthorizationRole $role) => [
+                'role_id' => $role->id,
+                'role_key' => $role->name,
+                'name' => $role->name,
+                'label' => $role->label_ar ?: $role->label,
+                'scope' => $role->scope_type,
+                'capabilities' => $this->capabilitiesFor($role),
             ])->all();
+    }
+
+    /** @return list<string> */
+    private function capabilitiesFor(AuthorizationRole $role): array
+    {
+        return $role->permissions->map(function (AuthorizationRolePermission $permission): ?string {
+            return collect(Capability::all())->first(function (string $capability) use ($permission): bool {
+                $mapping = CapabilityToAuthorizationRolePermission::map($capability);
+
+                return $mapping !== null
+                    && $mapping['resource'] === $permission->resource?->key
+                    && $mapping['action'] === $permission->action;
+            });
+        })->filter()->unique()->sort()->values()->all();
     }
 }

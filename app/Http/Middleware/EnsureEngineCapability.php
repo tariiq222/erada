@@ -8,15 +8,10 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * EnsureEngineCapability - engine-aware route gate.
- *
- * Replaces the legacy `permission:X` Spatie middleware on route groups that
- * have been migrated to the unified AuthZ engine. The legacy middleware
- * resolves the permission by its `name` column (Spatie's Permission table),
- * so pruning the seeded permission row 403s every request on that route.
+ * EnsureEngineCapability - canonical route capability gate.
  *
  * This middleware delegates the decision to AccessDecision::can(), the single
- * source of truth (engine-only). Capability strings must come from
+ * source of truth. Capability strings must come from
  * App\Modules\Core\Authorization\Capability constants (e.g. HR_VIEW).
  *
  * Usage:

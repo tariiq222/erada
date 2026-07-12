@@ -54,7 +54,7 @@ class RecommendationDeferMetadataTest extends TestCase
             'organization_id' => $this->project->organization_id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
 
         $this->meeting = Meeting::factory()->create([
             'department_id' => $this->dept->id,
@@ -93,7 +93,7 @@ class RecommendationDeferMetadataTest extends TestCase
             'organization_id' => $this->project->organization_id,
             'is_active' => true,
         ]);
-        $other->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($other);
 
         $ruling = Recommendation::create([
             'kind' => Recommendation::KIND_RULING,

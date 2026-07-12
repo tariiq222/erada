@@ -24,7 +24,7 @@ class PublicDepartmentsEndpointTest extends TestCase
             'organization_id' => $organization->id,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->assignCanonicalRole($user, 'admin');
 
         $response = $this->actingAs($user, 'sanctum')
             ->getJson('/api/hr/departments/list');

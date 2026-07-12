@@ -104,7 +104,7 @@ function getInitials(name?: string): string {
 
 const AppLayout: React.FC = () => {
   const { t, i18n } = useTranslation();
-  const { isAuthenticated, isLoading, user, isAdmin, canAccess, logout } = useAuth();
+  const { isAuthenticated, isLoading, user, can, refreshUser, logout } = useAuth();
   const { resolvedTheme, setTheme } = useTheme();
   const { direction, setLocale } = useLocale();
   const { currentOrganization, organizations, switchOrganization } = useOrganization();
@@ -172,8 +172,8 @@ const AppLayout: React.FC = () => {
   }, [i18n.language, direction]);
 
   const navGroups = useMemo(
-    () => buildNasaqGroups((key) => t(key), canAccess, isAdmin()),
-    [t, canAccess, isAdmin],
+    () => buildNasaqGroups((key) => t(key), can, can('core.view_organizations')),
+    [t, can],
   );
 
   if (isLoading) {
@@ -211,8 +211,9 @@ const AppLayout: React.FC = () => {
   const theme = (resolvedTheme === "dark" ? "dark" : "light") as "light" | "dark";
   const userName = user?.name || "";
   const userInitials = getInitials(user?.name);
-  const userRole = user?.roles?.[0]
-    ? t(`role.${user.roles[0]}`, user.roles[0])
+  const primaryRole = user?.role_assignments?.[0];
+  const userRole = primaryRole
+    ? t(`role.${primaryRole.role}`, primaryRole.label || primaryRole.role)
     : "";
 
   const sidebarLabels = {
@@ -277,7 +278,7 @@ const AppLayout: React.FC = () => {
         settings: t("nav.settings", "الإعدادات"),
         logout: t("nav.logout", "تسجيل الخروج"),
       }}
-      isAdmin={isAdmin()}
+      isAdmin={can('core.view_organizations')}
       onProfile={() => navigate("/profile")}
       onTechnicalDashboard={() => navigate("/admin/overview")}
       onSettings={() => navigate("/admin/organizations")}
@@ -291,7 +292,7 @@ const AppLayout: React.FC = () => {
         manage: t("admin.organizations.title", "إدارة المؤسسات"),
       }}
       onSwitchOrg={(id) => {
-        void switchOrganization(id);
+        void switchOrganization(id).then(refreshUser);
       }}
       onManageOrgs={() => navigate("/admin/organizations")}
       direction={direction}

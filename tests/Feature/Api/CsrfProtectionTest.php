@@ -13,7 +13,6 @@ use Illuminate\Cookie\CookieValuePrefix;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
-use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
@@ -29,15 +28,6 @@ use Tests\TestCase;
 class CsrfProtectionTest extends TestCase
 {
     use RefreshDatabase;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
-        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
-        Role::firstOrCreate(['name' => 'employee', 'guard_name' => 'web']);
-    }
 
     public function test_middleware_allows_get_requests_without_token(): void
     {
@@ -297,7 +287,7 @@ class CsrfProtectionTest extends TestCase
             'department_id' => $department->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         $response = $this->actingAs($user, 'sanctum')
             ->withHeaders($this->statefulHeaders())
@@ -317,7 +307,7 @@ class CsrfProtectionTest extends TestCase
             'department_id' => $department->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         // X-XSRF-TOKEN خاطئ عمداً لتجاوز حقن X-Skip-Csrf التلقائي في TestCase::call()
         // ولإجبار Middleware على رؤية token موجود لكنه لا يطابق session token
@@ -356,7 +346,7 @@ class CsrfProtectionTest extends TestCase
             'department_id' => $department->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         // تشغيل Session محلياً وقراءة الـ token الناتج، ثم إرساله كـ X-XSRF-TOKEN
         $session = $this->app['session.store'];
@@ -394,7 +384,7 @@ class CsrfProtectionTest extends TestCase
             'department_id' => $department->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         $meeting = Meeting::factory()->create([
             'organization_id' => $project->organization_id,

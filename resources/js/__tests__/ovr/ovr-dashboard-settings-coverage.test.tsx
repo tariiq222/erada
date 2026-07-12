@@ -11,7 +11,7 @@ const showToastMock = vi.fn();
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@shared/ui/Toast', () => ({ useToast: () => ({ showToast: showToastMock }) }));
 vi.mock('@shared/api/client', () => ({ api: apiMock }));
-vi.mock('@shared/contexts/AuthContext', () => ({ useAuth: () => ({ canAccess: () => false }) }));
+vi.mock('@shared/contexts/AuthContext', () => ({ useAuth: () => ({ can: () => false }) }));
 vi.mock('@entities/incident', () => ({
   incidentsApi: incidentsApiMock,
   incidentCategoriesApi: incidentCategoriesApiMock,

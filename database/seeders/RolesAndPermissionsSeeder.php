@@ -2,227 +2,338 @@
 
 namespace Database\Seeders;
 
+use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
-use App\Modules\Core\Enums\Permission;
-use App\Modules\Core\Models\ScopedRoleDefinition;
+use App\Modules\Core\Authorization\Models\AuthorizationResource;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Support\CapabilityToAuthorizationRolePermission;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
-use Spatie\Permission\Models\Permission as SpatiePermission;
-use Spatie\Permission\Models\Role;
-use Spatie\Permission\PermissionRegistrar;
 
 class RolesAndPermissionsSeeder extends Seeder
 {
+    /**
+     * Canonical install-time role catalog.
+     *
+     * @return array<string, array{label: string, label_ar?: string, label_en?: string, scope_type: string, is_admin_role: bool, capabilities: list<string>}>
+     */
+    public static function roleCatalog(): array
+    {
+        $projectManager = [
+            Capability::PROJECTS_VIEW,
+            Capability::PROJECTS_EDIT,
+            Capability::PROJECTS_ASSIGN_ROLES,
+            Capability::TASKS_VIEW,
+            Capability::TASKS_CREATE,
+            Capability::TASKS_EDIT,
+            Capability::TASKS_COMPLETE,
+            Capability::TASKS_ASSIGN,
+            Capability::ATTACHMENTS_VIEW,
+            Capability::ATTACHMENTS_UPLOAD,
+            Capability::COMMENTS_VIEW,
+            Capability::COMMENTS_CREATE,
+            Capability::COMMENTS_EDIT,
+        ];
+
+        $projectMember = [
+            Capability::PROJECTS_VIEW,
+            Capability::TASKS_VIEW,
+            Capability::TASKS_CREATE,
+            Capability::TASKS_EDIT,
+            Capability::TASKS_COMPLETE,
+            Capability::ATTACHMENTS_VIEW,
+            Capability::ATTACHMENTS_UPLOAD,
+            Capability::COMMENTS_VIEW,
+            Capability::COMMENTS_CREATE,
+        ];
+
+        $projectViewer = [
+            Capability::PROJECTS_VIEW,
+            Capability::TASKS_VIEW,
+            Capability::ATTACHMENTS_VIEW,
+            Capability::COMMENTS_VIEW,
+        ];
+
+        $departmentManager = [
+            Capability::DEPARTMENTS_VIEW,
+            Capability::DEPARTMENTS_MANAGE_MEMBERS,
+            Capability::DEPARTMENTS_ASSIGN_ROLES,
+            Capability::PROJECTS_VIEW,
+            Capability::PROJECTS_CREATE,
+            Capability::PROJECTS_EDIT,
+            Capability::PROJECTS_DELETE,
+            Capability::PROJECTS_ASSIGN_ROLES,
+            Capability::TASKS_VIEW,
+            Capability::TASKS_CREATE,
+            Capability::TASKS_EDIT,
+            Capability::TASKS_DELETE,
+            Capability::TASKS_COMPLETE,
+            Capability::TASKS_ASSIGN,
+            Capability::RISKS_VIEW,
+            Capability::RISKS_CREATE,
+            Capability::RISKS_EDIT,
+            Capability::RISKS_REASSESS,
+            Capability::RISKS_CHANGE_STATUS,
+            Capability::RISKS_VIEW_REPORTS,
+            Capability::OVR_VIEW,
+            Capability::OVR_CREATE,
+            Capability::OVR_VIEW_ALL,
+            Capability::OVR_INVESTIGATE,
+            Capability::OVR_CLOSE,
+            Capability::OVR_CHANGE_STATUS,
+            Capability::OVR_ASSIGN,
+            Capability::KPIS_VIEW,
+            Capability::MEETINGS_VIEW,
+            Capability::SURVEYS_VIEW,
+            Capability::STRATEGY_VIEW,
+        ];
+
+        return [
+            'super_admin' => [
+                'label' => 'Super Admin',
+                'scope_type' => 'all',
+                'is_admin_role' => true,
+                'capabilities' => Capability::all(),
+            ],
+            'admin' => [
+                'label' => 'Organization Admin',
+                'scope_type' => 'organization',
+                'is_admin_role' => true,
+                'capabilities' => Capability::all(),
+            ],
+            'viewer' => [
+                'label' => 'Viewer',
+                'scope_type' => 'organization',
+                'is_admin_role' => false,
+                'capabilities' => self::viewCapabilities(),
+            ],
+            'manager' => [
+                'label' => 'Manager',
+                'scope_type' => 'organization',
+                'is_admin_role' => false,
+                'capabilities' => $projectManager,
+            ],
+            'member' => [
+                'label' => 'Member',
+                'scope_type' => 'organization',
+                'is_admin_role' => false,
+                'capabilities' => $projectMember,
+            ],
+            'project_manager' => [
+                'label' => 'Project Manager',
+                'scope_type' => 'project',
+                'is_admin_role' => false,
+                'capabilities' => $projectManager,
+            ],
+            'project_member' => [
+                'label' => 'Project Member',
+                'scope_type' => 'project',
+                'is_admin_role' => false,
+                'capabilities' => $projectMember,
+            ],
+            'project_viewer' => [
+                'label' => 'Project Viewer',
+                'scope_type' => 'project',
+                'is_admin_role' => false,
+                'capabilities' => $projectViewer,
+            ],
+            'dept_manager' => [
+                'label' => 'Department Manager',
+                'label_ar' => 'مدير القسم',
+                'label_en' => 'Department Manager',
+                'scope_type' => 'department',
+                'is_admin_role' => false,
+                'capabilities' => $departmentManager,
+            ],
+            'dept_member' => [
+                'label' => 'Department Member',
+                'label_ar' => 'عضو القسم',
+                'label_en' => 'Department Member',
+                'scope_type' => 'department',
+                'is_admin_role' => false,
+                'capabilities' => [
+                    Capability::DEPARTMENTS_VIEW,
+                    Capability::PROJECTS_VIEW,
+                    Capability::PROJECTS_CREATE,
+                    Capability::PROJECTS_EDIT,
+                    Capability::TASKS_VIEW,
+                    Capability::TASKS_CREATE,
+                    Capability::TASKS_EDIT,
+                    Capability::TASKS_COMPLETE,
+                    Capability::RISKS_VIEW,
+                    Capability::RISKS_CREATE,
+                    Capability::OVR_VIEW,
+                    Capability::OVR_CREATE,
+                ],
+            ],
+            'pmo_manager' => [
+                'label' => 'PMO Manager',
+                'label_ar' => 'مدير مكتب المشاريع',
+                'label_en' => 'PMO Manager',
+                'scope_type' => 'organization',
+                'is_admin_role' => false,
+                'capabilities' => $projectManager,
+            ],
+            'pmo_coordinator' => [
+                'label' => 'PMO Coordinator',
+                'label_ar' => 'منسّق مكتب المشاريع',
+                'label_en' => 'PMO Coordinator',
+                'scope_type' => 'organization',
+                'is_admin_role' => false,
+                'capabilities' => [
+                    Capability::PROJECTS_VIEW,
+                    Capability::PROJECTS_EDIT,
+                    Capability::TASKS_VIEW,
+                    Capability::TASKS_EDIT,
+                ],
+            ],
+            'quality_manager' => [
+                'label' => 'Quality Manager',
+                'label_ar' => 'مدير الجودة',
+                'label_en' => 'Quality Manager',
+                'scope_type' => 'organization',
+                'is_admin_role' => false,
+                'capabilities' => [
+                    Capability::OVR_VIEW,
+                    Capability::OVR_VIEW_ALL,
+                    Capability::OVR_INVESTIGATE,
+                    Capability::OVR_CLOSE,
+                    Capability::OVR_CHANGE_STATUS,
+                    Capability::OVR_ASSIGN,
+                    Capability::OVR_VIEW_STATISTICS,
+                    Capability::OVR_EXPORT,
+                ],
+            ],
+            'risk_manager' => [
+                'label' => 'Risk Manager',
+                'label_ar' => 'مدير المخاطر',
+                'label_en' => 'Risk Manager',
+                'scope_type' => 'organization',
+                'is_admin_role' => false,
+                'capabilities' => [
+                    Capability::RISKS_VIEW,
+                    Capability::RISKS_CREATE,
+                    Capability::RISKS_EDIT,
+                    Capability::RISKS_REASSESS,
+                    Capability::RISKS_CHANGE_STATUS,
+                    Capability::RISKS_VIEW_REPORTS,
+                ],
+            ],
+            'cluster_auditor' => [
+                'label' => 'Cluster Audit Viewer',
+                'label_ar' => 'مدقق سجل النشاط على مستوى التجمع',
+                'label_en' => 'Cluster Audit Viewer',
+                'scope_type' => 'organization',
+                'is_admin_role' => false,
+                'capabilities' => [
+                    Capability::AUDIT_VIEW,
+                    Capability::AUDIT_EXPORT,
+                    Capability::CLUSTER_TREE_VIEW,
+                    Capability::CLUSTER_TREE_EXPORT,
+                ],
+            ],
+        ];
+    }
+
     public function run(): void
     {
-        // Reset cached roles and permissions
-        app()[PermissionRegistrar::class]->forgetCachedPermissions();
+        DB::transaction(function (): void {
+            $catalog = self::roleCatalog();
+            $mappings = $this->mappedCapabilities($catalog);
 
-        // إنشاء الصلاحيات
-        // Single source of truth: App\Modules\Core\Enums\Permission
-        foreach (Permission::cases() as $permission) {
-            SpatiePermission::firstOrCreate([
-                'name' => $permission->value,
-                'guard_name' => 'web',
-            ]);
-        }
-
-        // إنشاء الأدوار وتعيين الصلاحيات
-
-        // ========== Super Admin - يملك كل الصلاحيات ==========
-        $superAdmin = Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
-        $superAdmin->givePermissionTo(SpatiePermission::all());
-
-        // ========== Admin - organization-wide (top of a single organization) ==========
-        $admin = Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
-        $admin->givePermissionTo([
-            // admin is the organization-wide role (one organization/hospital):
-            // it manages everything inside its organization. super_admin sits
-            // above all organizations; admin is the top of a single one.
-            Permission::VIEW_ORGANIZATIONS->value,
-            Permission::VIEW_USERS->value,
-            Permission::CREATE_USERS->value,
-            Permission::EDIT_USERS->value,
-            Permission::VIEW_DASHBOARD->value,
-            // مدير الإدارة: الرؤية حسب القسم تُمنح عبر الدور السياقي على القسم
-            // (engine) لا عبر صلاحية مسطّحة. الصلاحيات المتبقية على مستوى السلسلة.
-            Permission::CREATE_PROJECTS->value,
-            Permission::DELETE_PROJECTS->value,
-            Permission::CREATE_TASKS->value,
-            Permission::DELETE_TASKS->value,
-            Permission::VIEW_REPORTS->value,
-            Permission::EXPORT_REPORTS->value,
-            Permission::VIEW_ROLES->value,
-            Permission::ASSIGN_ROLES->value,
-            Permission::UPLOAD_ATTACHMENTS->value,
-            Permission::DOWNLOAD_ATTACHMENTS->value,
-            Permission::DELETE_ATTACHMENTS->value,
-            Permission::CREATE_COMMENTS->value,
-            Permission::EDIT_COMMENTS->value,
-            Permission::DELETE_COMMENTS->value,
-            Permission::VIEW_AUDIT_LOGS->value,
-            // صلاحيات الموديولات الجديدة
-            Permission::VIEW_STRATEGY->value,
-            Permission::CREATE_STRATEGY->value,
-            Permission::EDIT_STRATEGY->value,
-            Permission::VIEW_SURVEY_RESPONSES->value,
-            Permission::REVIEW_SURVEY_RESPONSES->value,
-            Permission::REVIEW_DATA_IMPORTS->value,
-            Permission::VIEW_DEPARTMENTS->value,
-            Permission::CREATE_DEPARTMENTS->value,
-            Permission::EDIT_DEPARTMENTS->value,
-            // صلاحيات OVR
-            Permission::OVR_VIEW_ALL->value,
-            Permission::OVR_CONFIDENTIAL_VIEW->value,
-            Permission::OVR_CREATE->value,
-            Permission::OVR_EDIT_ALL->value,
-            Permission::OVR_CHANGE_STATUS->value,
-            Permission::OVR_ASSIGN->value,
-            Permission::OVR_COMMENT->value,
-            Permission::OVR_VIEW_INTERNAL_COMMENTS->value,
-            Permission::OVR_EXPORT->value,
-            Permission::OVR_VIEW_STATISTICS->value,
-            Permission::EDIT_ANY_COMMENT->value,
-            Permission::DELETE_ANY_COMMENT->value,
-            // صلاحيات RiskManagement
-            // NOTE: DELETE_RISKS is intentionally NOT granted to admin
-            // (only super_admin can delete enterprise risks).
-            // صلاحيات الاجتماعات (canonical only; legacy kebab strings were
-            // retired in Phase 9. MeetingsPermissionsSeeder grants admin the
-            // canonical dotted capabilities for the same role.)
-        ]);
-
-        // ملاحظة: أدوار النظام project_manager و member أُلغيت — أدوار المشاريع
-        // تُسنَد الآن كأدوار سياقية (scoped roles) على مستوى المشروع.
-
-        // ========== Viewer - مشاهد فقط ==========
-        $viewer = Role::firstOrCreate(['name' => 'viewer', 'guard_name' => 'web']);
-        $viewer->givePermissionTo([
-            // view_own_* ladder strings removed in Wave 4 (engine handles).
-            Permission::VIEW_DASHBOARD->value,
-            Permission::DOWNLOAD_ATTACHMENTS->value,
-            Permission::CREATE_COMMENTS->value,
-            Permission::VIEW_DEPARTMENTS->value,
-            // صلاحيات RiskManagement
-        ]);
-
-        // ترحيل المستخدمين من الأدوار الملغاة (project_manager/member) إلى viewer،
-        // مع الإبقاء على أدوارهم السياقية على المشاريع كما هي، ثم حذف الأدوار الملغاة.
-        foreach (['project_manager', 'member'] as $deprecatedRole) {
-            $role = Role::where('name', $deprecatedRole)->where('guard_name', 'web')->first();
-            if (! $role) {
-                continue;
-            }
-
-            foreach ($role->users as $user) {
-                if (! $user->hasAnyRole(['super_admin', 'admin', 'viewer'])) {
-                    $user->assignRole('viewer');
-                }
-                $user->removeRole($role);
-            }
-
-            $role->delete();
-        }
-
-        // تنظيف الصلاحيات اليتيمة: أي صلاحية في قاعدة البيانات لم تعد معرّفة في الـ enum
-        SpatiePermission::whereNotIn('name', Permission::values())->delete();
-
-        // أدوار النظام member/project_manager مُلغاة في الإنتاج (وُحّدت لأدوار سياقية،
-        // والمستخدمون يُهاجَرون إلى viewer). نعيد إنشاءها في بيئة الاختبار فقط — كأدوار
-        // وظيفية بمستوى viewer (Spatie لطبقة الاستعلام + تعريف org سياقي لمحرّك can)
-        // — لدعم تجهيزات الاختبارات القديمة دون تغيير دلالتها. لا تُبذر في الإنتاج.
-        if (! app()->isProduction()) {
-            $this->seedLegacyTestRoles($viewer);
-        }
-
-        app()[PermissionRegistrar::class]->forgetCachedPermissions();
-
-        $this->command->info('تم إنشاء/تحديث الأدوار والصلاحيات بنجاح');
-    }
-
-    /**
-     * Ensure the admin org-scoped scoped_role_definitions row carries the given
-     * engine capability in its `permissions` JSON. Mirrors the dual-write shape
-     * used by RoleController::store. Adds the capability if missing; leaves
-     * other capabilities untouched.
-     */
-    protected function syncAdminEngineCapability(string $capability): void
-    {
-        $orgScopeTypeId = DB::table('scope_types')->where('key', 'organization')->value('id');
-        if (! $orgScopeTypeId) {
-            return;
-        }
-
-        $def = ScopedRoleDefinition::where('scope_type_id', $orgScopeTypeId)
-            ->where('role_key', 'admin')
-            ->first();
-
-        if (! $def) {
-            return;
-        }
-
-        $permissions = $def->permissions ?? [];
-        if (in_array($capability, $permissions, true)) {
-            return;
-        }
-
-        $permissions[] = $capability;
-        $def->permissions = $permissions;
-        $def->save();
-
-        ScopedRoleDefinition::clearCache();
-    }
-
-    /**
-     * بيئة الاختبار فقط: إعادة إنشاء member/project_manager بمستوى viewer.
-     * Spatie role + صلاحيات viewer (لطبقة استعلام الرؤية) + تعريف org سياقي
-     * يمنح كل قدرات العرض (view/view_all/view_reports) عبر permissions[]
-     * ليعترف به محرّك can عبر الدور الوظيفي.
-     *
-     * Phase 3 (ADR-UNIFIED-ROLE-ACCESS): the retired can_view_all flag is expressed
-     * as the explicit list of view-family capabilities in permissions[], exactly the
-     * set the flag used to expand to in the engine.
-     */
-    protected function seedLegacyTestRoles(Role $viewer): void
-    {
-        $viewerPermissions = $viewer->permissions->pluck('name')->all();
-        $orgScopeTypeId = DB::table('scope_types')
-            ->where('key', 'organization')->value('id');
-
-        // can_view_all expanded to capabilities: every capability whose action is
-        // view / view_all / view_reports (mirrors the old capabilityMatchesFlags).
-        $viewAllCapabilities = array_values(array_filter(
-            Capability::all(),
-            function (string $capability) {
-                $action = str_contains($capability, '.')
-                    ? substr($capability, strrpos($capability, '.') + 1)
-                    : $capability;
-
-                return in_array($action, ['view', 'view_all', 'view_reports'], true);
-            }
-        ));
-
-        foreach (['member', 'project_manager'] as $legacyRole) {
-            Role::firstOrCreate(['name' => $legacyRole, 'guard_name' => 'web'])
-                ->syncPermissions($viewerPermissions);
-
-            if ($orgScopeTypeId) {
-                DB::table('scoped_role_definitions')->updateOrInsert(
-                    ['scope_type_id' => $orgScopeTypeId, 'role_key' => $legacyRole],
-                    [
-                        'name' => 'organization.'.$legacyRole,
-                        'display_name' => $legacyRole,
-                        'scope_type' => 'organization',
-                        'label_ar' => $legacyRole,
-                        'permissions' => json_encode($viewAllCapabilities),
-                        'is_admin_role' => false,
-                        'is_active' => true,
-                        'sort_order' => 99,
-                        'updated_at' => now(),
-                        'created_at' => now(),
-                    ]
+            foreach ($mappings as $mapping) {
+                AuthorizationResource::query()->updateOrCreate(
+                    ['key' => $mapping['resource']],
+                    ['label' => class_basename($mapping['resource'])],
                 );
             }
+
+            $resources = AuthorizationResource::query()
+                ->whereIn('key', array_column($mappings, 'resource'))
+                ->pluck('id', 'key');
+
+            foreach ($catalog as $name => $definition) {
+                $role = AuthorizationRole::query()->updateOrCreate(
+                    ['name' => $name],
+                    [
+                        'label' => $definition['label'],
+                        'label_ar' => $definition['label_ar'] ?? $definition['label'],
+                        'label_en' => $definition['label_en'] ?? $definition['label'],
+                        'scope_type' => $definition['scope_type'],
+                        'is_admin_role' => $definition['is_admin_role'],
+                        'is_system' => $name === 'super_admin',
+                        'is_active' => true,
+                    ],
+                );
+
+                $desired = [];
+                foreach ($definition['capabilities'] as $capability) {
+                    $mapping = CapabilityToAuthorizationRolePermission::map($capability);
+                    if ($mapping === null) {
+                        continue;
+                    }
+
+                    $resourceId = $resources[$mapping['resource']] ?? null;
+                    if ($resourceId === null) {
+                        continue;
+                    }
+
+                    $key = $resourceId.'|'.$mapping['action'];
+                    $desired[$key] = [
+                        'authorization_role_id' => $role->id,
+                        'authorization_resource_id' => $resourceId,
+                        'action' => $mapping['action'],
+                        'reach' => null,
+                    ];
+                }
+
+                foreach ($desired as $permission) {
+                    DB::table('authorization_role_permissions')->updateOrInsert(
+                        [
+                            'authorization_role_id' => $permission['authorization_role_id'],
+                            'authorization_resource_id' => $permission['authorization_resource_id'],
+                            'action' => $permission['action'],
+                        ],
+                        ['reach' => $permission['reach']],
+                    );
+                }
+
+            }
+        });
+
+        AccessDecision::flushCache();
+        $this->command?->info('Canonical authorization roles and permissions seeded successfully.');
+    }
+
+    /**
+     * @param  array<string, array{label: string, is_admin_role: bool, capabilities: list<string>}>  $catalog
+     * @return list<array{resource: class-string, action: string}>
+     */
+    private function mappedCapabilities(array $catalog): array
+    {
+        $mapped = [];
+        foreach ($catalog as $definition) {
+            foreach ($definition['capabilities'] as $capability) {
+                $mapping = CapabilityToAuthorizationRolePermission::map($capability);
+                if ($mapping !== null) {
+                    $mapped[$mapping['resource'].'|'.$mapping['action']] = $mapping;
+                }
+            }
         }
+
+        return array_values($mapped);
+    }
+
+    /** @return list<string> */
+    private static function viewCapabilities(): array
+    {
+        return array_values(array_filter(
+            Capability::all(),
+            static fn (string $capability): bool => in_array(
+                substr($capability, strrpos($capability, '.') + 1),
+                ['view', 'view_all', 'view_reports'],
+                true,
+            ),
+        ));
     }
 }

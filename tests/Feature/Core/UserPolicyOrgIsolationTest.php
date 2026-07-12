@@ -54,7 +54,7 @@ class UserPolicyOrgIsolationTest extends TestCase
         ]);
 
         if ($role !== 'norole') {
-            $user->assignRole($role);
+            $this->assignCanonicalRole($user, $role);
         }
 
         return $user;
@@ -123,7 +123,6 @@ class UserPolicyOrgIsolationTest extends TestCase
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $nullOrgAdmin->assignRole('admin');
 
         $target = $this->makeUser('viewer', $this->orgA, $this->deptA);
 

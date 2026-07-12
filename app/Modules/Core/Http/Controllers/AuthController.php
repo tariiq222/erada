@@ -3,9 +3,7 @@
 namespace App\Modules\Core\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Core\Authorization\AccessDecision;
-use App\Modules\Core\Authorization\Capability;
-use App\Modules\Core\Contracts\CapabilityProvider;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Http\Requests\ChangePasswordRequest;
 use App\Modules\Core\Http\Requests\LoginRequest;
 use App\Modules\Core\Http\Requests\UpdateProfileRequest;
@@ -16,7 +14,6 @@ use App\Modules\Core\Services\TwoFactorService;
 use App\Modules\Shared\Models\ActivityLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -348,46 +345,17 @@ class AuthController extends Controller
         ]);
     }
 
-    /**
-     * Two-tier ability contract.
-     *
-     * This method emits the GENERIC capability list consumed by menus and
-     * buttons (auth/me.permissions). For per-record authorization ("can I edit
-     * *this* project"), element endpoints carry their own `abilities` payload
-     * computed by App\Modules\Shared\Support\ElementAbilities via
-     * AccessDecision::can($user, $capability, $record). The frontend MUST read
-     * record.abilities.* for any "can I act on this record" decision; never
-     * infer it from auth/me.permissions, which is org/role-scope only.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     private function formatUser(User $user): array
     {
-        // /me is hit on every page load by the SPA; the heavy work below
-        // (70+ Capability::can() decisions + multiple role/permission loads)
-        // produces the same answer for any user whose role set hasn't changed.
-        // Key the cache on the user's role timestamp (updated_at) so any role
-        // assignment/role-definition mutation busts it within seconds; fall back
-        // to a fixed 60s TTL on top of that for absolute upper bound.
-        $roleVersion = $user->updated_at?->timestamp ?? 0;
-
-        try {
-            return Cache::remember(
-                "auth:me:user:{$user->id}:rv:{$roleVersion}",
-                now()->addSeconds(60),
-                fn () => $this->buildFormatUserPayload($user)
-            );
-        } catch (\Exception $e) {
-            // Cache backend failure shouldn't break login — fall through to direct build.
-            Log::warning('AuthController formatUser cache failure', ['error' => $e->getMessage()]);
-
-            return $this->buildFormatUserPayload($user);
-        }
+        // Authorization assignments can change independently of users.updated_at.
+        // Build this projection from current canonical rows so an explicit refresh
+        // after a grant, revocation, or organization switch never returns stale access.
+        return $this->buildFormatUserPayload($user);
     }
 
     /**
-     * Build the /me payload for a user. Heavy work (role/permission loads +
-     * Capability::can() loop) — call from a Cache::remember wrapper, not directly.
+     * Build the /me payload for a user from active canonical assignments.
      *
      * @return array<string, mixed>
      */
@@ -396,61 +364,18 @@ class AuthController extends Controller
         try {
             $user->load(['department']);
 
-            $roles = [];
-            // Canonical module.action capabilities the user effectively holds.
-            // Surfaced as its own `capabilities` key (Phase 2 of
-            // ADR-UNIFIED-ROLE-ACCESS) — this is the single maintained vocabulary.
-            // The legacy `permissions[]` blob was removed in Phase 9.3 of the master
-            // AuthZ unification plan; every frontend read goes through `user.access`
-            // (canonical capabilities) or `user.capabilities` (canonical list). See
-            // docs/authz/deprecation-policy.md for the migration context.
-            $capabilities = [];
-
             try {
-                $roles = $user->getRoleNames()->toArray();
-
-                // قدرات المحرّك على مستوى المؤسسة (vocabulary موحّد module.action).
-                // `capabilities` هو المصدر الوحيد لقرارات الـ SPA الآن.
-                // ponytail: O(عدد القدرات) قرارات على /me (مسار غير حار)؛ لو صار حاراً
-                // مرّر الأدوار النشطة مرة واحدة بدل استعلام لكل can().
-                foreach (Capability::all() as $capability) {
-                    if (AccessDecision::can($user, $capability)) {
-                        $capabilities[] = $capability;
-                    }
-                }
-
-                $capabilities = array_values(array_unique($capabilities));
-
-                // Module-owned legacy flat capabilities (view_projects / create_projects /
-                // view_risks / create_risks / ovr.create / ovr.view_own, ...) are surfaced
-                // by CapabilityProvider implementations that each module tags into
-                // `engined_capability_providers` from its service provider. Iterating the
-                // tag here keeps AuthController decoupled from any specific module's
-                // authorization service — adding a new flat capability becomes a
-                // one-file, one-tag-line change in the owning module.
-                $flags = [];
-                foreach (app()->tagged('engined_capability_providers') as $provider) {
-                    /** @var CapabilityProvider $provider */
-                    $flags = array_merge($flags, $provider->userCapabilities($user));
-                }
-                foreach ($flags as $flag => $granted) {
-                    if ($granted) {
-                        $capabilities[] = $flag;
-                    }
-                }
-
-                $capabilities = array_values(array_unique($capabilities));
+                // Navigation/module availability is projected from every active
+                // canonical assignment, including department/project scopes.
+                // Record mutations still use target-bound AccessDecision checks
+                // and per-record abilities; this list never widens backend access.
+                $capabilities = $user->canonicalCapabilityNames();
             } catch (\Exception $e) {
-                Log::warning('Failed to load roles/capabilities for user '.$user->id.': '.$e->getMessage());
+                Log::warning('Failed to load canonical capabilities for user '.$user->id.': '.$e->getMessage());
+                $capabilities = [];
             }
 
-            // Phase 1 of the master AuthZ unification plan: an additive
-            // `user.access` projection derived only from canonical
-            // module.action capabilities (e.g. {projects: {view: true,
-            // create: true}, tasks: {assign: true}}). Read-side only — does
-            // not change any backend authorization decision and never grants
-            // a capability that is not already in user.capabilities.
-            $access = $this->projectAccessMap($capabilities);
+            $access = array_fill_keys($capabilities, true);
 
             return [
                 'id' => $user->id,
@@ -465,17 +390,9 @@ class AuthController extends Controller
                     'name' => $user->department->name,
                 ] : null,
                 'preferred_locale' => $user->preferred_locale,
-                'roles' => $roles,
-                // Canonical module.action capabilities (single vocabulary) and
-                // the user's scoped role assignments — the canonical payload
-                // after the Phase 9.3 cutover. The legacy `permissions[]` blob
-                // is GONE; SPA gating reads `useCan('module.action')` (which
-                // consults `user.access`) or `user.capabilities[]` for display.
                 'capabilities' => $capabilities,
-                // Structured access map for the SPA. Each value is `true`; the
-                // frontend may read it as `user.access[module][action]`.
                 'access' => $access,
-                'scoped_roles' => $this->scopedRoleAssignments($user),
+                'role_assignments' => $this->canonicalRoleAssignments($user),
                 'organization_id' => $user->organization_id,
                 // super_admin may switch across all orgs; everyone else is locked to their own.
                 'organizations' => ($user->isSuperAdmin()
@@ -490,61 +407,41 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
-                'roles' => [],
                 'capabilities' => [],
                 'access' => [],
+                'role_assignments' => [],
             ];
         }
     }
 
     /**
-     * Project canonical dotted capabilities into the structured access map
-     * consumed by the SPA (`user.access[module][action] === true`). Read-side
-     * only — never grants a capability that isn't already in the engine
-     * decision. Non-dotted or malformed values are silently skipped; the
-     * upstream `$capabilities` array is already filtered by Capability::all()
-     * but we re-check defensively.
-     *
-     * @param  list<string>  $capabilities
-     * @return array<string, array<string, true>>
+     * @return list<array{id: int, role_id: int, role: string, label: string, scope_type: string, scope_id: int|null, organization_id: int|null, inherit_to_children: bool, expires_at: string|null, source: string}>
      */
-    private function projectAccessMap(array $capabilities): array
-    {
-        $access = [];
-        foreach ($capabilities as $capability) {
-            if (! is_string($capability) || ! preg_match('/^[a-z_]+\.[a-z_]+$/', $capability)) {
-                continue;
-            }
-            [$module, $action] = explode('.', $capability, 2);
-            $access[$module][$action] = true;
-        }
-
-        return $access;
-    }
-
-    /**
-     * The user's active scoped role assignments from model_has_scoped_roles.
-     * Additive projection for /auth/me (Phase 2 of ADR-UNIFIED-ROLE-ACCESS);
-     * previously absent from the payload. Read-only, no authorization decision.
-     *
-     * @return array<int, array{role: string, scope_type: string, scope_id: int, label: string}>
-     */
-    private function scopedRoleAssignments(User $user): array
+    private function canonicalRoleAssignments(User $user): array
     {
         try {
-            return $user->activeScopedRoles()
-                ->with('roleDefinition')
+            return AuthorizationRoleAssignment::query()
+                ->where('user_id', $user->id)
+                ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+                ->whereHas('role', fn ($query) => $query->where('is_active', true))
+                ->with('role:id,name,label')
                 ->get()
-                ->map(fn ($assignment) => [
-                    'role' => $assignment->role,
+                ->map(fn (AuthorizationRoleAssignment $assignment) => [
+                    'id' => (int) $assignment->id,
+                    'role_id' => (int) $assignment->authorization_role_id,
+                    'role' => $assignment->role?->name ?? '',
+                    'label' => $assignment->role?->label ?? '',
                     'scope_type' => $assignment->scope_type,
-                    'scope_id' => (int) $assignment->scope_id,
-                    'label' => $assignment->display_name,
+                    'scope_id' => $assignment->scope_id === null ? null : (int) $assignment->scope_id,
+                    'organization_id' => $assignment->organization_id === null ? null : (int) $assignment->organization_id,
+                    'inherit_to_children' => (bool) $assignment->inherit_to_children,
+                    'expires_at' => $assignment->expires_at?->toISOString(),
+                    'source' => $assignment->source,
                 ])
                 ->values()
                 ->all();
         } catch (\Exception $e) {
-            Log::warning('Failed to load scoped roles for user '.$user->id.': '.$e->getMessage());
+            Log::warning('Failed to load canonical role assignments for user '.$user->id.': '.$e->getMessage());
 
             return [];
         }

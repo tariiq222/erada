@@ -3,7 +3,6 @@
 namespace Tests\Feature\Tasks;
 
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\HR\Models\DepartmentCapacityRole;
@@ -72,10 +71,9 @@ class TaskIndexQueryBudgetTest extends TestCase
         ]);
         $dept->update(['manager_id' => $mgr->id]);
         app(ScopedDepartmentRoleSyncService::class)->syncUser($mgr->fresh());
-        $mgr->givePermissionTo('view_tasks');
-        // Org-scoped role so the org-level viewAny gate passes (dept role alone is
-        // not evaluated for a null target).
-        $mgr->assignScopedRole('pmo_coordinator', ScopedRole::SCOPE_ORGANIZATION, $org->id);
+        // Org-scoped canonical viewer makes the org-level viewAny gate explicit;
+        // the synchronized department-manager assignment still governs scope.
+        $this->grantCanonicalViewer($mgr);
 
         $project = Project::factory()->create([
             'organization_id' => $org->id,

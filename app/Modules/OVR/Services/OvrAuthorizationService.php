@@ -4,7 +4,6 @@ namespace App\Modules\OVR\Services;
 
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
-use App\Modules\Core\Models\ScopedRoleDefinition;
 use App\Modules\Core\Models\User;
 use App\Modules\OVR\Models\IncidentReport;
 use App\Modules\OVR\Models\OvrSetting;
@@ -23,6 +22,36 @@ use App\Modules\OVR\Models\OvrSetting;
  */
 class OvrAuthorizationService
 {
+    /**
+     * Evaluate an incident capability against the real report target.
+     *
+     * Canonical department assignments resolve their direct department from the
+     * conventional `department_id` target attribute. OVR deliberately stores the
+     * same boundary as `reporter_department_id`; expose that boundary on the
+     * hydrated report before invoking the engine so the decision remains
+     * target-bound (and therefore still runs organization, sensitive-record,
+     * reach, and record-rule checks).
+     */
+    public function canAccess(User $user, string $capability, IncidentReport $report): bool
+    {
+        $this->prepareScopeTarget($report);
+
+        return AccessDecision::can($user, $capability, $report);
+    }
+
+    /**
+     * Prepare a report that will subsequently be evaluated by ElementAbilities.
+     */
+    public function prepareScopeTarget(IncidentReport $report): IncidentReport
+    {
+        if ($report->getAttribute('department_id') === null
+            && $report->reporter_department_id !== null) {
+            $report->setAttribute('department_id', (int) $report->reporter_department_id);
+        }
+
+        return $report;
+    }
+
     public function canCreate(User $user, ?int $reporterDepartmentId = null): bool
     {
         if ($user->isSuperAdmin()) {
@@ -171,6 +200,8 @@ class OvrAuthorizationService
      */
     public function mayViewConfidential(User $user, IncidentReport $report): bool
     {
+        $this->prepareScopeTarget($report);
+
         if (! $report->is_confidential) {
             return true;
         }
@@ -179,16 +210,6 @@ class OvrAuthorizationService
             return true;
         }
 
-        return $user->activeScopedRoles()
-            ->with('roleDefinition')
-            ->get()
-            ->contains(function ($scopedRole) {
-                $def = $scopedRole->roleDefinition
-                    ?? ScopedRoleDefinition::findByKey($scopedRole->scope_type, $scopedRole->role);
-
-                return $def
-                    && is_array($def->permissions)
-                    && in_array(Capability::OVR_CONFIDENTIAL, $def->permissions, true);
-            });
+        return AccessDecision::can($user, Capability::OVR_CONFIDENTIAL, $report);
     }
 }

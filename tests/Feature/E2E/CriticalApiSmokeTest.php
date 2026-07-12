@@ -30,7 +30,7 @@ class CriticalApiSmokeTest extends TestCase
             'password' => Hash::make('password'),
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         $this->postJson('/api/login', [
             'email' => 'phase9-smoke@example.com',

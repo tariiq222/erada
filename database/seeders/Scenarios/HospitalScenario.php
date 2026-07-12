@@ -2,6 +2,9 @@
 
 namespace Database\Seeders\Scenarios;
 
+use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
@@ -10,7 +13,6 @@ use App\Modules\OVR\Models\ReportableType;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Spatie\Permission\PermissionRegistrar;
 
 class HospitalScenario
 {
@@ -67,7 +69,6 @@ class HospitalScenario
             'portfolios', 'decisions', 'reviews', 'survey_responses',
             'survey_invitations', 'survey_sections', 'survey_fields',
             'surveys', 'data_imports', 'data_mappings', 'activity_logs',
-            'scoped_roles',
         ];
 
         foreach ($tablesToClean as $table) {
@@ -91,7 +92,7 @@ class HospitalScenario
         }
 
         DB::statement('SET session_replication_role = origin');
-        app()[PermissionRegistrar::class]->forgetCachedPermissions();
+        AccessDecision::flushCache();
     }
 
     private function createOrganization(): void
@@ -314,9 +315,7 @@ class HospitalScenario
                 $user->update(['department_id' => $deptId, 'organization_id' => $this->organization->id]);
             }
 
-            if (! $user->hasRole($data['role'])) {
-                $user->assignRole($data['role']);
-            }
+            $this->assignCanonicalRole($user, $data['role']);
 
             $this->users[] = $user;
         }
@@ -338,13 +337,47 @@ class HospitalScenario
 
         foreach ($this->departments as $dept) {
             $candidates = $usersByDept[$dept->code] ?? [];
-            $manager = collect($candidates)->first(fn ($u) => $u->hasRole('admin') || $u->hasRole('project_manager'))
+            $manager = collect($candidates)->first(fn ($u) => $this->hasCanonicalRole($u, ['admin', 'project_manager']))
                 ?? collect($candidates)->first();
 
             if ($manager) {
                 $dept->update(['manager_id' => $manager->id]);
             }
         }
+    }
+
+    private function assignCanonicalRole(User $user, string $roleName): void
+    {
+        $canonicalRoleName = in_array($roleName, ['project_manager', 'member'], true) ? 'viewer' : $roleName;
+        $role = AuthorizationRole::query()->where('name', $canonicalRoleName)->firstOrFail();
+        $scopeType = $canonicalRoleName === 'super_admin' ? AuthorizationRoleAssignment::SCOPE_ALL : AuthorizationRoleAssignment::SCOPE_ORGANIZATION;
+        $scopeId = $scopeType === AuthorizationRoleAssignment::SCOPE_ALL ? null : $this->organization->id;
+
+        AuthorizationRoleAssignment::query()->updateOrCreate(
+            [
+                'authorization_role_id' => $role->id,
+                'user_id' => $user->id,
+                'scope_type' => $scopeType,
+                'scope_id' => $scopeId,
+            ],
+            [
+                'organization_id' => $scopeType === AuthorizationRoleAssignment::SCOPE_ALL ? null : $this->organization->id,
+                'inherit_to_children' => true,
+                'expires_at' => null,
+                'source' => 'migration',
+                'granted_by' => null,
+            ],
+        );
+    }
+
+    /** @param list<string> $roleNames */
+    private function hasCanonicalRole(User $user, array $roleNames): bool
+    {
+        return AuthorizationRoleAssignment::query()
+            ->where('user_id', $user->id)
+            ->whereHas('role', fn ($query) => $query->whereIn('name', $roleNames)->where('is_active', true))
+            ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->exists();
     }
 
     private function seedIncidentTypes(): void

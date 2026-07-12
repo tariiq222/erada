@@ -89,7 +89,7 @@ class HRCapabilityProviderTest extends TestCase
     public function test_super_admin_sees_both(): void
     {
         $user = $this->makeUser();
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
         // No engine grant — super_admin short-circuit inside
         // AccessDecision::can() must produce both flags true.
 

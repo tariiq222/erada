@@ -2,10 +2,7 @@
 
 namespace Tests\Feature\Api;
 
-use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
-use App\Modules\Core\Models\ScopeType;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -13,8 +10,6 @@ use App\Modules\Tasks\Models\Task;
 use App\Modules\Tasks\Policies\TaskPolicy;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Tests\TestCase;
 
@@ -49,8 +44,6 @@ class TaskAccessIsolationTest extends TestCase
     {
         parent::setUp();
         $this->seed(RolesAndPermissionsSeeder::class);
-        Cache::flush();
-        $this->seedTaskScopeDefinitions();
 
         $this->orgA = Organization::factory()->create();
         $this->orgB = Organization::factory()->create();
@@ -63,7 +56,7 @@ class TaskAccessIsolationTest extends TestCase
             'department_id' => $deptA->id,
             'is_active' => true,
         ]);
-        $this->pmA->assignRole('viewer');
+        $this->assignCanonicalRole($this->pmA, 'viewer');
 
         $projectB = Project::factory()->create([
             'organization_id' => $this->orgB->id,
@@ -77,109 +70,6 @@ class TaskAccessIsolationTest extends TestCase
         ]);
     }
 
-    // ========== Scope Definitions Seed ==========
-
-    private function seedTaskScopeDefinitions(): void
-    {
-        $scopeType = ScopeType::firstOrCreate(
-            ['key' => ScopedRole::SCOPE_PROJECT],
-            [
-                'label_ar' => 'مشروع',
-                'label_en' => 'Project',
-                'model_class' => Project::class,
-                'supports_hierarchy' => true,
-                'supports_expiry' => false,
-                'is_active' => true,
-                'sort_order' => 10,
-            ]
-        );
-
-        $now = now()->toDateTimeString();
-
-        $roles = [
-            [
-                'name' => 'project_manager',
-                'display_name' => 'Project Manager',
-                'scope_type' => ScopedRole::SCOPE_PROJECT,
-                'role_key' => ScopedRole::PROJECT_MANAGER,
-                'scope_type_id' => $scopeType->id,
-                'label_ar' => 'مدير المشروع',
-                'label_en' => 'Project Manager',
-                'is_admin_role' => false,
-                'is_active' => true,
-                'sort_order' => 1,
-                'level' => 0,
-                'permissions' => json_encode($this->expandFlags([
-                    'projects.view', 'projects.edit', 'projects.manage_members', 'projects.assign_roles',
-                    'tasks.view', 'tasks.create', 'tasks.edit', 'tasks.delete', 'tasks.complete', Capability::TASKS_ASSIGN,
-                ], ['can_manage_members' => true, 'can_edit' => true, 'can_delete' => false, 'can_view_all' => true])),
-                'created_at' => $now,
-                'updated_at' => $now,
-            ],
-            [
-                'name' => 'project_member',
-                'display_name' => 'Project Member',
-                'scope_type' => ScopedRole::SCOPE_PROJECT,
-                'role_key' => ScopedRole::PROJECT_MEMBER,
-                'scope_type_id' => $scopeType->id,
-                'label_ar' => 'عضو',
-                'label_en' => 'Member',
-                'is_admin_role' => false,
-                'is_active' => true,
-                'sort_order' => 2,
-                'level' => 0,
-                'permissions' => json_encode($this->expandFlags(['projects.view', 'tasks.view'], [
-                    'can_manage_members' => false, 'can_edit' => false, 'can_delete' => false, 'can_view_all' => true,
-                ])),
-                'created_at' => $now,
-                'updated_at' => $now,
-            ],
-            [
-                'name' => 'project_viewer',
-                'display_name' => 'Project Viewer',
-                'scope_type' => ScopedRole::SCOPE_PROJECT,
-                'role_key' => ScopedRole::PROJECT_VIEWER,
-                'scope_type_id' => $scopeType->id,
-                'label_ar' => 'مشاهد',
-                'label_en' => 'Viewer',
-                'is_admin_role' => false,
-                'is_active' => true,
-                'sort_order' => 3,
-                'level' => 0,
-                'permissions' => json_encode($this->expandFlags(['projects.view', 'tasks.view'], [
-                    'can_manage_members' => false, 'can_edit' => false, 'can_delete' => false, 'can_view_all' => true,
-                ])),
-                'created_at' => $now,
-                'updated_at' => $now,
-            ],
-        ];
-
-        foreach ($roles as $role) {
-            $exists = DB::table('scoped_role_definitions')
-                ->where('scope_type_id', $scopeType->id)
-                ->where('role_key', $role['role_key'])
-                ->exists();
-
-            if ($exists) {
-                DB::table('scoped_role_definitions')
-                    ->where('scope_type_id', $scopeType->id)
-                    ->where('role_key', $role['role_key'])
-                    ->update([
-                        'permissions' => $role['permissions'],
-                        'updated_at' => $now,
-                    ]);
-
-                continue;
-            }
-
-            if (! $exists) {
-                DB::table('scoped_role_definitions')->insert($role);
-            }
-        }
-
-        Cache::flush();
-    }
-
     // ========== Helpers (lifted from ProjectAccessIsolationTest) ==========
 
     private function makeUser(Organization $org, Department $dept, ?string $role = null): User
@@ -190,7 +80,7 @@ class TaskAccessIsolationTest extends TestCase
             'is_active' => true,
         ]);
         if ($role) {
-            $user->assignRole($role);
+            $this->assignCanonicalRole($user, $role);
         }
 
         return $user;
@@ -281,7 +171,7 @@ class TaskAccessIsolationTest extends TestCase
             'department_id' => $deptA->id,
         ]);
         $leaderA = $this->makeUser($this->orgA, $deptA, 'viewer');
-        $leaderA->assignProjectRole($projectA, ScopedRole::PROJECT_MANAGER, $leaderA->id);
+        $this->assignCanonicalRole($leaderA, 'project_manager', 'project', $projectA->id);
 
         $deptB = Department::factory()->create(['organization_id' => $this->orgB->id]);
         $foreign = $this->makeUser($this->orgB, $deptB, 'viewer');
@@ -314,10 +204,10 @@ class TaskAccessIsolationTest extends TestCase
             'department_id' => $deptA->id,
         ]);
         $leaderA = $this->makeUser($this->orgA, $deptA, 'viewer');
-        $leaderA->assignProjectRole($projectA, ScopedRole::PROJECT_MANAGER, $leaderA->id);
+        $this->assignCanonicalRole($leaderA, 'project_manager', 'project', $projectA->id);
 
         $member = $this->makeUser($this->orgA, $deptA, 'viewer');
-        $member->assignProjectRole($projectA, ScopedRole::PROJECT_MEMBER, $member->id);
+        $this->assignCanonicalRole($member, 'project_member', 'project', $projectA->id);
 
         $this->actingAs($leaderA, 'sanctum')
             ->patchJson("/api/unified-tasks/{$taskA->id}/assign", [
@@ -348,7 +238,7 @@ class TaskAccessIsolationTest extends TestCase
             'department_id' => $deptA->id,
         ]);
         $leaderA = $this->makeUser($this->orgA, $deptA, 'viewer');
-        $leaderA->assignProjectRole($projectA, ScopedRole::PROJECT_MANAGER, $leaderA->id);
+        $this->assignCanonicalRole($leaderA, 'project_manager', 'project', $projectA->id);
 
         // same org, NOT a member of projectA
         $otherDeptA = Department::factory()->create(['organization_id' => $this->orgA->id]);
@@ -383,7 +273,7 @@ class TaskAccessIsolationTest extends TestCase
             'department_id' => $deptA->id,
         ]);
         $siblingManager = $this->makeUser($this->orgA, $deptA, 'viewer');
-        $siblingManager->assignProjectRole($siblingProject, ScopedRole::PROJECT_MANAGER, $siblingManager->id);
+        $this->assignCanonicalRole($siblingManager, 'project_manager', 'project', $siblingProject->id);
         $assignee = $this->makeUser($this->orgA, $deptA, 'viewer');
 
         $this->actingAs($siblingManager, 'sanctum')
@@ -423,7 +313,7 @@ class TaskAccessIsolationTest extends TestCase
 
         // عضو المشروع: لا يعدّل ولا يحذف
         $member = $this->makeUser($this->orgA, $deptA, 'viewer');
-        $member->assignProjectRole($projectA, ScopedRole::PROJECT_MEMBER, $member->id);
+        $this->assignCanonicalRole($member, 'project_member', 'project', $projectA->id);
 
         $this->actingAs($member, 'sanctum')
             ->putJson("/api/unified-tasks/{$taskA->id}", ['title' => 'member edit'])
@@ -436,7 +326,7 @@ class TaskAccessIsolationTest extends TestCase
 
         // مدير المشروع: يعدّل ثم يحذف
         $manager = $this->makeUser($this->orgA, $deptA, 'viewer');
-        $manager->assignProjectRole($projectA, ScopedRole::PROJECT_MANAGER, $manager->id);
+        $this->assignCanonicalRole($manager, 'project_manager', 'project', $projectA->id);
 
         $this->actingAs($manager, 'sanctum')
             ->putJson("/api/unified-tasks/{$taskA->id}", ['title' => 'manager edit'])
@@ -509,7 +399,7 @@ class TaskAccessIsolationTest extends TestCase
 
         // authorized: project manager (isProjectAdmin) → can changeStatus
         $pm = $this->makeUser($this->orgA, $deptA, 'viewer');
-        $pm->assignProjectRole($projectA, ScopedRole::PROJECT_MANAGER, $pm->id);
+        $this->assignCanonicalRole($pm, 'project_manager', 'project', $projectA->id);
         $this->actingAs($pm, 'sanctum')
             ->patchJson("/api/unified-tasks/{$taskA->id}/status", ['status' => 'in_progress'])
             ->assertStatus(200);
@@ -519,7 +409,7 @@ class TaskAccessIsolationTest extends TestCase
         $otherDeptA = Department::factory()->create(['organization_id' => $this->orgA->id]);
         $otherProject = $this->makeProject($this->orgA, $otherDeptA);
         $outsider = $this->makeUser($this->orgA, $otherDeptA, 'viewer');
-        $outsider->assignProjectRole($otherProject, ScopedRole::PROJECT_MEMBER, $outsider->id);
+        $this->assignCanonicalRole($outsider, 'project_member', 'project', $otherProject->id);
         $this->actingAs($outsider, 'sanctum')
             ->patchJson("/api/unified-tasks/{$taskA->id}/status", ['status' => 'in_progress'])
             ->assertStatus(403);
@@ -544,10 +434,10 @@ class TaskAccessIsolationTest extends TestCase
         ]);
 
         $member = $this->makeUser($this->orgA, $deptA, 'viewer');
-        $member->assignProjectRole($projectA, ScopedRole::PROJECT_MEMBER, $member->id);
+        $this->assignCanonicalRole($member, 'project_member', 'project', $projectA->id);
 
         $manager = $this->makeUser($this->orgA, $deptA, 'viewer');
-        $manager->assignProjectRole($projectA, ScopedRole::PROJECT_MANAGER, $manager->id);
+        $this->assignCanonicalRole($manager, 'project_manager', 'project', $projectA->id);
 
         // restore delegates to delete: member denied both, manager allowed both.
         $this->assertTrue(Gate::forUser($member)->denies('restore', $taskA));
@@ -583,47 +473,5 @@ class TaskAccessIsolationTest extends TestCase
             ->deleteJson("/api/unified-tasks/{$this->taskB->id}")
             ->assertStatus(200);
         $this->assertSoftDeleted('tasks', ['id' => $this->taskB->id]);
-    }
-
-    /**
-     * Expand legacy granular flags into the equivalent explicit permissions
-     * (Phase 3, ADR-UNIFIED-ROLE-ACCESS — the flag columns were dropped from
-     * scoped_role_definitions; the engine now reads permissions[] only).
-     *
-     * @param  array<int, string>  $permissions
-     * @param  array<string, bool>  $flags
-     * @return array<int, string>
-     */
-    private function expandFlags(array $permissions, array $flags): array
-    {
-        $byAction = fn (array $actions): array => array_values(array_filter(
-            Capability::all(),
-            function (string $c) use ($actions) {
-                $a = str_contains($c, '.') ? substr($c, strrpos($c, '.') + 1) : $c;
-
-                return in_array($a, $actions, true);
-            }
-        ));
-        if (! empty($flags['can_edit'])) {
-            $permissions = array_merge($permissions, $byAction(['edit', 'update']));
-        }
-        if (! empty($flags['can_delete'])) {
-            $permissions = array_merge($permissions, $byAction(['delete', 'remove']));
-        }
-        if (! empty($flags['can_view_all'])) {
-            $permissions = array_merge($permissions, $byAction(['view', 'view_all', 'view_reports']));
-        }
-        if (! empty($flags['can_manage_members'])) {
-            $permissions = array_merge($permissions, $byAction(['manage_members', 'assign_roles']));
-        }
-        if (! empty($flags['can_view_confidential'])) {
-            // Post Direction B: engine reads Capability::OVR_CONFIDENTIAL
-            // (the new key). The legacy OVR_VIEW_CONFIDENTIAL is kept only
-            // as a class-load shim for the already-applied backfill
-            // migration (LR-004). Map the test fixture flag to the new key.
-            $permissions[] = Capability::OVR_CONFIDENTIAL;
-        }
-
-        return array_values(array_unique($permissions));
     }
 }

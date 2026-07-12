@@ -3,11 +3,11 @@
 namespace Tests\Unit\Models;
 
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Role;
 use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
@@ -40,14 +40,11 @@ class UserTest extends TestCase
     /**
      * اختبار أن المستخدم يمكن أن يكون له أدوار
      */
-    public function test_user_can_have_roles(): void
+    public function test_user_exposes_canonical_role_names(): void
     {
-        $role = Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
-        $this->user->assignRole($role);
+        $this->grantCanonicalAdmin($this->user);
 
-        $this->assertTrue($this->user->hasRole('admin'));
-        $this->assertCount(1, $this->user->roles);
-        $this->assertInstanceOf(Role::class, $this->user->roles->first());
+        $this->assertSame(['admin'], $this->user->canonicalRoleNames());
     }
 
     /**
@@ -164,31 +161,12 @@ class UserTest extends TestCase
     /**
      * اختبار التحقق من الأدوار المتعددة
      */
-    public function test_user_can_check_multiple_roles(): void
+    public function test_user_can_read_multiple_canonical_roles(): void
     {
-        $role1 = Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
-        $role2 = Role::firstOrCreate(['name' => 'employee', 'guard_name' => 'web']);
+        $this->assignCanonicalRole($this->user, 'viewer');
+        $this->grantCanonicalAdmin($this->user);
 
-        $this->user->assignRole($role1);
-        $this->user->assignRole($role2);
-
-        $this->assertTrue($this->user->hasAllRoles(['manager', 'employee']));
-        $this->assertFalse($this->user->hasAllRoles(['manager', 'admin']));
-        $this->assertTrue($this->user->hasAnyRole(['manager', 'admin']));
-    }
-
-    /**
-     * اختبار إزالة الأدوار
-     */
-    public function test_can_remove_roles(): void
-    {
-        $role = Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
-
-        $this->user->assignRole($role);
-        $this->assertTrue($this->user->hasRole('admin'));
-
-        $this->user->removeRole('admin');
-        $this->assertFalse($this->user->hasRole('admin'));
+        $this->assertEqualsCanonicalizing(['viewer', 'admin'], $this->user->canonicalRoleNames());
     }
 
     /**
@@ -208,8 +186,7 @@ class UserTest extends TestCase
      */
     public function test_is_super_admin(): void
     {
-        $role = Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
-        $this->user->assignRole($role);
+        $this->grantCanonicalSuperAdmin($this->user);
 
         $this->assertTrue($this->user->isSuperAdmin());
     }
@@ -219,9 +196,17 @@ class UserTest extends TestCase
      */
     public function test_is_admin(): void
     {
-        // isAdmin() now routes through AccessDecision::can(SETTINGS_MANAGE); grant
-        // the capability on the engine path so the assertion is meaningful.
-        $this->grantEngineCapability($this->user, Capability::SETTINGS_MANAGE);
+        $organization = Organization::factory()->create();
+        $this->user->forceFill(['organization_id' => $organization->id])->save();
+
+        // isAdmin() is a target-free canonical decision. Give the user a real
+        // organization context and an organization-scoped admin capability.
+        $this->grantEngineCapability(
+            $this->user,
+            Capability::SETTINGS_MANAGE,
+            'organization',
+            $organization->id,
+        );
 
         $this->assertTrue($this->user->isAdmin());
     }

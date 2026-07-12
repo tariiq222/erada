@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\WelcomeNotification;
@@ -15,7 +16,7 @@ use Tests\TestCase;
  * (docs/superpowers/plans/2026-07-06-simplified-registration.md).
  *
  * The endpoint creates a user in a single POST without OTP verification,
- * without admin approval, and without assigning any Spatie role. Privilege
+ * without admin approval, and without assigning any authorization role. Privilege
  * elevation happens later through the admin RoleController (out of scope
  * here).
  */
@@ -59,10 +60,12 @@ class SimpleRegistrationTest extends TestCase
         $this->assertSame('approved', $user->registration_status, 'Registered user must be auto-approved.');
         $this->assertNotNull($user->email_verified_at, 'Registered user email must be verified.');
 
-        // Critical: registration must NEVER grant any Spatie role, including
-        // super_admin or admin. Privilege elevation happens later via the
-        // admin RoleController (out of scope here).
-        $this->assertSame([], $user->getRoleNames()->all(), 'No Spatie role must be assigned on registration.');
+        // Registration must never grant a canonical role. Privilege elevation
+        // happens later through the administrative assignment workflow.
+        $this->assertFalse(
+            AuthorizationRoleAssignment::query()->where('user_id', $user->id)->exists(),
+            'No authorization role assignment may be created during registration.',
+        );
     }
 
     public function test_registration_requires_name(): void

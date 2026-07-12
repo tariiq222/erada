@@ -10,9 +10,6 @@ use App\Modules\Strategy\Models\Portfolio;
 use App\Modules\Strategy\Models\Program;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
-use Spatie\Permission\Models\Role;
-use Spatie\Permission\PermissionRegistrar;
 use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
@@ -40,14 +37,14 @@ class PortfolioControllerTest extends TestCase
             'organization_id' => $organization->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
 
         $this->pmoUser = User::factory()->create([
             'department_id' => $this->department->id,
             'organization_id' => $organization->id,
             'is_active' => true,
         ]);
-        $this->pmoUser->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->pmoUser);
     }
 
     // ========================================
@@ -317,36 +314,18 @@ class PortfolioControllerTest extends TestCase
         // gate) but does NOT hold strategy.change_status, so it cannot force-close
         // a portfolio that still has active programs. admin (is_admin_role) could,
         // which is why the denial case must be driven by a non-admin role.
-        $editorRole = Role::firstOrCreate(
-            ['name' => 'strategy_editor', 'guard_name' => 'web']
-        );
-        $orgScopeTypeId = DB::table('scope_types')
-            ->where('key', 'organization')->value('id');
-        DB::table('scoped_role_definitions')->updateOrInsert(
-            ['scope_type_id' => $orgScopeTypeId, 'role_key' => 'strategy_editor'],
-            [
-                'name' => 'organization.strategy_editor',
-                'display_name' => 'strategy_editor',
-                'scope_type' => 'organization',
-                'label_ar' => 'محرر الاستراتيجية',
-                'permissions' => json_encode($this->expandFlags([], [
-                    'can_manage_members' => false, 'can_edit' => true, 'can_delete' => false, 'can_view_all' => true,
-                ])),
-                'is_admin_role' => false,
-                'is_active' => true,
-                'sort_order' => 50,
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-        app()[PermissionRegistrar::class]->forgetCachedPermissions();
-
         $regularUser = User::factory()->create([
             'department_id' => $this->department->id,
             'organization_id' => $organization->id,
             'is_active' => true,
         ]);
-        $regularUser->assignRole('strategy_editor');
+        $this->grantEngineCapability(
+            $regularUser,
+            [Capability::STRATEGY_VIEW, Capability::STRATEGY_EDIT],
+            'organization',
+            $organization->id,
+            'strategy_editor',
+        );
 
         $owner = User::factory()->create(['organization_id' => $organization->id]);
         $portfolio = Portfolio::factory()->create([
@@ -592,43 +571,5 @@ class PortfolioControllerTest extends TestCase
             'action' => 'portfolio_force_closed',
             'user_id' => $this->user->id,
         ]);
-    }
-
-    /**
-     * Expand legacy granular flags into the equivalent explicit permissions
-     * (Phase 3, ADR-UNIFIED-ROLE-ACCESS — the flag columns were dropped from
-     * scoped_role_definitions; the engine now reads permissions[] only).
-     *
-     * @param  array<int, string>  $permissions
-     * @param  array<string, bool>  $flags
-     * @return array<int, string>
-     */
-    private function expandFlags(array $permissions, array $flags): array
-    {
-        $byAction = fn (array $actions): array => array_values(array_filter(
-            Capability::all(),
-            function (string $c) use ($actions) {
-                $a = str_contains($c, '.') ? substr($c, strrpos($c, '.') + 1) : $c;
-
-                return in_array($a, $actions, true);
-            }
-        ));
-        if (! empty($flags['can_edit'])) {
-            $permissions = array_merge($permissions, $byAction(['edit', 'update']));
-        }
-        if (! empty($flags['can_delete'])) {
-            $permissions = array_merge($permissions, $byAction(['delete', 'remove']));
-        }
-        if (! empty($flags['can_view_all'])) {
-            $permissions = array_merge($permissions, $byAction(['view', 'view_all', 'view_reports']));
-        }
-        if (! empty($flags['can_manage_members'])) {
-            $permissions = array_merge($permissions, $byAction(['manage_members', 'assign_roles']));
-        }
-        if (! empty($flags['can_view_confidential'])) {
-            $permissions[] = Capability::OVR_VIEW_CONFIDENTIAL;
-        }
-
-        return array_values(array_unique($permissions));
     }
 }

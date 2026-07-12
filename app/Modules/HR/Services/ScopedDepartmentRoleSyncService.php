@@ -2,11 +2,15 @@
 
 namespace App\Modules\HR\Services;
 
-use App\Modules\Core\Models\ScopedRole;
+use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\HR\Models\DepartmentCapacityRole;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 /**
  * Assigns scoped department roles automatically by capacity:
@@ -48,50 +52,51 @@ class ScopedDepartmentRoleSyncService
 
     public function syncUser(User $user): void
     {
-        // Scopes this user currently SHOULD hold an auto role on.
-        $expectedScopeIds = [];
+        DB::transaction(function () use ($user): void {
+            User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
 
-        // Membership
-        if ($user->department_id !== null) {
-            $memberKeys = DepartmentCapacityRole::where('department_id', $user->department_id)
-                ->where('capacity', DepartmentCapacityRole::CAPACITY_MEMBER)
-                ->pluck('role_key')->all();
+            // Scopes this user currently SHOULD hold an auto role on.
+            $expectedByScope = [];
 
-            $user->syncAutoScopedRolesForScope('department', (int) $user->department_id, $memberKeys);
-            $expectedScopeIds[(int) $user->department_id] = true;
-        }
-
-        // Leadership (one or more departments where this user is the manager)
-        $managedDeptIds = Department::where('manager_id', $user->id)->pluck('id');
-        foreach ($managedDeptIds as $deptId) {
-            $managerKeys = DepartmentCapacityRole::where('department_id', $deptId)
-                ->where('capacity', DepartmentCapacityRole::CAPACITY_MANAGER)
-                ->pluck('role_key')->all();
-
-            // merge with member keys if they are also a member of this same dept
-            $existing = $expectedScopeIds[(int) $deptId] ?? false;
-            if ($existing) {
-                $memberKeys = DepartmentCapacityRole::where('department_id', $deptId)
-                    ->where('capacity', DepartmentCapacityRole::CAPACITY_MEMBER)
-                    ->pluck('role_key')->all();
-                $managerKeys = array_values(array_unique(array_merge($managerKeys, $memberKeys)));
+            // Membership
+            if ($user->department_id !== null) {
+                $expectedByScope[(int) $user->department_id] = $this->capacityRoleKeys(
+                    (int) $user->department_id,
+                    DepartmentCapacityRole::CAPACITY_MEMBER,
+                );
             }
 
-            $user->syncAutoScopedRolesForScope('department', (int) $deptId, $managerKeys);
-            $expectedScopeIds[(int) $deptId] = true;
-        }
+            // Leadership (one or more departments where this user is the manager)
+            $managedDeptIds = Department::where('manager_id', $user->id)->pluck('id');
+            foreach ($managedDeptIds as $deptId) {
+                $scopeId = (int) $deptId;
+                $expectedByScope[$scopeId] = array_values(array_unique(array_merge(
+                    $expectedByScope[$scopeId] ?? [],
+                    $this->capacityRoleKeys($scopeId, DepartmentCapacityRole::CAPACITY_MANAGER),
+                )));
+            }
 
-        // Cleanup: remove auto department-scope roles on scopes no longer expected.
-        $staleScopeIds = $user->scopedRoles()
-            ->where('source', 'auto')
-            ->where('scope_type', 'department')
-            ->pluck('scope_id')
-            ->unique()
-            ->reject(fn ($id) => isset($expectedScopeIds[(int) $id]));
+            foreach ($expectedByScope as $scopeId => $roleKeys) {
+                $this->syncAutoAssignmentsForScope($user, $scopeId, $roleKeys);
+            }
 
-        foreach ($staleScopeIds as $scopeId) {
-            $user->revokeAutoScopedRolesForScope('department', (int) $scopeId);
-        }
+            // Cleanup only automatic department assignments on scopes no longer expected.
+            $staleAssignments = AuthorizationRoleAssignment::query()
+                ->with('role')
+                ->where('user_id', $user->id)
+                ->where('source', 'auto')
+                ->where('scope_type', AuthorizationRoleAssignment::SCOPE_DEPARTMENT)
+                ->when($expectedByScope !== [], fn ($query) => $query->whereNotIn('scope_id', array_keys($expectedByScope)))
+                ->lockForUpdate()
+                ->get();
+            foreach ($staleAssignments as $assignment) {
+                $old = $assignment->toArray();
+                $assignment->delete();
+                $this->auditMutation($user, $assignment, $assignment->role?->name, $old, null, 'revoked');
+            }
+
+            DB::afterCommit(static fn () => AccessDecision::flushUserCache((int) $user->id));
+        });
     }
 
     public function syncDepartment(Department $department): void
@@ -110,9 +115,9 @@ class ScopedDepartmentRoleSyncService
         }
 
         // Users holding an auto role on this department but no longer member/manager.
-        $holderIds = ScopedRole::query()
+        $holderIds = AuthorizationRoleAssignment::query()
             ->where('source', 'auto')
-            ->where('scope_type', 'department')
+            ->where('scope_type', AuthorizationRoleAssignment::SCOPE_DEPARTMENT)
             ->where('scope_id', $department->id)
             ->pluck('user_id')
             ->unique();
@@ -122,5 +127,117 @@ class ScopedDepartmentRoleSyncService
                 $this->syncUser($user);
             }
         });
+    }
+
+    /** @return list<string> */
+    private function capacityRoleKeys(int $departmentId, string $capacity): array
+    {
+        return DepartmentCapacityRole::query()
+            ->where('department_id', $departmentId)
+            ->where('capacity', $capacity)
+            ->pluck('role_key')
+            ->all();
+    }
+
+    /** @param list<string> $roleKeys */
+    private function syncAutoAssignmentsForScope(User $user, int $departmentId, array $roleKeys): void
+    {
+        $department = Department::query()->findOrFail($departmentId);
+        if ($user->organization_id === null || (int) $user->organization_id !== (int) $department->organization_id) {
+            // Fail closed without turning an observer side-effect into a failed
+            // user save. Any previously materialized automatic grants on the
+            // now-invalid scope are revoked and audited; no new grant is made.
+            $invalidAssignments = AuthorizationRoleAssignment::query()
+                ->with('role')
+                ->where('user_id', $user->id)
+                ->where('source', 'auto')
+                ->where('scope_type', AuthorizationRoleAssignment::SCOPE_DEPARTMENT)
+                ->where('scope_id', $departmentId)
+                ->lockForUpdate()
+                ->get();
+            foreach ($invalidAssignments as $assignment) {
+                $old = $assignment->toArray();
+                $assignment->delete();
+                $this->auditMutation($user, $assignment, $assignment->role?->name, $old, null, 'revoked');
+            }
+
+            return;
+        }
+
+        $roles = AuthorizationRole::query()
+            ->whereIn('name', $roleKeys ?: ['__none__'])
+            ->where('scope_type', AuthorizationRoleAssignment::SCOPE_DEPARTMENT)
+            ->where('is_active', true)
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('name');
+
+        $missing = array_values(array_diff($roleKeys, $roles->keys()->all()));
+        if ($missing !== []) {
+            throw new RuntimeException('Missing active canonical capacity roles: '.implode(', ', $missing));
+        }
+
+        $roleIds = $roles->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $staleAssignments = AuthorizationRoleAssignment::query()
+            ->with('role')
+            ->where('user_id', $user->id)
+            ->where('source', 'auto')
+            ->where('scope_type', AuthorizationRoleAssignment::SCOPE_DEPARTMENT)
+            ->where('scope_id', $departmentId)
+            ->whereNotIn('authorization_role_id', $roleIds ?: [0])
+            ->lockForUpdate()
+            ->get();
+        foreach ($staleAssignments as $assignment) {
+            $old = $assignment->toArray();
+            $assignment->delete();
+            $this->auditMutation($user, $assignment, $assignment->role?->name, $old, null, 'revoked');
+        }
+
+        foreach ($roles as $role) {
+            $identity = [
+                'authorization_role_id' => $role->id,
+                'user_id' => $user->id,
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_DEPARTMENT,
+                'scope_id' => $departmentId,
+            ];
+
+            // A manual/migration row with the same semantic identity takes precedence.
+            if (AuthorizationRoleAssignment::query()->where($identity)->exists()) {
+                continue;
+            }
+
+            $assignment = AuthorizationRoleAssignment::query()->create($identity + [
+                'organization_id' => $department->organization_id,
+                'inherit_to_children' => true,
+                'expires_at' => null,
+                'source' => 'auto',
+                'granted_by' => null,
+            ]);
+            $this->auditMutation($user, $assignment, $role->name, null, $assignment->fresh()->toArray(), 'assigned');
+        }
+    }
+
+    private function auditMutation(
+        User $subject,
+        AuthorizationRoleAssignment $assignment,
+        ?string $role,
+        ?array $old,
+        ?array $new,
+        string $event,
+    ): void {
+        DB::table('authorization_assignment_audits')->insert([
+            'event' => 'canonical_assignment_'.$event,
+            'actor_id' => null,
+            'target_user_id' => $subject->id,
+            'scope_type' => $assignment->scope_type,
+            'scope_id' => $assignment->scope_id,
+            'role' => $role,
+            'old_value' => $old === null ? null : json_encode($old),
+            'new_value' => $new === null ? null : json_encode($new),
+            'reason' => 'automatic department capacity assignment mutation',
+            'ip_address' => null,
+            'user_agent' => 'scoped-department-role-sync-service',
+            'created_at' => now(),
+        ]);
     }
 }

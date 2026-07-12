@@ -102,7 +102,7 @@ class UpdateCommentRequestTest extends TestCase
         // super_admin bypasses engine check on parent (UpdateCommentRequest::canAccessParent)
         // — see AccessDecision::whyCan() step 1. This is a unit test of the FormRequest
         // owner-floor path; engine grants are exercised separately.
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         $comment = $this->makeCommentOwnedBy($user);
         $request = $this->makeRequestWithRouteComment($comment, $user);

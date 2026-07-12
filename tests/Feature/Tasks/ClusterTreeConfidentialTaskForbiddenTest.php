@@ -128,7 +128,7 @@ class ClusterTreeConfidentialTaskForbiddenTest extends TestCase
         // admins are blocked.
         $org = Organization::factory()->create();
         $superAdmin = User::factory()->create(['organization_id' => null, 'is_active' => true]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $dept = Department::factory()->create(['organization_id' => $org->id]);
         $project = Project::factory()->create([

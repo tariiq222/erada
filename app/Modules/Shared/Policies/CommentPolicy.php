@@ -175,17 +175,17 @@ class CommentPolicy
             return false;
         }
 
-        // إذا كان التعليق على مهمة
+        // A project manager is represented by the canonical record-scoped
+        // project-team administration capability, never by a role name.
         if ($commentable instanceof Task) {
-            // مدير المشروع التابعة له المهمة
-            if ($commentable->project_id && $user->isProjectAdmin($commentable->project_id)) {
-                return true;
-            }
+            $project = $commentable->project;
+
+            return $project instanceof Project
+                && AccessDecision::can($user, Capability::PROJECTS_ASSIGN_ROLES, $project);
         }
 
-        // إذا كان التعليق على مشروع
         if ($commentable instanceof Project) {
-            return $user->isProjectAdmin($commentable);
+            return AccessDecision::can($user, Capability::PROJECTS_ASSIGN_ROLES, $commentable);
         }
 
         return false;

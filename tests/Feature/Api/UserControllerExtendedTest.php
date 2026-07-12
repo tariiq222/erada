@@ -3,7 +3,6 @@
 namespace Tests\Feature\Api;
 
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -41,28 +40,28 @@ class UserControllerExtendedTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
 
         $this->admin = User::factory()->create([
             'organization_id' => $organization->id,
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->admin->assignRole('admin');
+        $this->assignCanonicalRole($this->admin, 'admin');
 
         $this->projectManager = User::factory()->create([
             'organization_id' => $organization->id,
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->projectManager->assignRole('project_manager');
+        $this->assignCanonicalRole($this->projectManager, 'project_manager');
 
         $this->member = User::factory()->create([
             'organization_id' => $organization->id,
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->member->assignRole('member');
+        $this->assignCanonicalRole($this->member, 'member');
     }
 
     // ========== index ==========
@@ -129,8 +128,8 @@ class UserControllerExtendedTest extends TestCase
             'department_id' => $parent->id,
             'is_active' => true,
         ]);
-        $manager->assignRole('member');
-        $manager->assignDepartmentRole($parent, ScopedRole::DEPARTMENT_MANAGER);
+        $this->assignCanonicalRole($manager, 'member');
+        $this->assignCanonicalRole($manager, 'dept_manager', 'department', $parent->id);
 
         $childUser = User::factory()->create([
             'organization_id' => $org,

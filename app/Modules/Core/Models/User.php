@@ -4,7 +4,10 @@ namespace App\Modules\Core\Models;
 
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
-use App\Modules\Core\Traits\HasScopedRoles;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
+use App\Modules\Core\Authorization\Models\AuthorizationRolePermission;
+use App\Modules\Core\Authorization\Support\CapabilityToAuthorizationRolePermission;
+use App\Modules\Core\Traits\CanonicalDepartmentAssignments;
 use App\Modules\HR\Models\Department;
 use App\Modules\HR\Models\EmployeeProfile;
 use App\Modules\Performance\Models\Kpi;
@@ -16,18 +19,16 @@ use App\Modules\Tasks\Models\Task;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
-use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, HasRoles, HasScopedRoles, LogsActivity, Notifiable, SoftDeletes;
+    use CanonicalDepartmentAssignments, HasApiTokens, HasFactory, LogsActivity, Notifiable, SoftDeletes;
 
     /**
      * الحقول التي نريد تتبعها في سجل التغييرات
@@ -42,11 +43,6 @@ class User extends Authenticatable
         'job_title',
         'is_active',
     ];
-
-    /**
-     * تحديد guard الافتراضي لـ Spatie Permission
-     */
-    protected string $guard_name = 'web';
 
     /**
      * Create a new factory instance for the model.
@@ -180,12 +176,6 @@ class User extends Authenticatable
         return $this->hasOne(EmployeeProfile::class);
     }
 
-    // المشاريع المشترك فيها — استبدلت بـ model_has_scoped_roles في 2026-06-14
-    // (الـ project_members pivot table محذوف). للوصول للمشاريع التي يملك
-    // المستخدم فيها دوراً سياقياً، استخدم `User::projectScopedRoles` أو
-    // `ProjectQueryService::applyOwnershipScope`.
-    // public function projects(): BelongsToMany { ... } — deleted 2026-07-06
-
     // المهام المكلف بها (من موديول Tasks الموحد)
     public function tasks(): HasMany
     {
@@ -233,10 +223,93 @@ class User extends Authenticatable
         return $this->hasMany(Department::class, 'manager_id');
     }
 
+    /**
+     * Canonical role assignments. Callers making authorization decisions must
+     * additionally constrain lifecycle and scope, normally through
+     * activeCanonicalRoleAssignments().
+     */
+    /** @return HasMany<AuthorizationRoleAssignment, $this> */
+    public function canonicalRoleAssignments(): HasMany
+    {
+        return $this->hasMany(AuthorizationRoleAssignment::class, 'user_id');
+    }
+
+    /** @return HasMany<AuthorizationRoleAssignment, $this> */
+    public function activeCanonicalRoleAssignments(): HasMany
+    {
+        return $this->canonicalRoleAssignments()
+            ->where(function ($query) {
+                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->whereHas('role', fn ($query) => $query->where('is_active', true));
+    }
+
+    /** @return array<int, string> */
+    public function canonicalRoleNames(): array
+    {
+        if ($this->relationLoaded('activeCanonicalRoleAssignments')) {
+            return $this->activeCanonicalRoleAssignments
+                ->pluck('role.name')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+        }
+
+        return $this->activeCanonicalRoleAssignments()
+            ->with('role:id,name,is_active')
+            ->get()
+            ->pluck('role.name')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /** @return array<int, string> */
+    public function canonicalCapabilityNames(): array
+    {
+        if ($this->isSuperAdmin()) {
+            return Capability::all();
+        }
+
+        $roleIds = $this->activeCanonicalRoleAssignments()
+            ->pluck('authorization_role_id');
+
+        if ($roleIds->isEmpty()) {
+            return [];
+        }
+
+        $grants = AuthorizationRolePermission::query()
+            ->with('resource:id,key')
+            ->whereIn('authorization_role_id', $roleIds)
+            ->get()
+            ->map(fn (AuthorizationRolePermission $permission) => [
+                'resource' => $permission->resource?->key,
+                'action' => $permission->action,
+            ]);
+
+        return collect(CapabilityToAuthorizationRolePermission::mapAll())
+            ->filter(fn (array $mapping) => $grants->contains(
+                fn (array $grant) => $grant['resource'] === $mapping['resource']
+                    && $grant['action'] === $mapping['action']
+            ))
+            ->pluck('capability')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
     // هل المستخدم Super Admin
     public function isSuperAdmin(): bool
     {
-        return $this->hasRole('super_admin');
+        return $this->activeCanonicalRoleAssignments()
+            ->where('scope_type', AuthorizationRoleAssignment::SCOPE_ALL)
+            ->whereNull('scope_id')
+            ->whereHas('role', fn ($query) => $query
+                ->where('name', 'super_admin')
+                ->where('is_system', true))
+            ->exists();
     }
 
     /**
@@ -257,7 +330,7 @@ class User extends Authenticatable
     // (super_admin يتجاوز المحرّك تلقائياً).
     public function isAdmin(): bool
     {
-        return AccessDecision::can($this, Capability::SETTINGS_MANAGE);
+        return AccessDecision::canonicalTrace($this, Capability::SETTINGS_MANAGE)['granted'];
     }
 
     // ========== علاقات التتبع ==========
@@ -272,24 +345,6 @@ class User extends Authenticatable
     public function updater(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
-    }
-
-    // ========== علاقات الأدوار السياقية للعرض ==========
-
-    // أدوار الأقسام (للـ Infolist)
-    public function departmentScopedRoles(): HasMany
-    {
-        return $this->hasMany(ScopedRole::class, 'user_id')
-            ->where('scope_type', ScopedRole::SCOPE_DEPARTMENT)
-            ->with(['scope']);
-    }
-
-    // أدوار المشاريع (للـ Infolist)
-    public function projectScopedRoles(): HasMany
-    {
-        return $this->hasMany(ScopedRole::class, 'user_id')
-            ->where('scope_type', ScopedRole::SCOPE_PROJECT)
-            ->with(['scope']);
     }
 
     // أدوار أصحاب المصلحة

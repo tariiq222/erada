@@ -2,11 +2,9 @@
 
 namespace App\Modules\Core\Http\Requests;
 
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use Illuminate\Foundation\Http\FormRequest;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * RemoveDepartmentRoleRequest - validation + authz for revoking a
@@ -42,30 +40,7 @@ class RemoveDepartmentRoleRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'role' => ['required', 'string'],
+            'role_id' => ['required', 'integer', 'exists:authorization_roles,id'],
         ];
-    }
-
-    public function withValidator($validator): void
-    {
-        $validator->after(function ($validator) {
-            $user = $this->route('user');
-            $department = $this->route('department');
-            $roleName = $this->input('role');
-
-            if (! $user instanceof User || ! $department instanceof Department || ! is_string($roleName)) {
-                return;
-            }
-
-            $exists = $user->scopedRoles()
-                ->where('scope_type', ScopedRole::SCOPE_DEPARTMENT)
-                ->where('scope_id', $department->id)
-                ->where('role', $roleName)
-                ->exists();
-
-            if (! $exists) {
-                throw new NotFoundHttpException('المستخدم ليس لديه هذا الدور في هذا القسم');
-            }
-        });
     }
 }

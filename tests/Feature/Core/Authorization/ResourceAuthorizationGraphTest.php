@@ -10,9 +10,6 @@ use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Authorization\Models\AuthorizationRolePermission;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
-use App\Modules\Core\Models\ScopedRoleDefinition;
-use App\Modules\Core\Models\ScopeType;
 use App\Modules\HR\Models\Department;
 use App\Modules\Meetings\Models\Meeting;
 use App\Modules\Meetings\Models\Recommendation;
@@ -130,9 +127,6 @@ class ResourceAuthorizationGraphTest extends TestCase
         AuthorizationRole::class,
         AuthorizationRoleAssignment::class,
         AuthorizationRolePermission::class,
-        ScopedRole::class,
-        ScopedRoleDefinition::class,
-        ScopeType::class,
         Organization::class,
     ];
 

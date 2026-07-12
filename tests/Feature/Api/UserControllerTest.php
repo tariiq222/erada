@@ -6,8 +6,6 @@ use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class UserControllerTest extends TestCase
@@ -24,17 +22,6 @@ class UserControllerTest extends TestCase
     {
         parent::setUp();
 
-        // إنشاء دور وصلاحيات
-        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
-        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
-        Role::firstOrCreate(['name' => 'employee', 'guard_name' => 'web']);
-
-        Permission::firstOrCreate(['name' => 'manage_users', 'guard_name' => 'web']);
-        Permission::firstOrCreate(['name' => 'view_users', 'guard_name' => 'web']);
-        Permission::firstOrCreate(['name' => 'create_users', 'guard_name' => 'web']);
-        Permission::firstOrCreate(['name' => 'edit_users', 'guard_name' => 'web']);
-        Permission::firstOrCreate(['name' => 'delete_users', 'guard_name' => 'web']);
-
         // إنشاء المؤسسة والقسم
         $organization = Organization::factory()->create();
         $this->department = Department::factory()->create(['organization_id' => $organization->id]);
@@ -45,8 +32,7 @@ class UserControllerTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->admin->assignRole('admin');
-        $this->admin->givePermissionTo(['manage_users', 'view_users', 'create_users', 'edit_users', 'delete_users']);
+        $this->assignCanonicalRole($this->admin, 'admin');
 
         // إنشاء مستخدم عادي
         $this->user = User::factory()->create([
@@ -54,7 +40,7 @@ class UserControllerTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('employee');
+        $this->assignCanonicalRole($this->user, 'member');
     }
 
     /**

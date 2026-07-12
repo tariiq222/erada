@@ -4,8 +4,9 @@ namespace Tests\Feature\Shared;
 
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Support\CapabilityToAuthorizationRolePermission;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRoleDefinition;
 use App\Modules\Core\Models\User;
 use App\Modules\Projects\Models\Project;
 use App\Modules\Shared\Models\ActivityLog;
@@ -74,21 +75,52 @@ class ClusterTreeAuditRoleIsolationTest extends TestCase
         $this->assertFalse(AccessDecision::can($user, Capability::USERS_VIEW));
     }
 
-    public function test_cluster_auditor_definition_is_seeded_as_an_isolated_org_role(): void
+    public function test_cluster_auditor_canonical_role_is_isolated_at_org_scope(): void
     {
-        $definition = ScopedRoleDefinition::query()
+        $org = Organization::factory()->cluster()->create();
+        $user = User::factory()->create([
+            'organization_id' => $org->id,
+            'is_active' => true,
+        ]);
+        $this->grantEngineCapability(
+            $user,
+            [
+                Capability::AUDIT_VIEW,
+                Capability::AUDIT_EXPORT,
+                Capability::CLUSTER_TREE_VIEW,
+                Capability::CLUSTER_TREE_EXPORT,
+            ],
+            roleKey: 'cluster_auditor',
+        );
+
+        $role = AuthorizationRole::query()
+            ->with('permissions.resource')
             ->where('scope_type', 'organization')
-            ->where('role_key', 'cluster_auditor')
+            ->where('name', 'cluster_auditor')
             ->first();
 
-        $this->assertNotNull($definition);
-        $this->assertSame([
+        $this->assertNotNull($role);
+        $expectedCapabilities = [
             Capability::AUDIT_VIEW,
             Capability::AUDIT_EXPORT,
             Capability::CLUSTER_TREE_VIEW,
             Capability::CLUSTER_TREE_EXPORT,
-        ], $definition->permissions);
-        $this->assertFalse($definition->is_admin_role);
+        ];
+        $expected = collect($expectedCapabilities)
+            ->map(fn (string $capability): ?array => CapabilityToAuthorizationRolePermission::map($capability))
+            ->filter()
+            ->map(fn (array $mapping): string => $mapping['resource'].':'.$mapping['action'])
+            ->sort()
+            ->values()
+            ->all();
+        $actual = $role->permissions
+            ->map(fn ($permission): string => $permission->resource->key.':'.$permission->action)
+            ->sort()
+            ->values()
+            ->all();
+
+        $this->assertSame($expected, $actual);
+        $this->assertFalse($role->is_admin_role);
     }
 
     public function test_cluster_auditor_can_read_child_org_activity_log_via_cluster_widening(): void

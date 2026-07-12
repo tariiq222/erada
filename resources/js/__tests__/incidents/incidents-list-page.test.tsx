@@ -515,16 +515,13 @@ vi.mock('@shared/contexts/AuthContext', () => ({
       name: 'Test User',
       // Phase 9.3: production code reads useCan('ovr.*') from `user.access`.
       access: {
-        ovr: {
-          view_statistics: true,
-          create: true,
-          edit: true,
-          view_all: true,
-        },
+        'ovr.view_statistics': true,
+        'ovr.create': true,
+        'ovr.edit': true,
+        'ovr.view_all': true,
       },
     },
-    hasPermission: vi.fn(() => true),
-    canAccess: vi.fn(() => true),
+    can: vi.fn(() => true),
   }),
 }));
 

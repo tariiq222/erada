@@ -3,7 +3,6 @@
 namespace Tests\Unit\Projects;
 
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Exceptions\ProjectMemberAlreadyExistsException;
@@ -164,14 +163,14 @@ class ProjectChildServicesTopUpTest extends TestCase
         // directly — single-record service helpers were retired as dead code.
         $this->assertTrue($this->project->members()->where('user_id', $member->id)->exists());
         $this->assertSame(1, $this->project->members()->count());
-        $this->assertSame(1, $this->project->members()->wherePivot('role', 'member')->count());
-        $member->assignProjectRole($this->project, 'viewer');
-        $this->assertSame(1, $this->project->members()->wherePivot('role', 'viewer')->count());
+        $this->assertSame(1, $team->getMembersByRole($this->project, 'project_member')->count());
+        $this->assignCanonicalRole($member, 'project_viewer', 'project', (int) $this->project->id);
+        $this->assertSame(1, $team->getMembersByRole($this->project, 'project_viewer')->count());
 
         $team->createTeamMembers($this->project, [
             ['user_id' => $manager->id, 'role' => 'مدير'],
         ]);
-        $this->assertSame(1, $this->project->members()->wherePivot('role', 'manager')->count());
+        $this->assertSame(1, $team->getMembersByRole($this->project, 'project_manager')->count());
 
         $stakeholders->createStakeholders($this->project, [
             ['name' => '   '],
@@ -190,7 +189,7 @@ class ProjectChildServicesTopUpTest extends TestCase
         $this->assertSame('Updated Sponsor', $updated->name);
         $this->assertSame('consultant', $updated->role);
 
-        $manager->assignProjectRole($this->project, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($manager, 'project_manager', 'project', (int) $this->project->id);
         $addedIds = $stakeholders->addProjectLeadersAsStakeholders($this->project);
         $this->assertContains($manager->id, $addedIds);
         $this->assertSame(1, $stakeholders->getHighInfluenceStakeholders($this->project)->count());
@@ -204,9 +203,10 @@ class ProjectChildServicesTopUpTest extends TestCase
         $this->assertDatabaseMissing('stakeholders', ['name' => 'Replacement stakeholder']);
 
         $team->replaceTeamMembers($this->project, [['user_id' => $member->id, 'role' => 'عضو']]);
-        // removeMember is retired as dead code — revoke through the model directly.
-        $member->revokeProjectRole($this->project);
-        $this->assertFalse($this->project->members()->where('user_id', $member->id)->exists());
+        // The explicit viewer assignment is manual, so automatic team replacement
+        // and removal must not revoke it.
+        $this->assertFalse($team->removeMember($this->project, $member->id));
+        $this->assertTrue($this->project->members()->where('user_id', $member->id)->exists());
     }
 
     public function test_task_service_creates_updates_filters_reorders_assigns_and_deletes_tasks(): void
@@ -215,7 +215,7 @@ class ProjectChildServicesTopUpTest extends TestCase
         $taskService = new TaskService;
         $assignee = User::factory()->create(['organization_id' => $this->organization->id, 'department_id' => $this->department->id]);
         $manager = User::factory()->create(['organization_id' => $this->organization->id, 'department_id' => $this->department->id]);
-        $manager->assignProjectRole($this->project, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($manager, 'project_manager', 'project', (int) $this->project->id);
         $milestoneIds = $milestoneService->createMilestones($this->project, [[
             'name' => 'Milestone',
             'start_date' => now()->toDateString(),
@@ -255,5 +255,35 @@ class ProjectChildServicesTopUpTest extends TestCase
 
         $this->assertTrue($taskService->deleteTask($assigned));
         $this->assertSoftDeleted('tasks', ['id' => $assigned->id]);
+    }
+
+    public function test_expired_project_manager_is_not_used_as_a_leader_or_default_task_assignee(): void
+    {
+        $manager = User::factory()->create([
+            'organization_id' => $this->organization->id,
+            'department_id' => $this->department->id,
+        ]);
+        $assignment = $this->assignCanonicalRole(
+            $manager,
+            'project_manager',
+            'project',
+            (int) $this->project->id,
+        );
+        $assignment->update(['expires_at' => now()->subMinute()]);
+
+        $stakeholderIds = (new StakeholderService)->addProjectLeadersAsStakeholders($this->project);
+        $task = (new TaskService)->createTask(
+            $this->project,
+            ['name' => 'Unassigned task'],
+            [],
+            $this->user,
+        );
+
+        $this->assertNotContains($manager->id, $stakeholderIds);
+        $this->assertDatabaseMissing('stakeholders', [
+            'project_id' => $this->project->id,
+            'user_id' => $manager->id,
+        ]);
+        $this->assertNull($task->assigned_to);
     }
 }

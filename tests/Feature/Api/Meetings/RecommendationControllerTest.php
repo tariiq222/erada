@@ -55,7 +55,7 @@ class RecommendationControllerTest extends TestCase
         $this->seed(RolesAndPermissionsSeeder::class);
         $this->dept = Department::factory()->create();
         $this->user = User::factory()->create(['department_id' => $this->dept->id, 'is_active' => true]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
         $this->project = Project::factory()->create(['department_id' => $this->dept->id]);
 
         // Direction B: a Meeting hosts recommendations directly (no separate
@@ -470,7 +470,7 @@ class RecommendationControllerTest extends TestCase
             'department_id' => $orgADept->id,
             'is_active' => true,
         ]);
-        $orgAActor->assignRole('admin');
+        $this->assignCanonicalRole($orgAActor, 'admin');
         $this->grantEngineCapability($orgAActor, Capability::RECOMMENDATIONS_VIEW, 'organization', $orgA);
 
         // Same-org recommendation: must appear.
@@ -529,7 +529,7 @@ class RecommendationControllerTest extends TestCase
             'organization_id' => $this->project->organization_id,
             'is_active' => true,
         ]);
-        $otherUser->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($otherUser);
 
         $response = $this->actingAs($otherUser, 'sanctum')
             ->postJson("/api/recommendations/{$this->ruling->id}/approve", [
@@ -551,7 +551,7 @@ class RecommendationControllerTest extends TestCase
             'organization_id' => $this->project->organization_id,
             'is_active' => true,
         ]);
-        $otherUser->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($otherUser);
 
         $response = $this->actingAs($otherUser, 'sanctum')
             ->postJson("/api/recommendations/{$this->ruling->id}/reject", [
@@ -572,7 +572,7 @@ class RecommendationControllerTest extends TestCase
             'organization_id' => $this->project->organization_id,
             'is_active' => true,
         ]);
-        $otherUser->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($otherUser);
 
         $until = now()->addDays(14)->toDateString();
         $response = $this->actingAs($otherUser, 'sanctum')
@@ -717,7 +717,7 @@ class RecommendationControllerTest extends TestCase
             'organization_id' => $this->project->organization_id,
             'is_active' => true,
         ]);
-        $otherUser->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($otherUser);
 
         $response = $this->actingAs($otherUser, 'sanctum')
             ->postJson("/api/recommendations/{$this->ruling->id}/approve");

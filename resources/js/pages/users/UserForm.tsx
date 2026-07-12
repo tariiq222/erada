@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {IconDeviceFloppy, IconUser, IconMail, IconPhone, IconShield, IconLock, IconEye, IconEyeOff} from '@tabler/icons-react';
@@ -15,6 +15,8 @@ import { useToast } from '@shared/ui/Toast';
 import { departmentsApi } from '@entities/hr';
 import { usersApi } from '@entities/user';
 import { rolesApi, type Role } from '@entities/role';
+import { useAuth } from '@shared/contexts/AuthContext';
+import { useOrganization } from '@shared/contexts/OrganizationContext';
 
 interface UserFormData {
   name: string;
@@ -26,7 +28,7 @@ interface UserFormData {
   job_title: string;
   department_id: string;
   is_active: boolean;
-  roles: string[];
+  role_ids: number[];
 }
 
 interface Department {
@@ -39,7 +41,8 @@ interface ValidationErrors {
 }
 
 interface AvailableRole {
-  value: string;
+  value: number;
+  name: string;
   label: string;
   description?: string;
 }
@@ -100,16 +103,10 @@ export const UserForm: React.FC = () => {
   const navigate = useNavigate();
   const base = useLocation().pathname.startsWith('/admin') ? '/admin/users' : '/users';
   const { showToast } = useToast();
+  const { user: currentUser, refreshUser } = useAuth();
+  const { currentOrganization } = useOrganization();
 
   const isEditMode = !!id;
-
-  const fallbackRoles = useMemo<AvailableRole[]>(
-    () => [
-      { value: 'admin', label: t('role.admin'), description: t('users.role_desc_admin') },
-      { value: 'viewer', label: t('role.viewer'), description: t('users.role_desc_viewer') },
-    ],
-    [t]
-  );
 
   const [formData, setFormData] = useState<UserFormData>({
     name: '',
@@ -121,8 +118,9 @@ export const UserForm: React.FC = () => {
     job_title: '',
     department_id: '',
     is_active: true,
-    roles: [],
+    role_ids: [],
   });
+  const [loadedRoleNames, setLoadedRoleNames] = useState<string[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [availableRoles, setAvailableRoles] = useState<AvailableRole[]>([]);
   const [isLoading, setIsLoading] = useState(isEditMode);
@@ -136,6 +134,17 @@ export const UserForm: React.FC = () => {
       fetchUser();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (loadedRoleNames.length === 0 || availableRoles.length === 0) return;
+
+    setFormData((previous) => ({
+      ...previous,
+      role_ids: availableRoles
+        .filter((role) => loadedRoleNames.includes(role.name))
+        .map((role) => role.value),
+    }));
+  }, [availableRoles, loadedRoleNames]);
 
   const fetchDepartments = async () => {
     try {
@@ -157,17 +166,18 @@ export const UserForm: React.FC = () => {
     try {
       const response = (await rolesApi.list()) as { data?: Role[] };
       const roleOptions = (response.data || [])
-        .filter((role) => role.name !== 'super_admin')
+        .filter((role) => role.name !== 'super_admin' && role.is_active)
         .map((role) => ({
-          value: role.name,
-          label: role.display_name || role.label_ar || role.name,
+          value: role.id,
+          name: role.name,
+          label: role.label_ar || role.label || role.label_en || role.name,
           description: roleDescription(role),
         }));
 
-      setAvailableRoles(roleOptions.length > 0 ? roleOptions : fallbackRoles);
+      setAvailableRoles(roleOptions);
     } catch (error) {
       console.warn('Failed to load roles:', error);
-      setAvailableRoles(fallbackRoles);
+      setAvailableRoles([]);
     }
   };
 
@@ -184,8 +194,11 @@ export const UserForm: React.FC = () => {
         job_title: response.job_title || '',
         department_id: response.department_id?.toString() || '',
         is_active: response.is_active ?? true,
-        roles: response.roles || [],
+        role_ids: (response.authorization_assignments || response.assignments || [])
+          .map((assignment: { role_id?: number }) => assignment.role_id)
+          .filter((roleId: number | undefined): roleId is number => typeof roleId === 'number'),
       });
+      setLoadedRoleNames(response.roles || []);
     } catch {
       showToast('error', t('users.load_error'));
       navigate(base);
@@ -194,7 +207,7 @@ export const UserForm: React.FC = () => {
     }
   };
 
-  const handleChange = (field: keyof UserFormData, value: string | boolean | string[]) => {
+  const handleChange = (field: keyof UserFormData, value: string | boolean | number[]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     // Clear field error on change
     if (errors[field]) {
@@ -206,11 +219,11 @@ export const UserForm: React.FC = () => {
     }
   };
 
-  const handleRoleToggle = (role: string) => {
-    const newRoles = formData.roles.includes(role)
-      ? formData.roles.filter((r) => r !== role)
-      : [...formData.roles, role];
-    handleChange('roles', newRoles);
+  const handleRoleToggle = (roleId: number) => {
+    const newRoleIds = formData.role_ids.includes(roleId)
+      ? formData.role_ids.filter((candidate) => candidate !== roleId)
+      : [...formData.role_ids, roleId];
+    handleChange('role_ids', newRoleIds);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -219,6 +232,10 @@ export const UserForm: React.FC = () => {
     setIsSaving(true);
 
     try {
+      if (formData.role_ids.length > 0 && !currentOrganization?.id) {
+        throw new Error(t('users.organization_required_for_roles'));
+      }
+
       const submitData: any = {
         name: formData.name,
         email: formData.email,
@@ -227,7 +244,12 @@ export const UserForm: React.FC = () => {
         job_title: formData.job_title || null,
         department_id: formData.department_id ? Number(formData.department_id) : null,
         is_active: formData.is_active,
-        roles: formData.roles,
+        assignments: [...formData.role_ids].sort((left, right) => left - right).map((roleId) => ({
+          role_id: roleId,
+          scope_type: 'organization' as const,
+          scope_id: currentOrganization?.id ?? null,
+          inherit_to_children: false,
+        })),
       };
 
       // Include password only if provided
@@ -236,20 +258,35 @@ export const UserForm: React.FC = () => {
         submitData.password_confirmation = formData.password_confirmation;
       }
 
+      let subjectId: number;
       if (isEditMode) {
         await usersApi.update(Number(id), submitData);
+        subjectId = Number(id);
+      } else {
+        const response = await usersApi.create(submitData) as { user: { id: number } };
+        subjectId = response.user.id;
+      }
+
+      if (currentUser?.id === subjectId) {
+        await refreshUser();
+      }
+
+      if (isEditMode) {
         showToast('success', t('users.updated_success'));
       } else {
-        await usersApi.create(submitData);
         showToast('success', t('users.created_success'));
       }
       navigate(base);
     } catch (error: any) {
       if (error.errors) {
-        setErrors(error.errors);
-      } else {
-        showToast('error', error.message || t('users.save_error'));
+        const assignmentError = Object.entries(error.errors as ValidationErrors)
+          .find(([field]) => field.startsWith('assignments'))?.[1];
+        setErrors({
+          ...error.errors,
+          ...(assignmentError ? { assignments: assignmentError } : {}),
+        });
       }
+      showToast('error', error.message || t('users.save_error'));
     } finally {
       setIsSaving(false);
     }
@@ -418,17 +455,17 @@ export const UserForm: React.FC = () => {
                 {t('users.roles')} <RequiredIndicator />
               </label>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {(availableRoles.length > 0 ? availableRoles : fallbackRoles).map((role) => (
+                {availableRoles.map((role) => (
                   <label
                     key={role.value}
                     className={`relative flex items-start p-4 border rounded-lg cursor-pointer transition-colors ${
-                      formData.roles.includes(role.value)
+                      formData.role_ids.includes(role.value)
                         ? 'border-[var(--accent-default)] bg-[var(--accent-subtle)]'
                         : 'border-[var(--border-default)] hover:border-[var(--border-strong)]'
                     }`}
                   >
                     <Checkbox
-                      checked={formData.roles.includes(role.value)}
+                      checked={formData.role_ids.includes(role.value)}
                       onChange={() => handleRoleToggle(role.value)}
                       className="mt-0"
                     />
@@ -444,8 +481,10 @@ export const UserForm: React.FC = () => {
                   </label>
                 ))}
               </div>
-              {errors.roles && (
-                <p className="text-sm text-[var(--status-danger-text)] mt-2">{errors.roles[0]}</p>
+              {(errors.role_ids || errors.assignments) && (
+                <p className="text-sm text-[var(--status-danger-text)] mt-2">
+                  {(errors.role_ids || errors.assignments)[0]}
+                </p>
               )}
             </div>
           </CardContent>

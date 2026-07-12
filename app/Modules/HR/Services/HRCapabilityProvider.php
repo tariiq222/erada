@@ -30,13 +30,8 @@ class HRCapabilityProvider implements CapabilityProvider
 {
     public function userCapabilities(User $user): array
     {
-        // Wire-format flags for the SPA: the unified engine exposes the
-        // canonical dotted capabilities (hr.view, hr.manage) but the
-        // frontend route guards, menus, and buttons still match the flat
-        // legacy strings (`view_hr`, `manage_hr`). Map each canonical
-        // capability to its legacy key here so auth/me.permissions still
-        // lights up the legacy gate before the SPA migrates to the
-        // dotted keys. The Capability:: constants are not the wire keys.
+        // Expose the HR capability flags consumed by the SPA. AccessDecision
+        // remains the source of each decision.
         return [
             'view_hr' => AccessDecision::can($user, Capability::HR_VIEW),
             'manage_hr' => AccessDecision::can($user, Capability::HR_MANAGE),

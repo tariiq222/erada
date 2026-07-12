@@ -70,8 +70,8 @@ class RecommendationOptimisticGuardTest extends TestCase
             'organization_id' => $this->project->organization_id,
             'is_active' => true,
         ]);
-        $this->actor->assignRole('super_admin');
-        $this->approver->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->actor);
+        $this->grantCanonicalSuperAdmin($this->approver);
 
         $this->meeting = Meeting::factory()->create([
             'department_id' => $this->dept->id,

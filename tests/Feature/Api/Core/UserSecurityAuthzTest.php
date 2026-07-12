@@ -18,8 +18,8 @@ use Tests\TestCase;
  *
  *   GET  /api/users/{user}/security         (UserPolicy::view)
  *   GET  /api/users/stats                   (UserPolicy::viewAny + visibility)
- *   GET  /api/scoped-roles/user/{user}      (ScopedRoleController::userScopedRoles)
- *   GET  /api/scoped-roles/audit-logs       (Capability::AUDIT_VIEW)
+ *   GET  /api/authorization-role-assignments/user/{user}
+ *   GET  /api/authorization-role-assignments/audit-logs (Capability::AUDIT_VIEW)
  *
  * The previous registration-approval tests at the bottom of this file were
  * removed in the simplified-registration cutover (the routes + controller +
@@ -59,7 +59,7 @@ class UserSecurityAuthzTest extends TestCase
             'is_active' => true,
         ]);
         if ($role) {
-            $user->assignRole($role);
+            $this->assignCanonicalRole($user, $role);
         }
 
         return $user;
@@ -131,7 +131,7 @@ class UserSecurityAuthzTest extends TestCase
         $this->assertSame(2, $total, 'must NOT count orgB users');
     }
 
-    // ========== GET /api/scoped-roles/user/{user} ==========
+    // ========== GET /api/authorization-role-assignments/user/{user} ==========
 
     public function test_member_cannot_view_other_users_scoped_roles(): void
     {
@@ -139,7 +139,7 @@ class UserSecurityAuthzTest extends TestCase
         $target = $this->makeUser($this->orgA);
 
         $this->actingAs($member, 'sanctum')
-            ->getJson("/api/scoped-roles/user/{$target->id}")
+            ->getJson("/api/authorization-role-assignments/user/{$target->id}")
             ->assertStatus(403);
     }
 
@@ -148,7 +148,7 @@ class UserSecurityAuthzTest extends TestCase
         $user = $this->makeUser($this->orgA);
 
         $this->actingAs($user, 'sanctum')
-            ->getJson("/api/scoped-roles/user/{$user->id}")
+            ->getJson("/api/authorization-role-assignments/user/{$user->id}")
             ->assertStatus(200)
             ->assertJsonStructure(['data']);
     }
@@ -159,19 +159,19 @@ class UserSecurityAuthzTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $foreign = $this->makeUser($this->orgB);
 
         $this->actingAs($superAdmin, 'sanctum')
-            ->getJson("/api/scoped-roles/user/{$foreign->id}")
+            ->getJson("/api/authorization-role-assignments/user/{$foreign->id}")
             ->assertStatus(200);
     }
 
     public function test_same_org_admin_has_view_users_via_spatie_and_passes(): void
     {
         // The admin Spatie role is granted Permission::VIEW_USERS (legacy
-        // gate). ScopedRoleController::userScopedRoles still uses
+        // gate). AuthorizationRoleAssignmentController::userAssignments still uses
         // `$currentUser->can('view_users')` directly, so admin reaches the
         // response. This test pins that legacy behavior — a future task
         // should migrate the check to the engine (USERS_VIEW capability).
@@ -179,7 +179,7 @@ class UserSecurityAuthzTest extends TestCase
         $target = $this->makeUser($this->orgA);
 
         $this->actingAs($admin, 'sanctum')
-            ->getJson("/api/scoped-roles/user/{$target->id}")
+            ->getJson("/api/authorization-role-assignments/user/{$target->id}")
             ->assertStatus(200);
     }
 
@@ -190,14 +190,14 @@ class UserSecurityAuthzTest extends TestCase
         $foreign = $this->makeUser($this->orgB);
 
         $this->actingAs($admin, 'sanctum')
-            ->getJson("/api/scoped-roles/user/{$foreign->id}")
+            ->getJson("/api/authorization-role-assignments/user/{$foreign->id}")
             ->assertStatus(403);
     }
 
     public function test_same_org_user_with_only_engine_users_view_can_access_scoped_roles(): void
     {
         // Engine-only USERS_VIEW (no Spatie 'view_users' permission on a
-        // viewer-role user). userScopedRoles must authorize through
+        // viewer-role user). userAssignments must authorize through
         // UserPolicy::view, not the legacy `$user->can('view_users')` check.
         // RED for the legacy path: a viewer lacks Permission::VIEW_USERS, so
         // `$user->can('view_users')` returns false => 403 (should be 200).
@@ -206,7 +206,7 @@ class UserSecurityAuthzTest extends TestCase
         $target = $this->makeUser($this->orgA);
 
         $this->actingAs($viewer, 'sanctum')
-            ->getJson("/api/scoped-roles/user/{$target->id}")
+            ->getJson("/api/authorization-role-assignments/user/{$target->id}")
             ->assertStatus(200)
             ->assertJsonStructure(['data']);
     }
@@ -220,7 +220,7 @@ class UserSecurityAuthzTest extends TestCase
         $target = $this->makeUser($this->orgA);
 
         $this->actingAs($viewer, 'sanctum')
-            ->getJson("/api/scoped-roles/user/{$target->id}/access-summary")
+            ->getJson("/api/authorization-role-assignments/user/{$target->id}/access-summary")
             ->assertStatus(200)
             ->assertJsonStructure(['data' => ['functional_roles', 'scoped']]);
     }
@@ -228,7 +228,7 @@ class UserSecurityAuthzTest extends TestCase
     public function test_cluster_directory_grant_alone_does_not_widen_user_endpoints_cross_org(): void
     {
         // Holding CLUSTER_TREE_VIEW (cluster directory primitive) but NOT
-        // USERS_VIEW must not authorize cross-org reads on userScopedRoles
+        // USERS_VIEW must not authorize cross-org reads on userAssignments
         // or accessSummary. UserPolicy::view demands the module capability;
         // viewDirectory() is the dedicated cluster seam, not wired here.
         $actor = $this->makeUser($this->orgA, null, 'viewer');
@@ -236,28 +236,28 @@ class UserSecurityAuthzTest extends TestCase
         $foreign = $this->makeUser($this->orgB);
 
         $this->actingAs($actor, 'sanctum')
-            ->getJson("/api/scoped-roles/user/{$foreign->id}")
+            ->getJson("/api/authorization-role-assignments/user/{$foreign->id}")
             ->assertStatus(403);
 
         $this->actingAs($actor, 'sanctum')
-            ->getJson("/api/scoped-roles/user/{$foreign->id}/access-summary")
+            ->getJson("/api/authorization-role-assignments/user/{$foreign->id}/access-summary")
             ->assertStatus(403);
     }
 
-    // ========== GET /api/scoped-roles/audit-logs ==========
+    // ========== GET /api/authorization-role-assignments/audit-logs ==========
 
     public function test_member_cannot_view_audit_logs(): void
     {
         $viewer = $this->makeUser($this->orgA, null, 'viewer');
 
         $this->actingAs($viewer, 'sanctum')
-            ->getJson('/api/scoped-roles/audit-logs')
+            ->getJson('/api/authorization-role-assignments/audit-logs')
             ->assertStatus(403);
     }
 
     public function test_unauthenticated_cannot_view_audit_logs(): void
     {
-        $this->getJson('/api/scoped-roles/audit-logs')->assertStatus(401);
+        $this->getJson('/api/authorization-role-assignments/audit-logs')->assertStatus(401);
     }
 
     public function test_user_with_audit_view_can_access_audit_logs(): void
@@ -266,7 +266,7 @@ class UserSecurityAuthzTest extends TestCase
         $this->grantEngineCapability($admin, Capability::AUDIT_VIEW);
 
         $this->actingAs($admin, 'sanctum')
-            ->getJson('/api/scoped-roles/audit-logs')
+            ->getJson('/api/authorization-role-assignments/audit-logs')
             ->assertStatus(200)
             ->assertJsonStructure(['data']);
     }
@@ -279,28 +279,22 @@ class UserSecurityAuthzTest extends TestCase
         $targetA = $this->makeUser($this->orgA);
         $targetB = $this->makeUser($this->orgB);
 
-        // Seed an audit log entry targeting each user. The API now returns the
-        // redacted ActivityLogResource shape, so target_user_id is not exposed;
-        // assert scoping through visible row ids instead.
-        $logA = DB::table('activity_logs')->insertGetId([
-            'user_id' => $adminA->id, 'action' => 'role_assigned',
-            'loggable_type' => 'role', 'loggable_id' => 1,
+        // Seed canonical assignment audit entries targeting each organization.
+        $logA = DB::table('authorization_assignment_audits')->insertGetId([
+            'actor_id' => $adminA->id, 'event' => 'canonical_assignment_assigned',
             'target_user_id' => $targetA->id, 'scope_type' => 'organization',
             'scope_id' => $this->orgA->id,
-            'organization_id' => $this->orgA->id,
-            'created_at' => now(), 'updated_at' => now(),
+            'role' => 'viewer', 'created_at' => now(),
         ]);
-        $logB = DB::table('activity_logs')->insertGetId([
-            'user_id' => $adminA->id, 'action' => 'role_assigned',
-            'loggable_type' => 'role', 'loggable_id' => 2,
+        $logB = DB::table('authorization_assignment_audits')->insertGetId([
+            'actor_id' => $adminA->id, 'event' => 'canonical_assignment_assigned',
             'target_user_id' => $targetB->id, 'scope_type' => 'organization',
             'scope_id' => $this->orgB->id,
-            'organization_id' => $this->orgB->id,
-            'created_at' => now(), 'updated_at' => now(),
+            'role' => 'viewer', 'created_at' => now(),
         ]);
 
         $response = $this->actingAs($adminA, 'sanctum')
-            ->getJson('/api/scoped-roles/audit-logs')
+            ->getJson('/api/authorization-role-assignments/audit-logs')
             ->assertStatus(200);
 
         $ids = collect($response->json('data'))->pluck('id')->all();

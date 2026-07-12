@@ -220,7 +220,7 @@ class PrivateAttachmentRetentionTest extends TestCase
             'department_id' => $department->id,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
 
         $project = Project::factory()->create([
             'organization_id' => $organization->id,

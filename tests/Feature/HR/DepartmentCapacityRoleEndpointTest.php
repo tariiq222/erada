@@ -3,13 +3,12 @@
 namespace Tests\Feature\HR;
 
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use Database\Seeders\RolesAndPermissionsSeeder;
-use Database\Seeders\ScopedDepartmentRolesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
 /**
@@ -17,13 +16,13 @@ use Tests\TestCase;
  *  - PUT writes the policy with the observer muted, then runs syncDepartment ONCE
  *    so existing members receive their auto roles.
  *  - GET returns the current member/manager role keys plus the available
- *    department- and organization-scoped definitions.
+ *    department-scoped definitions only.
  *  - Cross-org actor must not be able to read or mutate a department that
  *    belongs to a different organization (sharesOrganization guard).
  */
 class DepartmentCapacityRoleEndpointTest extends TestCase
 {
-    use GrantsEngineCapability, RefreshDatabase;
+    use RefreshDatabase;
 
     protected Organization $organization;
 
@@ -36,7 +35,6 @@ class DepartmentCapacityRoleEndpointTest extends TestCase
         parent::setUp();
 
         $this->seed(RolesAndPermissionsSeeder::class);
-        $this->seed(ScopedDepartmentRolesSeeder::class);
 
         $this->organization = Organization::factory()->create();
         $this->otherOrganization = Organization::factory()->create();
@@ -62,7 +60,7 @@ class DepartmentCapacityRoleEndpointTest extends TestCase
     private function superAdmin(): User
     {
         $user = User::factory()->create(['is_active' => true]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         return $user;
     }
@@ -89,8 +87,9 @@ class DepartmentCapacityRoleEndpointTest extends TestCase
             'department_id' => $dept->id, 'capacity' => 'manager', 'role_key' => 'dept_manager',
         ]);
         // existing member got the auto role via the single post-batch sync
-        $this->assertDatabaseHas('model_has_scoped_roles', [
-            'user_id' => $member->id, 'role' => 'dept_member',
+        $memberRole = AuthorizationRole::query()->where('name', 'dept_member')->firstOrFail();
+        $this->assertDatabaseHas('authorization_role_assignments', [
+            'user_id' => $member->id, 'authorization_role_id' => $memberRole->id,
             'scope_type' => 'department', 'scope_id' => $dept->id, 'source' => 'auto',
         ]);
 
@@ -101,7 +100,7 @@ class DepartmentCapacityRoleEndpointTest extends TestCase
             ->assertJsonPath('manager_role_keys', ['dept_manager']);
     }
 
-    public function test_get_capacity_roles_lists_department_and_organization_definitions(): void
+    public function test_get_capacity_roles_lists_only_semantically_compatible_department_definitions(): void
     {
         $admin = $this->superAdmin();
         $dept = Department::factory()->create(['organization_id' => $this->organization->id]);
@@ -113,13 +112,14 @@ class DepartmentCapacityRoleEndpointTest extends TestCase
                 'member_role_keys',
                 'manager_role_keys',
                 'available' => [
-                    '*' => ['role_key', 'label', 'scope'],
+                    '*' => ['role_id', 'role_key', 'name', 'label', 'scope', 'capabilities'],
                 ],
             ]);
 
         $available = collect($response->json('available'));
         $this->assertTrue($available->firstWhere('role_key', 'dept_member')['scope'] === 'department');
-        $this->assertTrue($available->firstWhere('role_key', 'quality_manager')['scope'] === 'organization');
+        $this->assertNull($available->firstWhere('role_key', 'quality_manager'));
+        $this->assertNotEmpty($available->firstWhere('role_key', 'dept_manager')['capabilities']);
     }
 
     public function test_put_capacity_roles_replaces_previous_policy(): void
@@ -136,12 +136,12 @@ class DepartmentCapacityRoleEndpointTest extends TestCase
         // Replace with an empty manager set and a different member set.
         $this->actingAs($admin, 'sanctum')
             ->putJson("/api/hr/departments/{$dept->id}/capacity-roles", [
-                'member_role_keys' => ['quality_manager'],
+                'member_role_keys' => ['dept_manager'],
                 'manager_role_keys' => [],
             ])->assertOk();
 
         $this->assertDatabaseHas('department_capacity_roles', [
-            'department_id' => $dept->id, 'capacity' => 'member', 'role_key' => 'quality_manager',
+            'department_id' => $dept->id, 'capacity' => 'member', 'role_key' => 'dept_manager',
         ]);
         $this->assertDatabaseMissing('department_capacity_roles', [
             'department_id' => $dept->id, 'capacity' => 'member', 'role_key' => 'dept_member',
@@ -160,14 +160,31 @@ class DepartmentCapacityRoleEndpointTest extends TestCase
             ->assertOk()
             ->assertJsonStructure([
                 'available' => [
-                    '*' => ['role_key', 'label', 'scope'],
+                    '*' => ['role_id', 'role_key', 'name', 'label', 'scope', 'capabilities'],
                 ],
             ]);
 
         $available = collect($response->json('available'))->pluck('role_key');
         $this->assertTrue($available->contains('dept_member'));
         $this->assertTrue($available->contains('dept_manager'));
-        $this->assertTrue($available->contains('quality_manager'));
+        $this->assertFalse($available->contains('quality_manager'));
+    }
+
+    public function test_put_rejects_inactive_or_non_capacity_scope_canonical_roles(): void
+    {
+        $admin = $this->superAdmin();
+        $dept = Department::factory()->create(['organization_id' => $this->organization->id]);
+
+        AuthorizationRole::query()->where('name', 'dept_member')->update(['is_active' => false]);
+
+        $this->actingAs($admin, 'sanctum')
+            ->putJson("/api/hr/departments/{$dept->id}/capacity-roles", [
+                'member_role_keys' => ['dept_member', 'project_member', 'quality_manager'],
+                'manager_role_keys' => [],
+            ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['member_role_keys.0', 'member_role_keys.1', 'member_role_keys.2']);
+
+        $this->assertDatabaseMissing('department_capacity_roles', ['department_id' => $dept->id]);
     }
 
     public function test_put_capacity_roles_denies_user_without_edit_departments(): void
@@ -175,7 +192,7 @@ class DepartmentCapacityRoleEndpointTest extends TestCase
         $plain = User::factory()->create([
             'organization_id' => $this->organization->id,
         ]);
-        $this->grantEngineCapability($plain, Capability::DEPARTMENTS_VIEW);
+        $this->assignCanonicalRole($plain, 'viewer', 'organization', $this->organization->id, [Capability::DEPARTMENTS_VIEW]);
         $dept = Department::factory()->create(['organization_id' => $this->organization->id]);
 
         $this->actingAs($plain, 'sanctum')
@@ -201,7 +218,7 @@ class DepartmentCapacityRoleEndpointTest extends TestCase
         // grant engine capability for departments.edit so the engine itself
         // would otherwise allow the request — proving sharesOrganization is
         // the active gate.
-        $this->grantEngineCapability($actor, Capability::DEPARTMENTS_EDIT);
+        $this->assignCanonicalRole($actor, 'viewer', 'organization', $this->organization->id, [Capability::DEPARTMENTS_EDIT]);
 
         $foreign = $this->otherOrgDepartment;
 
@@ -230,7 +247,7 @@ class DepartmentCapacityRoleEndpointTest extends TestCase
     public function test_cross_org_actor_cannot_get_capacity_roles_on_foreign_department(): void
     {
         $actor = $this->orgAdmin();
-        $this->grantEngineCapability($actor, Capability::DEPARTMENTS_VIEW);
+        $this->assignCanonicalRole($actor, 'viewer', 'organization', $this->organization->id, [Capability::DEPARTMENTS_VIEW]);
 
         $foreign = $this->otherOrgDepartment;
 

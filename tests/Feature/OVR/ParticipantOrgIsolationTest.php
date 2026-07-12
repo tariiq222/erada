@@ -151,7 +151,7 @@ class ParticipantOrgIsolationTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
         Cache::flush();
 
         $invitee = $this->makeUser($this->orgB, $this->deptB);
@@ -176,7 +176,7 @@ class ParticipantOrgIsolationTest extends TestCase
         // engine_capability:ovr.edit middleware must short-circuit before
         // the controller's gates run, returning 403.
         $unauthorized = $this->makeUser($this->orgA, $this->deptA);
-        $unauthorized->assignRole('viewer');
+        $this->grantCanonicalViewer($unauthorized);
         Cache::flush();
 
         $invitee = $this->makeUser($this->orgA, $this->deptA);
@@ -198,7 +198,7 @@ class ParticipantOrgIsolationTest extends TestCase
         $report = $this->makeReport($this->orgA);
 
         $unauthorized = $this->makeUser($this->orgA, $this->deptA);
-        $unauthorized->assignRole('viewer');
+        $this->grantCanonicalViewer($unauthorized);
         Cache::flush();
 
         $invitee = $this->makeUser($this->orgA, $this->deptA);

@@ -96,8 +96,12 @@ class MeetingResolutionRoleBasedAuthzTest extends TestCase
             'organization_id' => $org?->id ?? $this->orgA->id,
             'is_active' => true,
         ]);
-        if ($role !== '') {
-            $user->assignRole($role);
+        if ($role === 'super_admin') {
+            $this->grantCanonicalSuperAdmin($user);
+        } elseif ($role === 'admin') {
+            $this->grantCanonicalAdmin($user);
+        } elseif ($role === 'viewer') {
+            $this->grantCanonicalViewer($user);
         }
 
         return $user;
@@ -162,9 +166,8 @@ class MeetingResolutionRoleBasedAuthzTest extends TestCase
 
     // ---- Scoped-role definitions (dept_manager, dept_member) ----
     // Note: `dept_manager` and `dept_member` are scoped-role DEFINITIONS
-    // in `scoped_role_definitions` (not Spatie roles). Engine grants
-    // for them flow through `authorization_role_assignments` which is
-    // beyond the scope of a release-validation smoke test. We pin the
+    // in the canonical role catalog. Their engine grants flow through
+    // `authorization_role_assignments`. We pin the
     // broader contract via the `viewer` role (engine deny) below.
 
     public function test_user_without_engine_grant_cannot_view_resolutions(): void

@@ -77,8 +77,7 @@ class AttachmentPolicy
      * عرض قائمة المرفقات
      *
      * List-level access: defer to the engine with no target. The engine walks
-     * organization-scoped functional roles only (admin functional role grants
-     * ATTACHMENTS_VIEW via ScopedRoleDefinition permissions mapping).
+     * active canonical organization assignments only.
      */
     public function viewAny(User $user): bool
     {
@@ -134,8 +133,7 @@ class AttachmentPolicy
      */
     public function delete(User $user, Attachment $attachment): bool
     {
-        // صلاحية حذف جميع المرفقات — engine routes this through the
-        // organization-scoped functional role and ScopedRoleDefinition grants.
+        // صلاحية حذف جميع المرفقات تمر عبر التفويض المعياري للمؤسسة.
         if (AccessDecision::can($user, Capability::ATTACHMENTS_DELETE)) {
             return true;
         }
@@ -220,26 +218,29 @@ class AttachmentPolicy
             return false;
         }
 
-        // إذا كان المرفق على مهمة
+        // Project administration is the record-scoped capability to manage
+        // that project's team, not a legacy role-name predicate.
         if ($attachable instanceof Task) {
-            if ($attachable->project_id && $user->isProjectAdmin($attachable->project_id)) {
-                return true;
-            }
+            $project = $attachable->project;
+
+            return $project instanceof Project
+                && AccessDecision::can($user, Capability::PROJECTS_ASSIGN_ROLES, $project);
         }
 
-        // إذا كان المرفق على مشروع
         if ($attachable instanceof Project) {
-            return $user->isProjectAdmin($attachable);
+            return AccessDecision::can($user, Capability::PROJECTS_ASSIGN_ROLES, $attachable);
         }
 
-        // إذا كان المرفق على تعليق - تحقق من العنصر المرتبط بالتعليق
         if ($attachable instanceof Comment) {
             $commentable = $attachable->commentable;
-            if ($commentable instanceof Task && $commentable->project_id) {
-                return $user->isProjectAdmin($commentable->project_id);
+            if ($commentable instanceof Task) {
+                $project = $commentable->project;
+
+                return $project instanceof Project
+                    && AccessDecision::can($user, Capability::PROJECTS_ASSIGN_ROLES, $project);
             }
             if ($commentable instanceof Project) {
-                return $user->isProjectAdmin($commentable);
+                return AccessDecision::can($user, Capability::PROJECTS_ASSIGN_ROLES, $commentable);
             }
         }
 

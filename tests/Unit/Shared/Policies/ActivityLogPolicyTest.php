@@ -31,7 +31,7 @@ class ActivityLogPolicyTest extends TestCase
             'organization_id' => $org->id,
             'department_id' => $dept->id,
         ]);
-        $admin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($admin);
 
         $this->assertTrue((new ActivityLogPolicy)->viewAny($admin));
     }
@@ -39,7 +39,7 @@ class ActivityLogPolicyTest extends TestCase
     public function test_view_super_admin_returns_true_regardless_of_org(): void
     {
         $admin = User::factory()->create();
-        $admin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($admin);
 
         $log = new ActivityLog(['organization_id' => 999, 'action' => 'login']);
         $log->id = 1;

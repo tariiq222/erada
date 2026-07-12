@@ -47,7 +47,7 @@ class ClusterTreeKpiPolicyTest extends TestCase
             'organization_id' => $cluster->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($user, [
+        $this->grantClusterCapabilities($user, [
             Capability::KPIS_VIEW,
             Capability::CLUSTER_TREE_VIEW,
         ]);
@@ -65,7 +65,7 @@ class ClusterTreeKpiPolicyTest extends TestCase
             'organization_id' => $cluster->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($user, Capability::KPIS_VIEW);
+        $this->grantClusterCapabilities($user, Capability::KPIS_VIEW);
 
         $childKpi = Kpi::factory()->create(['organization_id' => $hospital->id]);
 
@@ -80,7 +80,7 @@ class ClusterTreeKpiPolicyTest extends TestCase
             'organization_id' => $cluster->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($user, Capability::CLUSTER_TREE_VIEW);
+        $this->grantClusterCapabilities($user, Capability::CLUSTER_TREE_VIEW);
 
         $childKpi = Kpi::factory()->create(['organization_id' => $hospital->id]);
 
@@ -97,7 +97,7 @@ class ClusterTreeKpiPolicyTest extends TestCase
             'organization_id' => $clusterA->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($userA, [
+        $this->grantClusterCapabilities($userA, [
             Capability::KPIS_VIEW,
             Capability::CLUSTER_TREE_VIEW,
         ]);
@@ -118,7 +118,7 @@ class ClusterTreeKpiPolicyTest extends TestCase
             'organization_id' => $hospital->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($childUser, [
+        $this->grantClusterCapabilities($childUser, [
             Capability::KPIS_VIEW,
             Capability::CLUSTER_TREE_VIEW,
         ]);
@@ -140,7 +140,7 @@ class ClusterTreeKpiPolicyTest extends TestCase
             'organization_id' => $cluster->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($user, [
+        $this->grantClusterCapabilities($user, [
             Capability::KPIS_VIEW,
             Capability::CLUSTER_TREE_VIEW,
             Capability::KPIS_MANAGE,
@@ -161,7 +161,7 @@ class ClusterTreeKpiPolicyTest extends TestCase
             'organization_id' => $cluster->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($user, [
+        $this->grantClusterCapabilities($user, [
             Capability::KPIS_VIEW,
             Capability::CLUSTER_TREE_VIEW,
             Capability::KPIS_MANAGE,
@@ -181,7 +181,7 @@ class ClusterTreeKpiPolicyTest extends TestCase
             'organization_id' => $cluster->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($user, [
+        $this->grantClusterCapabilities($user, [
             Capability::KPIS_VIEW,
             Capability::CLUSTER_TREE_VIEW,
             Capability::KPIS_MANAGE,
@@ -195,7 +195,7 @@ class ClusterTreeKpiPolicyTest extends TestCase
             'organization_id' => $cluster->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($readOnlyUser, [
+        $this->grantClusterCapabilities($readOnlyUser, [
             Capability::KPIS_VIEW,
             Capability::CLUSTER_TREE_VIEW,
         ]);
@@ -210,7 +210,7 @@ class ClusterTreeKpiPolicyTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $super->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($super);
 
         $childKpi = Kpi::factory()->create(['organization_id' => $hospital->id]);
 
@@ -233,7 +233,7 @@ class ClusterTreeKpiPolicyTest extends TestCase
 
         $childKpi = Kpi::factory()->create(['organization_id' => $hospital->id]);
 
-        // null-org user ⇒ cluster_tree rescue fail-closed (userHasScopedRoleGrantingCapability requires orgId).
+        // null-org user => cluster-tree rescue fails closed because an organization scope is required.
         $this->assertFalse($this->policy->view($orphan, $childKpi));
     }
 
@@ -245,7 +245,7 @@ class ClusterTreeKpiPolicyTest extends TestCase
             'organization_id' => $cluster->id,
             'is_active' => true,
         ]);
-        $this->grantEngineCapability($user, [
+        $this->grantClusterCapabilities($user, [
             Capability::KPIS_VIEW,
             Capability::CLUSTER_TREE_VIEW,
         ]);
@@ -265,5 +265,17 @@ class ClusterTreeKpiPolicyTest extends TestCase
         $sibling = Organization::factory()->create(['name' => 'sibling of '.$hospitalName]);
 
         return [$cluster, $hospital, $sibling];
+    }
+
+    private function grantClusterCapabilities(User $user, string|array $capabilities): void
+    {
+        $this->grantEngineCapability(
+            $user,
+            $capabilities,
+            'organization',
+            (int) $user->organization_id,
+            null,
+            ['inherit_to_children' => true],
+        );
     }
 }

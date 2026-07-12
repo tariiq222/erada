@@ -59,14 +59,14 @@ class UploadControllerTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
 
         $this->admin = User::factory()->create([
             'organization_id' => $this->org->id,
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->admin->assignRole('admin');
+        $this->grantCanonicalAdmin($this->admin);
         // isAdmin() checks AccessDecision::can(SETTINGS_MANAGE); grant via the engine so the
         // admin Spatie role resolves to the engine definition carrying that capability.
         $this->grantEngineCapability($this->admin, Capability::SETTINGS_MANAGE);
@@ -76,7 +76,7 @@ class UploadControllerTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->member->assignRole('member');
+        $this->assignCanonicalRole($this->member, 'member');
 
         $this->project = Project::factory()->create([
             'organization_id' => $this->org->id,
@@ -451,7 +451,7 @@ class UploadControllerTest extends TestCase
             'department_id' => $crossOrgDept->id,
             'is_active' => true,
         ]);
-        $outsider->assignRole('member');
+        $this->assignCanonicalRole($outsider, 'member');
 
         $file = UploadedFile::fake()->createWithContent('photo.png', $this->validPngBytes());
 
@@ -484,7 +484,7 @@ class UploadControllerTest extends TestCase
             'department_id' => $crossOrgDept->id,
             'is_active' => true,
         ]);
-        $outsider->assignRole('member');
+        $this->assignCanonicalRole($outsider, 'member');
 
         $file = UploadedFile::fake()->createWithContent('task.png', $this->validPngBytes());
 

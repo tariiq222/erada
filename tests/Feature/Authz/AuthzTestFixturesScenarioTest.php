@@ -4,8 +4,8 @@ namespace Tests\Feature\Authz;
 
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use Database\Seeders\DatabaseSeeder;
@@ -71,10 +71,10 @@ class AuthzTestFixturesScenarioTest extends TestCase
         $this->makeScenario()->run();
 
         $flat = User::where('email', 'flat.admin@authz.demo')->firstOrFail();
-        $this->assertTrue($flat->hasRole('admin'));
+        $this->assertContains('admin', $flat->canonicalRoleNames());
 
         $viewer = User::where('email', 'flat.viewer@authz.demo')->firstOrFail();
-        $this->assertTrue($viewer->hasRole('viewer'));
+        $this->assertContains('viewer', $viewer->canonicalRoleNames());
     }
 
     public function test_fixture_two_deep_attaches_a_dept_scoped_manager(): void
@@ -84,13 +84,14 @@ class AuthzTestFixturesScenarioTest extends TestCase
         $l3 = Department::where('code', 'AUTHZ2-DEEP-L3')->firstOrFail();
         $mgr = User::where('email', 'deep.l3.manager@authz.demo')->firstOrFail();
 
-        $scoped = ScopedRole::where('user_id', $mgr->id)
-            ->where('scope_type', ScopedRole::SCOPE_DEPARTMENT)
+        $scoped = AuthorizationRoleAssignment::query()
+            ->where('user_id', $mgr->id)
+            ->where('scope_type', AuthorizationRoleAssignment::SCOPE_DEPARTMENT)
             ->where('scope_id', $l3->id)
-            ->where('role', 'dept_manager')
+            ->whereHas('role', fn ($query) => $query->where('name', 'dept_manager'))
             ->first();
 
-        $this->assertNotNull($scoped, 'L3 manager must hold a dept-scoped dept_manager row');
+        $this->assertNotNull($scoped, 'L3 manager must hold a canonical department-scoped dept_manager assignment');
         $this->assertSame('manual', $scoped->source);
     }
 
@@ -176,7 +177,7 @@ class AuthzTestFixturesScenarioTest extends TestCase
         $this->makeScenario()->run();
 
         $super = User::where('email', 'super.authz@authz.demo')->firstOrFail();
-        $this->assertTrue($super->hasRole('super_admin'));
+        $this->assertContains('super_admin', $super->canonicalRoleNames());
     }
 
     /**

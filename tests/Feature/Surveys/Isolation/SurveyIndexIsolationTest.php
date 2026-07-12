@@ -77,6 +77,12 @@ class SurveyIndexIsolationTest extends TestCase
             $surveyOrg = Survey::find($row['id'])?->organization_id;
             $this->assertSame($orgA->id, $surveyOrg);
             $this->assertStringNotContainsString('EXCLUSIVE', $row['title']);
+            $this->assertTrue($row['abilities']['view']);
+            $this->assertFalse(
+                $row['abilities']['edit'],
+                'A survey visible through the list grant must not gain edit outside the actor capability scope.'
+            );
+            $this->assertFalse($row['abilities']['delete']);
         }
         // Sanity check: the org B rows exist in the DB so the floor is doing
         // the isolation (not a missing-data accident).
@@ -94,7 +100,13 @@ class SurveyIndexIsolationTest extends TestCase
             'organization_id' => $orgA->id,
             'department_id' => $deptA->id,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantEngineCapability(
+            $superAdmin,
+            [],
+            'all',
+            roleKey: 'super_admin',
+            definitionFlags: ['is_admin_role' => true],
+        );
 
         $this->makeSurveyIn($orgA, 'A-1');
         $this->makeSurveyIn($orgA, 'A-2');

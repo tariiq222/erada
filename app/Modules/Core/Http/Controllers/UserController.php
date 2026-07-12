@@ -3,22 +3,31 @@
 namespace App\Modules\Core\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Data\AssignmentScope;
+use App\Modules\Core\Authorization\Data\AssignmentWrite;
+use App\Modules\Core\Authorization\Data\RoleAssignmentWrite;
+use App\Modules\Core\Authorization\Exceptions\AuthorizationAssignmentDenied;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
+use App\Modules\Core\Authorization\Services\AuthorizationAssignmentService;
 use App\Modules\Core\Http\Requests\DeleteUserRequest;
 use App\Modules\Core\Http\Requests\StoreUserRequest;
 use App\Modules\Core\Http\Requests\UpdateUserRequest;
 use App\Modules\Core\Http\Requests\ViewUserRequest;
 use App\Modules\Core\Http\Resources\UserDirectoryResource;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Scopes\UserOrganizationScope;
-use App\Modules\Core\Support\UserRoleAssignmentGuard;
 use App\Modules\HR\Models\Department;
+use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -80,7 +89,7 @@ class UserController extends Controller
             $this->authorize('viewAny', User::class);
 
             $user = $request->user();
-            $query = User::with(['department', 'creator:id,name', 'roles:id,name', 'activeScopedRoles']);
+            $query = User::with(['department', 'creator:id,name', 'activeCanonicalRoleAssignments.role:id,name,is_active']);
 
             $this->applyUserVisibility($query, $user);
 
@@ -105,11 +114,10 @@ class UserController extends Controller
 
             $users = $query->orderBy('name')->paginate(min((int) $request->get('per_page', 15), 100));
 
-            // تحويل الـ roles إلى مفاتيح الأدوار الفعلية: Spatie compat + أدوار المؤسسة السياقية.
+            // تحويل الأدوار إلى مفاتيح التعيينات القانونية والسياقية الفعلية.
             $users->getCollection()->transform(function ($user) {
                 $user->setAttribute('roles', $this->roleKeysForUser($user));
-                $user->unsetRelation('roles');
-                $user->unsetRelation('activeScopedRoles');
+                $user->unsetRelation('activeCanonicalRoleAssignments');
 
                 return $user;
             });
@@ -138,7 +146,23 @@ class UserController extends Controller
                 'active' => (clone $baseQuery)->where('is_active', true)->count(),
                 'inactive' => (clone $baseQuery)->where('is_active', false)->count(),
                 'admins' => (clone $baseQuery)
-                    ->whereHas('roles', fn ($q) => $q->whereIn('name', ['admin', 'super_admin']))
+                    ->whereHas('canonicalRoleAssignments', function ($assignment) {
+                        $assignment
+                            ->where(function ($query) {
+                                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+                            })
+                            ->where(function ($scope) {
+                                $scope->where('scope_type', AuthorizationRoleAssignment::SCOPE_ALL)
+                                    ->orWhere(function ($organization) {
+                                        $organization
+                                            ->where('scope_type', AuthorizationRoleAssignment::SCOPE_ORGANIZATION)
+                                            ->whereColumn('authorization_role_assignments.scope_id', 'users.organization_id');
+                                    });
+                            })
+                            ->whereHas('role', fn ($role) => $role
+                                ->where('is_active', true)
+                                ->where('is_admin_role', true));
+                    })
                     ->count(),
             ]);
         } catch (\Throwable $e) {
@@ -156,12 +180,12 @@ class UserController extends Controller
 
             $validated['password'] = Hash::make($validated['password']);
             $validated['created_by'] = $request->user()->id;
-            $roles = $validated['roles'] ?? [];
-            unset($validated['roles']);
+            $assignments = $validated['assignments'] ?? null;
+            unset($validated['assignments']);
 
-            // فحص تصعيد الأدوار — canAssignRole عبر StoreUserRequest::withValidator
-            // + UserRoleAssignmentGuard (defense-in-depth, Phase 3). الـ Guard وحده
-            // يرفض super_admin مع 403 — لا حذف صامت هنا (Phase 3 v3 rule).
+            // Canonical assignment authorization stays inside the same transaction
+            // as user creation. The assignment service enforces actor, target,
+            // role, scope, and privilege-escalation constraints before commit.
 
             // قفل المؤسسة
             $currentUser = $request->user();
@@ -177,27 +201,23 @@ class UserController extends Controller
             }
 
             // السماح بتعيين حالة النشاط فقط للمسؤولين
-            if (array_key_exists('is_active', $validated) && ! $request->user()->hasAnyRole(['super_admin', 'admin'])) {
+            if (array_key_exists('is_active', $validated) && ! $this->canManageUserLifecycle($request->user())) {
                 unset($validated['is_active']);
             }
 
-            $user = User::create($validated);
+            $user = DB::transaction(function () use ($assignments, $currentUser, $validated): User {
+                $user = User::create($validated);
 
-            if (! empty($roles)) {
-                // Phase 3: UserRoleAssignmentGuard is the single defense-in-depth
-                // layer for cross-org + escalation checks. It validates:
-                //   - super_admin in roles ⇒ only super_admin actor
-                //   - cross-org target ⇒ 403
-                //   - null-org actor/target ⇒ 403 (non-super_admin)
-                //   - self-escalation ⇒ 403 for strictly-higher levels
-                //   - AssignableRoleKey + RoleHierarchy matrix
-                app(UserRoleAssignmentGuard::class)->assertCanAssign($currentUser, $user, $roles);
+                if ($assignments !== null) {
+                    app(AuthorizationAssignmentService::class)->syncManual(
+                        $currentUser,
+                        $user,
+                        $this->canonicalAssignmentWrites($assignments),
+                    );
+                }
 
-                // Phase 4 (ADR-UNIFIED-ROLE-ACCESS): route role assignment through
-                // the single helper so the engine recognizes the roles via their
-                // org-scope scoped assignment (Spatie kept only for the compat set).
-                RoleController::applyRoleAssignment($user, $roles);
-            }
+                return $user;
+            });
 
             $user->load(['department']);
             $userData = $user->toArray();
@@ -207,6 +227,8 @@ class UserController extends Controller
                 'message' => 'تم إنشاء المستخدم بنجاح',
                 'user' => $userData,
             ], 201);
+        } catch (AuthorizationAssignmentDenied $e) {
+            return response()->json(['message' => $e->getMessage()], 403);
         } catch (\Throwable $e) {
             return $this->handleException($e, 'store');
         }
@@ -245,7 +267,7 @@ class UserController extends Controller
             // تحويل الـ roles و permissions إلى مصفوفة أسماء
             $userData = $user->toArray();
             $userData['roles'] = $this->roleKeysForUser($user);
-            $userData['permissions'] = $user->getAllPermissions()->pluck('name')->toArray();
+            $userData['permissions'] = $user->canonicalCapabilityNames();
 
             return response()->json($userData);
         } catch (\Throwable $e) {
@@ -298,15 +320,8 @@ class UserController extends Controller
                 unset($validated['password']);
             }
 
-            $roles = $validated['roles'] ?? null;
-            unset($validated['roles']);
-
-            // فحص تصعيد الأدوار — canAssignRole عبر UpdateUserRequest::withValidator
-
-            // منع تصعيد الصلاحيات: لا يمكن تعيين super_admin عبر API
-            if ($roles !== null) {
-                $roles = array_diff($roles, ['super_admin']);
-            }
+            $assignments = $validated['assignments'] ?? null;
+            unset($validated['assignments']);
 
             // منع نقل المستخدم لمؤسسة أخرى
             $currentUser = $request->user();
@@ -319,7 +334,7 @@ class UserController extends Controller
             // M-09: a non-admin cannot move their own department; and any
             // submitted department_id must belong to the target user's org.
             if (array_key_exists('department_id', $validated)) {
-                $isAdmin = $currentUser->hasAnyRole(['super_admin', 'admin']);
+                $isAdmin = $this->canManageUserLifecycle($currentUser);
                 if (! $isAdmin && $currentUser->id === $user->id) {
                     unset($validated['department_id']);
                 } elseif (! $currentUser->isSuperAdmin() && $validated['department_id'] !== null) {
@@ -331,23 +346,22 @@ class UserController extends Controller
             }
 
             // السماح بتعديل حالة النشاط فقط للمسؤولين
-            if (array_key_exists('is_active', $validated) && ! $request->user()->hasAnyRole(['super_admin', 'admin'])) {
+            if (array_key_exists('is_active', $validated) && ! $this->canManageUserLifecycle($request->user())) {
                 unset($validated['is_active']);
             }
 
             $validated['updated_by'] = $request->user()->id;
-            $user->update($validated);
+            DB::transaction(function () use ($assignments, $currentUser, $user, $validated): void {
+                $user->update($validated);
 
-            if ($roles !== null) {
-                // Phase 3: UserRoleAssignmentGuard mirrors the same checks used in
-                // store(). The role-escalation guard inside UpdateUserRequest
-                // (withValidator) already returned a 422 for non-engine cases; the
-                // Guard here is the second layer that also catches the org-isolation
-                // and self-escalation paths the FormRequest can't see.
-                app(UserRoleAssignmentGuard::class)->assertCanAssign($currentUser, $user, $roles);
-
-                RoleController::applyRoleAssignment($user, $roles);
-            }
+                if ($assignments !== null) {
+                    app(AuthorizationAssignmentService::class)->syncManual(
+                        $currentUser,
+                        $user,
+                        $this->canonicalAssignmentWrites($assignments),
+                    );
+                }
+            });
 
             $user->load(['department']);
             $userData = $user->toArray();
@@ -357,9 +371,44 @@ class UserController extends Controller
                 'message' => 'تم تحديث المستخدم بنجاح',
                 'user' => $userData,
             ]);
+        } catch (AuthorizationAssignmentDenied $e) {
+            return response()->json(['message' => $e->getMessage()], 403);
         } catch (\Throwable $e) {
             return $this->handleException($e, 'update');
         }
+    }
+
+    /**
+     * @param  list<array{role_id: int, scope_type: string, scope_id?: int|null, inherit_to_children?: bool, expires_at?: string|null}>  $assignments
+     * @return list<RoleAssignmentWrite>
+     */
+    private function canonicalAssignmentWrites(array $assignments): array
+    {
+        $roles = AuthorizationRole::query()
+            ->whereKey(collect($assignments)->pluck('role_id')->all())
+            ->get()
+            ->keyBy('id');
+
+        return collect($assignments)->map(function (array $payload) use ($roles): RoleAssignmentWrite {
+            $role = $roles->get((int) $payload['role_id']);
+            if ($role === null) {
+                throw ValidationException::withMessages([
+                    'assignments' => ['الدور المطلوب غير موجود.'],
+                ]);
+            }
+
+            return new RoleAssignmentWrite(
+                $role,
+                new AssignmentWrite(
+                    new AssignmentScope(
+                        $payload['scope_type'],
+                        $payload['scope_id'] ?? null,
+                        (bool) ($payload['inherit_to_children'] ?? false),
+                    ),
+                    isset($payload['expires_at']) ? CarbonImmutable::parse($payload['expires_at']) : null,
+                ),
+            );
+        })->values()->all();
     }
 
     /**
@@ -388,23 +437,13 @@ class UserController extends Controller
      */
     private function roleKeysForUser(User $user): array
     {
-        $spatieRoles = $user->relationLoaded('roles')
-            ? $user->roles->pluck('name')->all()
-            : $user->getRoleNames()->all();
+        return $user->canonicalRoleNames();
+    }
 
-        $scopedRoles = $user->relationLoaded('activeScopedRoles')
-            ? $user->activeScopedRoles
-                ->where('scope_type', ScopedRole::SCOPE_ORGANIZATION)
-                ->when($user->organization_id !== null, fn ($roles) => $roles->where('scope_id', $user->organization_id))
-                ->pluck('role')
-                ->all()
-            : $user->activeScopedRoles()
-                ->where('scope_type', ScopedRole::SCOPE_ORGANIZATION)
-                ->when($user->organization_id !== null, fn ($query) => $query->where('scope_id', $user->organization_id))
-                ->pluck('role')
-                ->all();
-
-        return array_values(array_unique(array_merge($spatieRoles, $scopedRoles)));
+    private function canManageUserLifecycle(User $user): bool
+    {
+        return $user->isSuperAdmin()
+            || AccessDecision::canonicalTrace($user, Capability::USERS_MANAGE_ACCESS)['granted'];
     }
 
     /**

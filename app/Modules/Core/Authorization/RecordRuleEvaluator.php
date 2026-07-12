@@ -225,6 +225,10 @@ class RecordRuleEvaluator
     {
         $roleIds = AuthorizationRoleAssignment::query()
             ->where('user_id', $user->id)
+            ->where(function (Builder $query) {
+                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->whereHas('role', fn (Builder $query) => $query->where('is_active', true))
             ->pluck('authorization_role_id')
             ->map(fn ($id) => (int) $id)
             ->all();

@@ -29,7 +29,7 @@ class UserActivityLogScopeTest extends TestCase
             'organization_id' => $org->id,
             'department_id' => $dept->id,
         ]);
-        $admin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($admin);
 
         ActivityLog::query()->create([
             'action' => ActivityLog::ACTION_LOGIN,

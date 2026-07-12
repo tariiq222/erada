@@ -122,7 +122,7 @@ class ClusterTreeRiskActionPolicyViewTest extends TestCase
         [, $hospital] = $this->makeClusterTree();
 
         $superAdmin = User::factory()->create(['organization_id' => null, 'is_active' => true]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $risk = Risk::factory()->forOrganization($hospital)->create();
         $childAction = $this->makeActionInExistingRisk($risk);

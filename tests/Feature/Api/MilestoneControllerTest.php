@@ -3,7 +3,6 @@
 namespace Tests\Feature\Api;
 
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Milestone;
@@ -38,7 +37,7 @@ class MilestoneControllerTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('project_manager');
+        $this->assignCanonicalRole($this->user, 'project_manager');
 
         // إنشاء مشروع بتواريخ محددة للاختبارات
         $this->project = Project::factory()->create([
@@ -48,7 +47,7 @@ class MilestoneControllerTest extends TestCase
             'end_date' => now()->addMonths(6),
         ]);
         // المدير يُمثَّل كدور سياقي (scoped role) لا كعمود manager_id
-        $this->user->assignProjectRole($this->project, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($this->user, 'project_manager', 'project', $this->project->id);
     }
 
     /**

@@ -507,17 +507,21 @@ vi.mock('@shared/ui/Toast', () => ({
 
 // Mock Auth — Phase 9.3: production code reads useCan('users.*') from
 // `user.access`; populate the canonical dotted form to mirror /api/auth/me.
-// The access map is reactive to mockHasPermission so individual tests can
-// flip a permission off by setting mockHasPermission.mockReturnValue(false).
-const mockHasPermission = vi.fn().mockReturnValue(true);
+// The canonical decision mock is reactive so individual tests can revoke all
+// user-management capabilities for the restricted-state assertions.
+const mockCan = vi.fn().mockReturnValue(true);
 vi.mock('@shared/contexts/AuthContext', () => ({
   useAuth: () => ({
-    canAccess: () => true,
-    hasPermission: mockHasPermission,
+    can: mockCan,
     user: {
       id: 1,
-      access: mockHasPermission()
-        ? { users: { view: true, create: true, edit: true, delete: true } }
+      access: mockCan('users.view')
+        ? {
+            'users.view': true,
+            'users.create': true,
+            'users.edit': true,
+            'users.delete': true,
+          }
         : {},
     },
   }),
@@ -628,7 +632,7 @@ import { UsersList } from '@pages/users/UsersList';
 describe('UsersList Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockHasPermission.mockReturnValue(true);
+    mockCan.mockReturnValue(true);
   });
 
   it('renders page title', async () => {
@@ -653,7 +657,7 @@ describe('UsersList Page', () => {
   });
 
   it('hides add user button without permission', async () => {
-    mockHasPermission.mockReturnValue(false);
+    mockCan.mockReturnValue(false);
     render(<UsersList />);
     await waitFor(() => {
       expect(screen.queryByText('إضافة مستخدم')).not.toBeInTheDocument();
@@ -719,7 +723,7 @@ describe('UsersList Page', () => {
 describe('UsersList Delete', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockHasPermission.mockReturnValue(true);
+    mockCan.mockReturnValue(true);
   });
 
   it('opens delete modal', async () => {
@@ -805,7 +809,7 @@ describe('UsersList Delete', () => {
 describe('UsersList Add User Link', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockHasPermission.mockReturnValue(true);
+    mockCan.mockReturnValue(true);
   });
 
   it('renders add user link', async () => {
@@ -821,7 +825,7 @@ describe('UsersList Add User Link', () => {
   });
 
   it('hides add user link without permission', async () => {
-    mockHasPermission.mockReturnValue(false);
+    mockCan.mockReturnValue(false);
     render(<UsersList />);
 
     await waitFor(() => {
@@ -835,7 +839,7 @@ describe('UsersList Add User Link', () => {
 describe('UsersList API Errors', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockHasPermission.mockReturnValue(true);
+    mockCan.mockReturnValue(true);
   });
 
   it('shows error toast on fetch failure', async () => {
@@ -877,7 +881,7 @@ describe('UsersList API Errors', () => {
 describe('UsersList Pagination', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockHasPermission.mockReturnValue(true);
+    mockCan.mockReturnValue(true);
   });
 
   it('changes page on pagination click', async () => {

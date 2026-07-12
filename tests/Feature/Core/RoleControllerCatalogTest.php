@@ -26,7 +26,7 @@ class RoleControllerCatalogTest extends TestCase
             'department_id' => $department->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
     }
 
     /**

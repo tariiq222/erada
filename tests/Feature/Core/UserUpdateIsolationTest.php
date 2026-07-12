@@ -47,7 +47,7 @@ class UserUpdateIsolationTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $user->assignRole('admin');
+        $this->grantCanonicalAdmin($user);
 
         return $user;
     }
@@ -60,7 +60,7 @@ class UserUpdateIsolationTest extends TestCase
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $target->assignRole('viewer');
+        $this->grantCanonicalViewer($target);
 
         $this->actingAs($admin, 'sanctum')
             ->putJson("/api/users/{$target->id}", [
@@ -82,7 +82,7 @@ class UserUpdateIsolationTest extends TestCase
             'department_id' => $this->deptB->id,
             'is_active' => true,
         ]);
-        $target->assignRole('viewer');
+        $this->grantCanonicalViewer($target);
 
         $this->actingAs($admin, 'sanctum')
             ->putJson("/api/users/{$target->id}", [
@@ -99,7 +99,7 @@ class UserUpdateIsolationTest extends TestCase
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $target->assignRole('viewer');
+        $this->grantCanonicalViewer($target);
 
         $this->actingAs($admin, 'sanctum')
             ->putJson("/api/users/{$target->id}", [
@@ -122,7 +122,7 @@ class UserUpdateIsolationTest extends TestCase
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $target->assignRole('viewer');
+        $this->grantCanonicalViewer($target);
 
         $this->actingAs($admin, 'sanctum')
             ->putJson("/api/users/{$target->id}", [
@@ -168,14 +168,14 @@ class UserUpdateIsolationTest extends TestCase
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $target = User::factory()->create([
             'organization_id' => $this->orgB->id,
             'department_id' => $this->deptB->id,
             'is_active' => true,
         ]);
-        $target->assignRole('viewer');
+        $this->grantCanonicalViewer($target);
 
         $this->actingAs($superAdmin, 'sanctum')
             ->putJson("/api/users/{$target->id}", [

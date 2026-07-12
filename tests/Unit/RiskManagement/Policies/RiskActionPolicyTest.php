@@ -10,8 +10,7 @@ use App\Modules\RiskManagement\Models\RiskAction;
 use App\Modules\RiskManagement\Policies\RiskActionPolicy;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
+use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
 /**
@@ -23,13 +22,13 @@ use Tests\TestCase;
  */
 class RiskActionPolicyTest extends TestCase
 {
-    use RefreshDatabase;
+    use GrantsEngineCapability, RefreshDatabase;
 
     private Organization $orgA;
 
     private Organization $orgB;
 
-    /** User with a contextual 'risk_manager' ScopedRole on the parent Risk. */
+    /** User with a canonical contextual risk-manager grant on the parent Risk. */
     private User $userA;
 
     /** User in orgB — cross-org. */
@@ -56,7 +55,7 @@ class RiskActionPolicyTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
 
         $this->riskInOrgA = Risk::factory()->forOrganization($this->orgA)->create();
 
@@ -75,16 +74,15 @@ class RiskActionPolicyTest extends TestCase
             'is_active' => true,
         ]);
 
-        $this->seedRiskScopeDefinitions();
-
         // Grant userA a contextual 'risk_manager' role on the parent Risk.
         // The engine walks RiskAction → Risk → org, so a role on the Risk
         // grants access to its child RiskActions too.
-        $this->userA->assignScopedRole(
-            role: 'risk_manager',
-            scopeType: 'risk',
-            scopeId: $this->riskInOrgA->id,
-            grantedBy: $this->superAdmin->id,
+        $this->grantEngineCapability(
+            $this->userA,
+            [Capability::RISKS_VIEW, Capability::RISKS_EDIT],
+            'risk',
+            $this->riskInOrgA->id,
+            'risk_manager',
         );
 
         $this->policy = new RiskActionPolicy;
@@ -97,7 +95,7 @@ class RiskActionPolicyTest extends TestCase
         $this->assertTrue($this->policy->view($this->superAdmin, $this->actionInOrgA));
     }
 
-    // ========== contextual ScopedRole on parent Risk grants access ==========
+    // ========== contextual canonical assignment on parent Risk grants access ==========
 
     public function test_user_with_risk_manager_role_on_parent_risk_can_view_action(): void
     {
@@ -136,70 +134,5 @@ class RiskActionPolicyTest extends TestCase
         ]);
 
         $this->assertFalse($this->policy->view($userNoRole, $this->actionInOrgA));
-    }
-
-    // ========== helpers ==========
-
-    /**
-     * Seed a 'risk' ScopeType + 'risk_manager' ScopedRoleDefinition for the engine.
-     * Idempotent — safe to call in setUp.
-     */
-    private function seedRiskScopeDefinitions(): void
-    {
-        $now = now();
-
-        $scopeTypeId = DB::table('scope_types')
-            ->where('key', 'risk')
-            ->value('id');
-
-        if ($scopeTypeId === null) {
-            $scopeTypeId = DB::table('scope_types')->insertGetId([
-                'key' => 'risk',
-                'label_ar' => 'الخطر',
-                'label_en' => 'Risk',
-                'model_class' => Risk::class,
-                'icon' => null,
-                'color' => 'danger',
-                'supports_hierarchy' => true,
-                'supports_expiry' => false,
-                'is_active' => true,
-                'sort_order' => 30,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
-        }
-
-        $exists = DB::table('scoped_role_definitions')
-            ->where('scope_type_id', $scopeTypeId)
-            ->where('role_key', 'risk_manager')
-            ->exists();
-
-        if (! $exists) {
-            DB::table('scoped_role_definitions')->insert([
-                'name' => 'risk.risk_manager',
-                'display_name' => 'Risk Manager',
-                'scope_type' => 'risk',
-                'scope_type_id' => $scopeTypeId,
-                'role_key' => 'risk_manager',
-                'label_ar' => 'مدير الخطر',
-                'label_en' => 'Risk Manager',
-                'description' => null,
-                'color' => 'danger',
-                'permissions' => json_encode([
-                    Capability::RISKS_VIEW,
-                    Capability::RISKS_EDIT,
-                    Capability::RISKS_DELETE,
-                    Capability::RISKS_REASSESS,
-                    Capability::RISKS_CHANGE_STATUS,
-                ]),
-                'is_admin_role' => false,
-                'is_active' => true,
-                'sort_order' => 10,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
-        }
-
-        Cache::flush();
     }
 }

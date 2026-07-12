@@ -9,19 +9,8 @@ import React, {
 } from "react";
 import { authApi } from '@shared/api/auth';
 import { api } from '@shared/api/client';
-import {
-	canAccessCompat,
-	hasPermissionCompat,
-} from '@shared/api/access-bridge';
+import { canUser } from '@shared/api/access';
 import type { User } from "@shared/types";
-
-// إعدادات الوصول للموديولات
-export interface AccessConfig {
-	permission?: string;
-	permissions?: string[];
-	allPermissions?: string[];
-	roles?: string[];
-}
 
 // نتيجة تسجيل الدخول
 export interface LoginResult {
@@ -37,13 +26,7 @@ interface AuthContextType {
 	login: (email: string, password: string) => Promise<LoginResult>;
 	logout: () => Promise<void>;
 	refreshUser: () => Promise<void>;
-	hasRole: (role: string) => boolean;
-	hasAnyRole: (roles: string[]) => boolean;
-	hasPermission: (permission: string) => boolean;
-	hasAnyPermission: (permissions: string[]) => boolean;
-	isSuperAdmin: () => boolean;
-	isAdmin: () => boolean;
-	canAccess: (config: AccessConfig) => boolean;
+	can: (capability: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -76,7 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 	const isLoadingRef = useRef(false);
 	const hasAttemptedLoadRef = useRef(isInitialPublicPath);
 
-	const loadUser = useCallback(async () => {
+	const loadUser = useCallback(async (force = false) => {
 		const currentPath = window.location.pathname;
 
 		// منع الاستدعاءات المتزامنة
@@ -91,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		}
 
 		// إذا حاولنا التحميل مسبقاً (سواء نجح أو فشل)، لا نعيد المحاولة
-		if (hasAttemptedLoadRef.current) {
+		if (!force && hasAttemptedLoadRef.current) {
 			return;
 		}
 
@@ -145,62 +128,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 	}, []);
 
 	const refreshUser = useCallback(async () => {
-		await loadUser();
+		await loadUser(true);
 	}, [loadUser]);
 
-	// التحقق من دور واحد
-	const hasRole = useCallback((role: string) => {
-		if (user?.roles.includes("super_admin")) return true;
-		return user?.roles.includes(role) || false;
-	}, [user]);
-
-	// التحقق من أي دور من قائمة أدوار
-	const hasAnyRole = useCallback((roles: string[]) => {
-		if (user?.roles.includes("super_admin")) return true;
-		return roles.some((role) => user?.roles.includes(role));
-	}, [user]);
-
-	// التحقق من صلاحية واحدة
-	// Two-tier ability contract:
-	//  - hasPermission / hasAnyPermission / canAccess read the GENERIC
-	//    capability list at auth/me (user.permissions) via the central
-	//    access-bridge. The bridge prefers `user.access` and falls back to
-	//    `user.permissions[]` for stale sessions (Phase 9 cleanup freeze
-	//    has not completed yet). Use these for menu items, top-level
-	//    buttons, and any "do I have this permission at all" check.
-	//  - For per-record decisions ("can I edit THIS project / THIS task"),
-	//    always read element.abilities.* straight from the resource response.
-	//    Do NOT infer record-level access from the generic permission list,
-	//    because AccessDecision::can against a record consults the scope
-	//    chain, inline element roles, and the lifecycle-gated owner floor —
-	//    none of which are reflected in user.permissions.
-	const hasPermission = useCallback(
-		(permission: string) => hasPermissionCompat(user, permission),
-		[user],
-	);
-
-	// التحقق من أي صلاحية من قائمة صلاحيات
-	const hasAnyPermission = useCallback(
-		(permissions: string[]) =>
-			permissions.some((permission) => hasPermissionCompat(user, permission)),
-		[user],
-	);
-
-	// هل المستخدم Super Admin
-	const isSuperAdmin = useCallback(() => {
-		return user?.roles.includes("super_admin") || false;
-	}, [user]);
-
-	// تير الإدارة — مقاد بصلاحية manage_organization لا باسم الدور (super_admin يتجاوز).
-	// الـ bridge يضمن الرجوع إلى permissions[] كـ fallback أثناء نافذة التوافق.
-	const isAdmin = useCallback(
-		() => hasPermissionCompat(user, "manage_organization"),
-		[user],
-	);
-
-	// دالة موحدة للتحقق من إمكانية الوصول
-	const canAccess = useCallback(
-		(config: AccessConfig): boolean => canAccessCompat(user, config),
+	const can = useCallback(
+		(capability: string): boolean => canUser(user, capability),
 		[user],
 	);
 
@@ -212,13 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			login,
 			logout,
 			refreshUser,
-			hasRole,
-			hasAnyRole,
-			hasPermission,
-			hasAnyPermission,
-			isSuperAdmin,
-			isAdmin,
-			canAccess,
+			can,
 		}),
 		[
 			user,
@@ -226,13 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			login,
 			logout,
 			refreshUser,
-			hasRole,
-			hasAnyRole,
-			hasPermission,
-			hasAnyPermission,
-			isSuperAdmin,
-			isAdmin,
-			canAccess,
+			can,
 		],
 	);
 

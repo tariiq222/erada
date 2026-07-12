@@ -47,7 +47,7 @@ class UserEmployeeScopeTest extends TestCase
             'organization_id' => $orgA->id,
             'department_id' => $deptA->id,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         User::factory()->count(2)->create(['organization_id' => $orgA->id]);
         User::factory()->count(3)->create(['organization_id' => $orgB->id]);
@@ -105,7 +105,7 @@ class UserEmployeeScopeTest extends TestCase
             'organization_id' => $orgA->id,
             'department_id' => $deptA->id,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $userA = User::factory()->create(['organization_id' => $orgA->id]);
         $userB = User::factory()->create(['organization_id' => $orgB->id]);
@@ -191,7 +191,7 @@ class UserEmployeeScopeTest extends TestCase
             'organization_id' => $orgA->id,
             'department_id' => $deptA->id,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $userA = User::factory()->create(['organization_id' => $orgA->id]);
         $userB = User::factory()->create(['organization_id' => $orgB->id]);

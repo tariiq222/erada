@@ -41,13 +41,6 @@ Schedule::command('recommendations:check-overdue')
     ->withoutOverlapping()
     ->onOneServer();
 
-// Authorization: nightly reconcile of auto scoped roles so drift from bulk HR
-// edits (department moves, manager swaps) self-heals without manual intervention.
-Schedule::command('roles:reconcile')
-    ->dailyAt('02:00')
-    ->withoutOverlapping()
-    ->onOneServer();
-
 // Prune failed queue jobs older than 72 hours, daily at 03:00.
 Schedule::command('queue:prune-failed --hours=72')
     ->dailyAt('03:00')

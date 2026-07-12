@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Surveys;
 
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\Surveys\Models\Survey;
@@ -33,8 +34,14 @@ class SurveyNullOrgDenialTest extends TestCase
             'is_active' => true,
         ]);
 
-        if ($role) {
-            $user->assignRole($role);
+        if ($role === 'super_admin') {
+            $this->grantCanonicalSuperAdmin($user);
+        } elseif ($role === 'admin') {
+            $this->grantCanonicalAdmin(
+                $user,
+                $org === null ? AuthorizationRoleAssignment::SCOPE_ALL : AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+                $org?->id,
+            );
         }
 
         return $user;

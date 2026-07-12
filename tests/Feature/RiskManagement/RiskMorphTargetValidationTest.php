@@ -8,7 +8,6 @@ use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
 use App\Modules\RiskManagement\Models\Risk;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 /**
@@ -49,7 +48,6 @@ class RiskMorphTargetValidationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
         $this->orgA = Organization::factory()->create();
         $this->orgB = Organization::factory()->create();
@@ -66,7 +64,7 @@ class RiskMorphTargetValidationTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->orgAAdmin->assignRole('admin');
+        $this->grantCanonicalAdmin($this->orgAAdmin);
 
         $this->orgAProject = Project::factory()->create([
             'organization_id' => $this->orgA->id,

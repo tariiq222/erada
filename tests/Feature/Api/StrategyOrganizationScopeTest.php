@@ -55,7 +55,7 @@ class StrategyOrganizationScopeTest extends TestCase
         ]);
 
         if ($role) {
-            $user->assignRole($role);
+            $this->assignCanonicalRole($user, $role);
         }
 
         return $user;
@@ -68,7 +68,7 @@ class StrategyOrganizationScopeTest extends TestCase
     private function makeStrategyActor(?Organization $org): User
     {
         $user = $this->makeUser($org, 'admin');
-        $user->givePermissionTo('delete_strategy');
+        $this->grantEngineCapability($user, Capability::STRATEGY_DELETE);
 
         return $user;
     }

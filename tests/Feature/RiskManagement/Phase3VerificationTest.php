@@ -72,11 +72,8 @@ class Phase3VerificationTest extends TestCase
         // Engine grants (Wave 3 task 8): replaces legacy Spatie view_risks +
         // view_risk_reports. RISKS_VIEW covers the list/dashboard/show paths;
         // RISKS_VIEW_REPORTS covers the matrix + CSV/PDF exports.
-        // Both capabilities MUST be granted in a single call: assignScopedRole has
-        // single-role-per-scope semantics, so two separate same-scope calls would
-        // silently revoke the first grant (Phase 3, ADR-UNIFIED-ROLE-ACCESS: the
-        // legacy can_* flag path that used to mask this by broadening view grants
-        // was removed — permissions[] is now the only grant source).
+        // Grant both capabilities on one canonical role assignment so the fixture
+        // mirrors the production permission graph at organization scope.
         $this->grantEngineCapability($this->user, [
             Capability::RISKS_VIEW,
             Capability::RISKS_VIEW_REPORTS,

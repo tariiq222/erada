@@ -2,6 +2,8 @@
 
 namespace App\Modules\Core\Providers;
 
+use App\Modules\Core\Authorization\Contracts\AuthorizationAssignmentActorGuard;
+use App\Modules\Core\Authorization\Services\CanonicalAuthorizationAssignmentActorGuard;
 use App\Modules\Core\Services\CoreCapabilityProvider;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -13,6 +15,11 @@ class CoreServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->bind(
+            AuthorizationAssignmentActorGuard::class,
+            CanonicalAuthorizationAssignmentActorGuard::class,
+        );
+
         // Phase 8-C: tag the Core module's CapabilityProvider so
         // AuthController can iterate all engined_capability_providers
         // without referencing Core directly. See

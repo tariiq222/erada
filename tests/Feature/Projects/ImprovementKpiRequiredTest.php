@@ -23,7 +23,7 @@ class ImprovementKpiRequiredTest extends TestCase
     {
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         return $user;
     }

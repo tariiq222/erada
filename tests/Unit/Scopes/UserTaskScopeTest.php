@@ -3,7 +3,6 @@
 namespace Tests\Unit\Scopes;
 
 use App\Modules\Core\Authorization\Capability;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -54,7 +53,7 @@ class UserTaskScopeTest extends TestCase
     public function test_super_admin_sees_all_tasks(): void
     {
         $superAdmin = User::factory()->create(['department_id' => $this->department1->id]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         Task::factory()->count(3)->create(['project_id' => $this->project1->id]);
         Task::factory()->count(2)->create(['project_id' => $this->project2->id]);
@@ -102,7 +101,7 @@ class UserTaskScopeTest extends TestCase
 
         // مشروع يديره بدور سياقي (في قسم آخر)
         $managedProject = Project::factory()->create(['department_id' => $this->department2->id]);
-        $user->assignProjectRole($managedProject, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($user, 'project_manager', 'project', (int) $managedProject->id);
 
         Task::factory()->count(2)->create(['project_id' => $managedProject->id]);
         Task::factory()->count(3)->create(['project_id' => $this->project1->id]);

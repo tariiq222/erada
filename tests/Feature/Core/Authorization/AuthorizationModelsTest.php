@@ -71,14 +71,19 @@ class AuthorizationModelsTest extends TestCase
     {
         $role = new AuthorizationRole;
 
-        // Phase 2.1.4a (admin role unification) added `is_admin_role`
-        // to the fillable set so the backfill migration + the engine's
-        // admin gate can both write the flag through Eloquent. The
-        // schema migration `2026_07_05_000025` adds the column;
-        // `2026_07_05_000026` reads `scoped_role_definitions.is_admin_role`
-        // and writes `authorization_roles.is_admin_role`.
+        // The canonical role catalog owns localized labels, scope,
+        // lifecycle state, and the system/admin flags used by the engine.
         $this->assertEqualsCanonicalizing(
-            ['name', 'label', 'is_admin_role'],
+            [
+                'name',
+                'label',
+                'label_ar',
+                'label_en',
+                'scope_type',
+                'is_admin_role',
+                'is_system',
+                'is_active',
+            ],
             $role->getFillable()
         );
     }
@@ -86,17 +91,17 @@ class AuthorizationModelsTest extends TestCase
     public function test_authorization_role_persists_name_and_label(): void
     {
         $role = AuthorizationRole::create([
-            'name' => 'project_manager',
+            'name' => 'models_project_manager',
             'label' => 'Project Manager',
         ]);
 
         $this->assertNotNull($role->id);
-        $this->assertSame('project_manager', $role->name);
+        $this->assertSame('models_project_manager', $role->name);
         $this->assertSame('Project Manager', $role->label);
 
         $this->assertDatabaseHas('authorization_roles', [
             'id' => $role->id,
-            'name' => 'project_manager',
+            'name' => 'models_project_manager',
             'label' => 'Project Manager',
         ]);
     }
@@ -123,8 +128,8 @@ class AuthorizationModelsTest extends TestCase
 
     public function test_authorization_role_can_eager_load_assignments_and_permissions(): void
     {
-        $role = AuthorizationRole::create(['name' => 'admin', 'label' => 'Admin']);
-        $resource = AuthorizationResource::create([
+        $role = AuthorizationRole::create(['name' => 'models_admin', 'label' => 'Admin']);
+        $resource = AuthorizationResource::firstOrCreate([
             'key' => 'App\\Modules\\Projects\\Models\\Project',
             'label' => 'Project',
         ]);
@@ -185,13 +190,13 @@ class AuthorizationModelsTest extends TestCase
 
     public function test_authorization_resource_persists_key_and_label(): void
     {
-        $resource = AuthorizationResource::create([
-            'key' => 'App\\Modules\\Projects\\Models\\Project',
+        $resource = AuthorizationResource::firstOrCreate([
+            'key' => 'Tests\\Fixtures\\AuthorizationModels\\PersistedProject',
             'label' => 'Project',
         ]);
 
         $this->assertNotNull($resource->id);
-        $this->assertSame('App\\Modules\\Projects\\Models\\Project', $resource->key);
+        $this->assertSame('Tests\\Fixtures\\AuthorizationModels\\PersistedProject', $resource->key);
         $this->assertSame('Project', $resource->label);
     }
 
@@ -240,12 +245,10 @@ class AuthorizationModelsTest extends TestCase
     {
         $assignment = new AuthorizationRoleAssignment;
 
-        // Phase 2.1.2 hardening: inherit_to_children was added so the
-        // backfill can preserve legacy model_has_scoped_roles semantics
-        // on the new path. The resolver reads the column directly, so
-        // it must be fillable for the migration's INSERT to land it.
+        // Canonical assignments persist scope inheritance, lifecycle,
+        // provenance, and the actor responsible for the grant.
         $this->assertEqualsCanonicalizing(
-            ['authorization_role_id', 'user_id', 'scope_type', 'scope_id', 'organization_id', 'inherit_to_children'],
+            ['authorization_role_id', 'user_id', 'scope_type', 'scope_id', 'organization_id', 'inherit_to_children', 'expires_at', 'source', 'granted_by'],
             $assignment->getFillable()
         );
     }
@@ -402,11 +405,8 @@ class AuthorizationModelsTest extends TestCase
     {
         $pivot = new AuthorizationRolePermission;
 
-        // Phase 2.1.3 adds the per-pivot `reach` column so the new path can
-        // enforce a per-(role, resource, action) reach cap without falling
-        // back to the legacy scoped_role_definitions read on every call.
-        // The column is nullable: a NULL value signals "no cap on this row"
-        // and the engine falls back to the legacy read in that case.
+        // The nullable reach map is the canonical per-module cap for a
+        // role/resource/action permission. NULL means no additional cap.
         $this->assertEqualsCanonicalizing(
             ['authorization_role_id', 'authorization_resource_id', 'action', 'reach'],
             $pivot->getFillable()
@@ -449,7 +449,7 @@ class AuthorizationModelsTest extends TestCase
     public function test_authorization_role_permission_persists_composite_key_row(): void
     {
         $role = AuthorizationRole::create(['name' => 'pivot-role', 'label' => 'Pivot Role']);
-        $resource = AuthorizationResource::create([
+        $resource = AuthorizationResource::firstOrCreate([
             'key' => 'App\\Modules\\Projects\\Models\\Project',
             'label' => 'Project',
         ]);
@@ -480,7 +480,7 @@ class AuthorizationModelsTest extends TestCase
         // misconfigured cast that returned a string here would break the
         // reach check silently.
         $role = AuthorizationRole::create(['name' => 'reach-roundtrip-role', 'label' => 'Reach Round-trip']);
-        $resource = AuthorizationResource::create([
+        $resource = AuthorizationResource::firstOrCreate([
             'key' => 'App\\Modules\\Projects\\Models\\Project',
             'label' => 'Project',
         ]);
@@ -518,13 +518,10 @@ class AuthorizationModelsTest extends TestCase
 
     public function test_authorization_role_permission_reach_accepts_null(): void
     {
-        // Phase 2.1.3: a pivot with no reach set (NULL) means "no cap on
-        // this row" -- the new path falls back to the legacy
-        // scoped_role_definitions read in that case. Pre-fix behavior
-        // (no reach column) is represented by this NULL, so the column
-        // must accept and round-trip null safely.
+        // A pivot with no reach set means no additional canonical reach cap,
+        // so the nullable column must round-trip null safely.
         $role = AuthorizationRole::create(['name' => 'reach-null-role', 'label' => 'Reach Null']);
-        $resource = AuthorizationResource::create([
+        $resource = AuthorizationResource::firstOrCreate([
             'key' => 'App\\Modules\\Projects\\Models\\Project',
             'label' => 'Project',
         ]);
@@ -588,7 +585,7 @@ class AuthorizationModelsTest extends TestCase
 
     public function test_authorization_record_rule_round_trips_domain_json_as_array(): void
     {
-        $resource = AuthorizationResource::create([
+        $resource = AuthorizationResource::firstOrCreate([
             'key' => 'App\\Modules\\Projects\\Models\\Project',
             'label' => 'Project',
         ]);
@@ -653,7 +650,7 @@ class AuthorizationModelsTest extends TestCase
 
     public function test_authorization_record_rule_scope_enabled_filters_disabled_rules(): void
     {
-        $resource = AuthorizationResource::create([
+        $resource = AuthorizationResource::firstOrCreate([
             'key' => 'App\\Modules\\Projects\\Models\\Project',
             'label' => 'Project',
         ]);
@@ -679,11 +676,11 @@ class AuthorizationModelsTest extends TestCase
 
     public function test_authorization_record_rule_scope_for_resource(): void
     {
-        $projectResource = AuthorizationResource::create([
+        $projectResource = AuthorizationResource::firstOrCreate([
             'key' => 'App\\Modules\\Projects\\Models\\Project',
             'label' => 'Project',
         ]);
-        $taskResource = AuthorizationResource::create([
+        $taskResource = AuthorizationResource::firstOrCreate([
             'key' => 'App\\Modules\\Tasks\\Models\\Task',
             'label' => 'Task',
         ]);
@@ -707,7 +704,7 @@ class AuthorizationModelsTest extends TestCase
 
     public function test_authorization_record_rule_scope_for_action_accepts_null(): void
     {
-        $resource = AuthorizationResource::create([
+        $resource = AuthorizationResource::firstOrCreate([
             'key' => 'App\\Modules\\Projects\\Models\\Project',
             'label' => 'Project',
         ]);
@@ -743,7 +740,7 @@ class AuthorizationModelsTest extends TestCase
 
     public function test_authorization_record_rule_scope_for_role_or_user_matches_role_user_or_wildcard(): void
     {
-        $resource = AuthorizationResource::create([
+        $resource = AuthorizationResource::firstOrCreate([
             'key' => 'App\\Modules\\Projects\\Models\\Project',
             'label' => 'Project',
         ]);
@@ -872,7 +869,7 @@ class AuthorizationModelsTest extends TestCase
 
     public function test_authorization_decision_audit_persists_and_reads_created_at(): void
     {
-        $resource = AuthorizationResource::create([
+        $resource = AuthorizationResource::firstOrCreate([
             'key' => 'App\\Modules\\Audit\\Models\\Audit',
             'label' => 'Audit',
         ]);
@@ -916,7 +913,7 @@ class AuthorizationModelsTest extends TestCase
         // Append-only at the Eloquent layer: any attempt to update an
         // existing audit row must throw a clear LogicException. Review
         // finding I-1: the engine must never silently rewrite history.
-        $resource = AuthorizationResource::create([
+        $resource = AuthorizationResource::firstOrCreate([
             'key' => 'App\\Modules\\Audit\\Models\\Audit',
             'label' => 'Audit',
         ]);
@@ -943,7 +940,7 @@ class AuthorizationModelsTest extends TestCase
         // must remain unchanged. We assert this by reading the row back via
         // the query builder (bypassing the model guard) and confirming the
         // original decision is still there.
-        $resource = AuthorizationResource::create([
+        $resource = AuthorizationResource::firstOrCreate([
             'key' => 'App\\Modules\\Audit\\Models\\Audit',
             'label' => 'Audit',
         ]);
@@ -977,7 +974,7 @@ class AuthorizationModelsTest extends TestCase
 
     public function test_authorization_decision_audit_does_not_write_updated_at(): void
     {
-        $resource = AuthorizationResource::create([
+        $resource = AuthorizationResource::firstOrCreate([
             'key' => 'App\\Modules\\Audit\\Models\\Audit',
             'label' => 'Audit',
         ]);

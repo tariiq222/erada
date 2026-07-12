@@ -4,7 +4,6 @@ namespace Tests\Feature\OVR;
 
 use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\OVR\Enums\ReportStatus;
@@ -82,12 +81,7 @@ class ReportCommentCrossOrgIdorTest extends TestCase
         ]);
 
         if ($scopedRole !== null) {
-            $user->assignScopedRole(
-                $scopedRole,
-                ScopedRole::SCOPE_ORGANIZATION,
-                $organization->id,
-                $user->id
-            );
+            $this->assignCanonicalRole($user, $scopedRole, scopeId: $organization->id);
         }
 
         return $user;

@@ -169,7 +169,7 @@ class ActivityLogService
     }
 
     /**
-     * تسجيل تعيين دور نظام (Spatie)
+     * تسجيل تعيين دور في نظام التفويض
      */
     public function logSystemRoleAssigned(
         int $targetUserId,

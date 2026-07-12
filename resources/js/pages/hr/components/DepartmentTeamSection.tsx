@@ -24,7 +24,7 @@ import {
   DeleteConfirmationModal,
 } from '@shared/ui';
 import { IconButton } from '@shared/ui/IconButton';
-import { departmentRoleOptions, departmentRoleLabels } from '../constants';
+import { departmentRoleLabels } from '../constants';
 
 interface DepartmentTeamSectionProps {
   deptId: number;
@@ -40,7 +40,8 @@ interface MemberUser {
 interface MemberRow {
   id: number;
   user: MemberUser;
-  role: string;
+  role_id: number;
+  role_name: string;
   role_display: string;
   inherit_to_children: boolean;
   expires_at: string | null;
@@ -49,7 +50,7 @@ interface MemberRow {
 
 interface MembersResponse {
   data: MemberRow[];
-  available_roles: Record<string, string>;
+  available_roles: Array<{ id: number; name: string; label: string }>;
 }
 
 interface UserOption {
@@ -63,7 +64,7 @@ const DepartmentTeamSection: React.FC<DepartmentTeamSectionProps> = ({ deptId })
   const { showToast } = useToast();
 
   const [members, setMembers] = useState<MemberRow[]>([]);
-  const [availableRoles, setAvailableRoles] = useState<Record<string, string>>({});
+  const [availableRoles, setAvailableRoles] = useState<Array<{ id: number; name: string; label: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [isAssignOpen, setIsAssignOpen] = useState(false);
@@ -87,7 +88,7 @@ const DepartmentTeamSection: React.FC<DepartmentTeamSectionProps> = ({ deptId })
       const res = await departmentRolesApi.getMembers(deptId);
       const r = res as unknown as MembersResponse;
       setMembers(r?.data ?? []);
-      setAvailableRoles(r?.available_roles ?? {});
+      setAvailableRoles(r?.available_roles ?? []);
     } catch {
       showToast('error', t('hr.departmentRoles.load_error'));
     } finally {
@@ -128,14 +129,14 @@ const DepartmentTeamSection: React.FC<DepartmentTeamSectionProps> = ({ deptId })
     }
     setIsSubmitting(true);
     try {
-      await departmentRolesApi.assignRole(deptId, {
+      await departmentRolesApi.assignRoleAssignment(deptId, {
         user_id: Number(selectedUserId),
-        role: selectedRole,
+        role_id: Number(selectedRole),
         inherit_to_children: inheritToChildren,
       });
       showToast('success', t('hr.departmentRoles.assign_success'));
       handleCloseAssign();
-      fetchMembers();
+      await fetchMembers();
     } catch {
       showToast('error', t('hr.departmentRoles.assign_error'));
     } finally {
@@ -147,10 +148,12 @@ const DepartmentTeamSection: React.FC<DepartmentTeamSectionProps> = ({ deptId })
     if (deleteModal.userId == null) return;
     setIsDeleting(true);
     try {
-      await departmentRolesApi.removeMember(deptId, deleteModal.userId);
+      const member = members.find((item) => item.user.id === deleteModal.userId);
+      if (!member) return;
+      await departmentRolesApi.removeMember(deptId, deleteModal.userId, member.role_id);
       showToast('success', t('hr.departmentRoles.remove_success'));
       setDeleteModal({ isOpen: false, userId: null, userName: '' });
-      fetchMembers();
+      await fetchMembers();
     } catch {
       showToast('error', t('hr.departmentRoles.remove_error'));
     } finally {
@@ -164,13 +167,13 @@ const DepartmentTeamSection: React.FC<DepartmentTeamSectionProps> = ({ deptId })
   }));
 
   const roleOptions =
-    Object.entries(availableRoles).length > 0
-      ? Object.entries(availableRoles).map(([value, label]) => ({ value, label }))
-      : departmentRoleOptions;
+    availableRoles.length > 0
+      ? availableRoles.map((role) => ({ value: String(role.id), label: role.label }))
+      : [];
 
   const resolveRoleLabel = (row: MemberRow): string => {
     if (row.role_display) return row.role_display;
-    return availableRoles[row.role] || departmentRoleLabels[row.role] || row.role;
+    return row.role_display || departmentRoleLabels[row.role_name] || row.role_name;
   };
 
   const renderAvatar = (name: string) => {

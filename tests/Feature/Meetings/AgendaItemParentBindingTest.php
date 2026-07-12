@@ -60,7 +60,7 @@ class AgendaItemParentBindingTest extends TestCase
             'organization_id' => $this->project->organization_id,
             'is_active' => true,
         ]);
-        $this->organizer->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->organizer);
 
         $this->meetingA = Meeting::factory()->create([
             'department_id' => $this->dept->id,

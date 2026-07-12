@@ -23,6 +23,35 @@ export type ProjectSettingsPayload = Partial<{
   attachments: Partial<ProjectSettings['attachments']>;
 }>;
 
+export interface CanonicalRoleOption {
+  id: number;
+  name: string;
+  label: string;
+}
+
+export interface CanonicalProjectRoleAssignment {
+  id: number;
+  user_id?: number;
+  role_id: number;
+  role_name: string;
+  role_display: string;
+  scope_type: 'project';
+  scope_id: number;
+  expires_at: string | null;
+  user?: { id: number; name: string; email?: string; job_title?: string | null };
+}
+
+export interface CanonicalProjectRolesResponse {
+  data: CanonicalProjectRoleAssignment[];
+  available_roles: CanonicalRoleOption[];
+}
+
+export interface CanonicalProjectRoleWrite {
+  user_id: number;
+  role_id: number;
+  expires_at?: string | null;
+}
+
 export const projectsApi = {
   getAll: (params?: Record<string, string>) => {
     const query = params ? '?' + new URLSearchParams(params).toString() : '';
@@ -62,12 +91,20 @@ export const projectsApi = {
   // أعضاء الفريق
   getMembers: (projectId: number) =>
     api.get(`/projects/${projectId}/members`),
+  getRoleAssignments: (projectId: number) =>
+    api.get<CanonicalProjectRolesResponse>(`/projects/${projectId}/roles`),
   addMember: (projectId: number, data: { user_id: number; role?: string }) =>
     api.post(`/projects/${projectId}/members`, data),
-  updateMemberRole: (projectId: number, userId: number, role: string) =>
-    api.put(`/projects/${projectId}/roles/${userId}`, { role }),
-  removeMember: (projectId: number, userId: number) =>
-    api.delete(`/projects/${projectId}/members/${userId}`),
+  assignRoleAssignment: (projectId: number, data: CanonicalProjectRoleWrite) =>
+    api.post<{ data: CanonicalProjectRoleAssignment }>(`/projects/${projectId}/roles`, data),
+  updateMemberRole: (projectId: number, userId: number, roleId: number) =>
+    api.put<{ data: CanonicalProjectRoleAssignment }>(`/projects/${projectId}/roles/${userId}`, {
+      role_id: roleId,
+    }),
+  removeMember: (projectId: number, userId: number, roleId?: number) =>
+    roleId === undefined
+      ? api.delete(`/projects/${projectId}/members/${userId}`)
+      : api.delete(`/projects/${projectId}/roles/${userId}?role_id=${roleId}`),
 
   // مراحل PDCA (مشاريع التحسين)
   updatePdcaPhase: (

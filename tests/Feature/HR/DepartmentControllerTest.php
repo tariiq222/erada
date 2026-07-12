@@ -41,7 +41,7 @@ class DepartmentControllerTest extends TestCase
             'organization_id' => $this->organization->id,
             'is_active' => true,
         ]);
-        $this->admin->assignRole('admin');
+        $this->grantCanonicalAdmin($this->admin);
     }
 
     private function superAdmin(?int $organizationId = null): User
@@ -50,7 +50,7 @@ class DepartmentControllerTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         return $user;
     }

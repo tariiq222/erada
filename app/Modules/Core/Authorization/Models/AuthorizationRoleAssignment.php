@@ -5,8 +5,10 @@ namespace App\Modules\Core\Authorization\Models;
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Phase 1 Task 1.1.2 — `authorization_role_assignments` Eloquent model.
@@ -26,6 +28,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int|null $scope_id
  * @property int|null $organization_id
  * @property bool $inherit_to_children
+ * @property CarbonImmutable|null $expires_at
+ * @property string $source
+ * @property int|null $granted_by
+ * @property-read User|null $grantedBy
  */
 class AuthorizationRoleAssignment extends Model
 {
@@ -33,13 +39,7 @@ class AuthorizationRoleAssignment extends Model
 
     public const SCOPE_ORGANIZATION = 'organization';
 
-    public const SCOPE_CLUSTER = 'cluster';
-
-    public const SCOPE_HOSPITAL = 'hospital';
-
     public const SCOPE_DEPARTMENT = 'department';
-
-    public const SCOPE_TEAM = 'team';
 
     public const SCOPE_OWN = 'own';
 
@@ -52,16 +52,22 @@ class AuthorizationRoleAssignment extends Model
         'scope_id',
         'organization_id',
         'inherit_to_children',
+        'expires_at',
+        'source',
+        'granted_by',
     ];
 
     protected $casts = [
         'inherit_to_children' => 'boolean',
+        'expires_at' => 'immutable_datetime',
+        'source' => 'string',
+        'granted_by' => 'integer',
     ];
 
     protected static function booted(): void
     {
-        static::saved(fn () => AccessDecision::flushCache());
-        static::deleted(fn () => AccessDecision::flushCache());
+        static::saved(fn () => DB::afterCommit(fn () => AccessDecision::flushCache()));
+        static::deleted(fn () => DB::afterCommit(fn () => AccessDecision::flushCache()));
     }
 
     public function role(): BelongsTo
@@ -77,5 +83,10 @@ class AuthorizationRoleAssignment extends Model
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class, 'organization_id');
+    }
+
+    public function grantedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'granted_by');
     }
 }

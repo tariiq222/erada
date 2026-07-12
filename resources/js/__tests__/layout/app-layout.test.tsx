@@ -500,7 +500,7 @@ let mockAuthState = {
 };
 
 vi.mock('@shared/contexts/AuthContext', () => ({
-  useAuth: () => mockAuthState,
+  useAuth: () => ({ ...mockAuthState, can: () => true }),
 }));
 
 // Mock SystemSettingsContext

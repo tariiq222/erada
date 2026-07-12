@@ -68,13 +68,38 @@ export const certificatesApi = {
   delete: (certificateId: number) => api.delete(`/hr/certificates/${certificateId}`),
 };
 
-// Department Scoped Roles API (الأدوار السياقية للقسم)
+// Canonical department role assignments API (إسنادات أدوار القسم)
 export const departmentRolesApi = {
-  getMembers: (deptId: number) => api.get(`/departments/${deptId}/roles`),
-  assignRole: (
+  getMembers: (deptId: number) => api.get<{
+    data: Array<{
+      id: number;
+      user: { id: number; name: string; email: string; job_title?: string | null };
+      role_id: number;
+      role_name: string;
+      role_display: string;
+      inherit_to_children: boolean;
+      expires_at: string | null;
+      source: string;
+      created_at: string;
+    }>;
+    available_roles: Array<{ id: number; name: string; label: string }>;
+  }>(`/departments/${deptId}/roles`),
+  assignRoleAssignment: (
     deptId: number,
-    data: { user_id: number; role: string; inherit_to_children?: boolean; expires_at?: string | null }
-  ) => api.post(`/departments/${deptId}/roles`, data),
-  removeMember: (deptId: number, userId: number) =>
-    api.delete(`/departments/${deptId}/roles/${userId}`),
+    data: { user_id: number; role_id: number; inherit_to_children?: boolean; expires_at?: string | null }
+  ) => api.post<{
+    data: {
+      id: number;
+      user_id: number;
+      role_id: number;
+      role_name: string;
+      role_display: string;
+      scope_type: 'department';
+      scope_id: number;
+      inherit_to_children: boolean;
+      expires_at: string | null;
+    };
+  }>(`/departments/${deptId}/roles`, data),
+  removeMember: (deptId: number, userId: number, roleId: number) =>
+    api.delete(`/departments/${deptId}/roles/${userId}?role_id=${roleId}`),
 };

@@ -98,15 +98,12 @@ final class CapabilityAlias
             'edit_strategy' => Capability::STRATEGY_EDIT,
             'delete_strategy' => Capability::STRATEGY_DELETE,
 
+            // Historical database vocabulary kept only for reconciliation and
+            // canonical integrity reporting while stored aliases are normalized.
+            'edit_department_projects' => Capability::PROJECTS_EDIT,
+            'edit_department_tasks' => Capability::TASKS_EDIT,
+
             // ── Meetings ──
-            // Phase 9: legacy kebab strings (view-meetings,
-            // manage-meetings, record-decisions) and their alias
-            // entries are removed. Only the canonical dotted
-            // capability strings remain in this map and in the
-            // Permission enum. The canonical dotted strings must
-            // stay here as long as any Permission enum case uses
-            // them, so CapabilityAliasTest's "every flat permission
-            // enum case has an alias entry" assertion keeps passing.
             'meetings.view' => Capability::MEETINGS_VIEW,
             'meetings.create' => Capability::MEETINGS_CREATE,
             'meetings.edit' => Capability::MEETINGS_EDIT,

@@ -43,7 +43,6 @@ class ReferenceNumberGeneratorTest extends TestCase
         // truncate values that exceed it). Creating 9999 identical rows was
         // the original approach but violates the new partial unique index.
         Meeting::factory()->create([
-            'organization_id' => 1,
             'reference_number' => 'MTG-2026-9999',
         ]);
         $gen = app(ReferenceNumberGenerator::class);

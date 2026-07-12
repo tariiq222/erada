@@ -30,17 +30,13 @@ const statusBadgeColors: Record<IncidentStatus, CustomBadgeColor> = {
 
 export const OVRStatsCard: React.FC = () => {
   const { t } = useTranslation();
-  const { canAccess } = useAuth();
+  const { can } = useAuth();
   // Phase 9.3 freeze cleanup (2026-07-06): gate on the canonical `ovr.view_*`
   // capabilities. The umbrella `ovr.view_all` is the engine-enforced top-level
   // gate for the dashboard stats card; `ovr.view_own` / `ovr.view_department`
   // stay as granular fallbacks for role-restricted users who can read but not
   // see all departments. No more transition-only strings.
-  const canView = canAccess({
-    permission: 'ovr.view_statistics',
-  }) || canAccess({
-    permissions: ['ovr.view_all', 'ovr.view_department', 'ovr.view_own'],
-  });
+  const canView = can('ovr.view_statistics') && can('ovr.view_all');
   const [stats, setStats] = useState<OVRStats | null>(null);
   const [recent, setRecent] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);

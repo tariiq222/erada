@@ -8,8 +8,8 @@ use Illuminate\Foundation\Http\FormRequest;
 /**
  * Validation for POST /api/projects/{project}/members.
  *
- * The project-level authorization (update) is enforced by the controller via
- * Policy::update — the FormRequest centralizes the input shape only.
+ * The route owns the project scope; callers submit only the target user and
+ * canonical role identifiers.
  */
 class StoreProjectMemberRequest extends FormRequest
 {
@@ -25,14 +25,15 @@ class StoreProjectMemberRequest extends FormRequest
             return false;
         }
 
-        return $this->user()->can('update', $project);
+        return $this->user()?->can('assignProjectRoles', $project) ?? false;
     }
 
     public function rules(): array
     {
         return [
             'user_id' => ['required', 'integer', 'exists:users,id'],
-            'role' => ['nullable', 'string', 'max:100'],
+            'role_id' => ['required', 'integer', 'exists:authorization_roles,id'],
+            'expires_at' => ['nullable', 'date', 'after:now'],
         ];
     }
 }

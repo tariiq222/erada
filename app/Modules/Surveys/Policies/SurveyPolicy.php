@@ -12,8 +12,7 @@ use Illuminate\Auth\Access\HandlesAuthorization;
  * SurveyPolicy — Phase 6 (Surveys Org-Isolation).
  *
  * Engine-only authorization: every gate is decided by AccessDecision::can()
- * against the canonical Capability::SURVEYS_* constant. Spatie flat
- * hasPermissionTo() is no longer used for Surveys. Record-scoped checks
+ * against the canonical Capability::SURVEYS_* constant. Record-scoped checks
  * add a same-organization floor so a user from org A cannot reach a
  * survey that lives in org B even if their scoped roles grant the
  * underlying capability.

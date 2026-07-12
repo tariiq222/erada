@@ -4,8 +4,6 @@ namespace Tests\Feature\Projects;
 
 use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
-use App\Modules\Core\Models\ScopedRoleDefinition;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -13,10 +11,9 @@ use App\Modules\Projects\Models\ProjectSetting;
 use App\Modules\Projects\Scopes\UserProjectScope;
 use App\Modules\Projects\Services\ProjectAuthorizationService;
 use Database\Seeders\RolesAndPermissionsSeeder;
-use Database\Seeders\ScopedDepartmentRolesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
+use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
 /**
@@ -33,7 +30,7 @@ use Tests\TestCase;
  */
 class ProjectCreationGovernanceTest extends TestCase
 {
-    use RefreshDatabase;
+    use GrantsEngineCapability, RefreshDatabase;
 
     private Organization $org;
 
@@ -53,8 +50,6 @@ class ProjectCreationGovernanceTest extends TestCase
     {
         parent::setUp();
         $this->seed(RolesAndPermissionsSeeder::class);
-        $this->seed(ScopedDepartmentRolesSeeder::class);
-        $this->seedAdminScopedRoleDefinition();
         Cache::flush();
 
         $this->org = Organization::factory()->create();
@@ -72,32 +67,6 @@ class ProjectCreationGovernanceTest extends TestCase
 
         $this->svc = app(ProjectAuthorizationService::class);
         Cache::flush();
-    }
-
-    private function seedAdminScopedRoleDefinition(): void
-    {
-        $orgScopeId = DB::table('scope_types')->where('key', 'organization')->value('id');
-
-        $definition = ScopedRoleDefinition::firstOrNew([
-            'scope_type_id' => $orgScopeId,
-            'role_key' => 'admin',
-        ]);
-
-        $definition->forceFill([
-            'name' => 'organization.admin',
-            'display_name' => 'admin',
-            'scope_type' => 'organization',
-            'label_ar' => 'مدير إدارة',
-            'label_en' => 'Admin',
-            'permissions' => [
-                Capability::SETTINGS_VIEW,
-                Capability::SETTINGS_EDIT,
-                Capability::SETTINGS_MANAGE,
-            ],
-            'is_admin_role' => true,
-            'is_active' => true,
-            'sort_order' => 10,
-        ])->save();
     }
 
     private function makeDept(string $code, ?int $parentId, int $level): Department
@@ -122,7 +91,32 @@ class ProjectCreationGovernanceTest extends TestCase
 
     private function withDeptRole(User $user, string $roleKey, Department $dept): User
     {
-        $user->assignScopedRole($roleKey, ScopedRole::SCOPE_DEPARTMENT, $dept->id, null, true);
+        $capabilities = match ($roleKey) {
+            'dept_manager' => [
+                Capability::DEPARTMENTS_VIEW,
+                Capability::PROJECTS_VIEW,
+                Capability::PROJECTS_CREATE,
+                Capability::PROJECTS_EDIT,
+                Capability::PROJECTS_DELETE,
+                Capability::PROJECTS_ASSIGN_ROLES,
+            ],
+            'dept_member' => [
+                Capability::DEPARTMENTS_VIEW,
+                Capability::PROJECTS_VIEW,
+                Capability::PROJECTS_CREATE,
+                Capability::PROJECTS_EDIT,
+            ],
+            default => throw new \InvalidArgumentException("Unsupported department role [{$roleKey}]."),
+        };
+
+        $this->grantEngineCapability(
+            $user,
+            $capabilities,
+            'department',
+            $dept->id,
+            $roleKey,
+            ['inherit_to_children' => true],
+        );
         Cache::flush();
 
         return $user;
@@ -296,7 +290,7 @@ class ProjectCreationGovernanceTest extends TestCase
     public function test_admin_can_read_and_update_governing_departments(): void
     {
         $admin = $this->makeUser($this->parentDept->id);
-        $admin->assignRole('admin');
+        $this->grantCanonicalAdmin($admin);
         Cache::flush();
 
         $this->actingAs($admin)

@@ -1,7 +1,7 @@
 /**
  * AccessHub — unified admin page for roles, members, governance, and audit.
  *
- * Replaces the distributed /admin/roles, /admin/scoped-roles/audit-logs, and
+ * Replaces the distributed role, assignment-audit, and
  * the standalone /users/:id/access surfaces with a single tabbed screen.
  * Tabs are URL-driven (?tab=roles|members|governance|audit) so deep links work
  * and the active tab survives a full reload.
@@ -14,7 +14,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@shared/ui';
 import { IconShield, IconUsers, IconBuildingBank, IconHistory } from '@tabler/icons-react';
 import { RolesList } from '../roles/RolesList';
 import { GoverningDepartments } from '../roles/GoverningDepartments';
-import ScopedRoleAuditLogs from '../scoped-roles/ScopedRoleAuditLogs';
+import AuthorizationAssignmentAuditLogs from '../authorization/AuthorizationAssignmentAuditLogs';
 import { MembersPanel } from './MembersPanel';
 
 const TABS = ['roles', 'members', 'governance', 'audit'] as const;
@@ -65,7 +65,7 @@ export const AccessHub: React.FC = () => {
           <GoverningDepartments embedded />
         </TabsContent>
         <TabsContent value="audit">
-          <ScopedRoleAuditLogs embedded />
+          <AuthorizationAssignmentAuditLogs embedded />
         </TabsContent>
       </Tabs>
     </div>
