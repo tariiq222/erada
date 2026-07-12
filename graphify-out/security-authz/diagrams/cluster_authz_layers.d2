@@ -1,0 +1,163 @@
+# cluster_tree authorization — engine + CFA guards
+# Style: minimal, label-first, one shape per invariant
+
+direction: down
+
+vars: {
+  d2-config: {
+    pad: 28
+    theme-id: 6
+  }
+}
+
+# Inputs --------------------------------------------------------------
+inputs: {
+  label: "Inputs"
+  shape: rectangle
+  style.fill: "#eef2ff"
+  style.stroke: "#6366f1"
+  style.stroke-width: 2
+
+  actor: {
+    label: "Actor (user)\n+ organization_id\n+ role assignments"
+    shape: document
+    style.fill: "#ffffff"
+  }
+  capability: {
+    label: "Capability\n(e.g. KPIS_VIEW, TASKS_EDIT)"
+    shape: document
+    style.fill: "#ffffff"
+  }
+  target: {
+    label: "Target Model\n(Survey, Task, KPI, Risk…)"
+    shape: document
+    style.fill: "#ffffff"
+  }
+}
+
+# Engine --------------------------------------------------------------
+engine: {
+  label: "AccessDecision::whyCan(user, capability, target)"
+  shape: hexagon
+  style.fill: "#0f172a"
+  style.font-color: "#f8fafc"
+  style.stroke-width: 2
+
+  layer1: {
+    label: "1. super_admin short-circuit"
+    shape: rectangle
+    style.fill: "#fde68a"
+  }
+  layer2: {
+    label: "2. cluster_tree_rescue\n(primitive + module cap)"
+    shape: rectangle
+    style.fill: "#bae6fd"
+  }
+  layer3: {
+    label: "3. org_isolation_denied\n(strict same-org)"
+    shape: rectangle
+    style.fill: "#fecaca"
+  }
+  layer4: {
+    label: "4. owner_floor\n(OwnerEditable contract)"
+    shape: rectangle
+    style.fill: "#fde68a"
+  }
+  layer5: {
+    label: "5. sensitive_allowed/denied\n(SensitivelyScoped)"
+    shape: rectangle
+    style.fill: "#fecaca"
+  }
+  layer6: {
+    label: "6. org_functional_role\n(scoped role grants)"
+    shape: rectangle
+    style.fill: "#bbf7d0"
+  }
+  layer7: {
+    label: "7. scope_chain\n(ScopeAssignmentResolver)"
+    shape: rectangle
+    style.fill: "#bbf7d0"
+  }
+  layer8: {
+    label: "8. inline_role\n(target-scoped assignment)"
+    shape: rectangle
+    style.fill: "#bbf7d0"
+  }
+  layer9: {
+    label: "9. deny (default)"
+    shape: rectangle
+    style.fill: "#e5e7eb"
+  }
+
+  layer1 -> layer2 -> layer3 -> layer4 -> layer5 -> layer6 -> layer7 -> layer8 -> layer9
+}
+
+# Guards enforced by tests -------------------------------------------
+guards: {
+  label: "Invariants (test-enforced)"
+  shape: rectangle
+  style.fill: "#ecfdf5"
+  style.stroke: "#059669"
+  style.stroke-width: 2
+
+  g_directional: {
+    label: "One-directional\nancestor -> descendants\n(no upward widening)"
+    shape: diamond
+    style.fill: "#ffffff"
+  }
+  g_sibling: {
+    label: "Sibling cluster\nisolated"
+    shape: diamond
+    style.fill: "#ffffff"
+  }
+  g_null: {
+    label: "Null-org actor\nfail-closed"
+    shape: diamond
+    style.fill: "#ffffff"
+  }
+  g_confidential: {
+    label: "Confidential floor:\nOVR / Private Task /\nSensitivelyScoped"
+    shape: diamond
+    style.fill: "#ffffff"
+  }
+  g_primitives: {
+    label: "Primitives split:\nCLUSTER_TREE_VIEW / MANAGE / EXPORT\n(no cross-promotion)"
+    shape: diamond
+    style.fill: "#ffffff"
+  }
+  g_auditor: {
+    label: "cluster_auditor\nisolated from cluster_pmo"
+    shape: diamond
+    style.fill: "#ffffff"
+  }
+  g_crud: {
+    label: "Write widens only for\nstatus/transition; create/update/delete\nstay strict same-org"
+    shape: diamond
+    style.fill: "#ffffff"
+  }
+  g_pii: {
+    label: "No PII in cluster exports\n(email/phone/token/IP/UA)"
+    shape: diamond
+    style.fill: "#ffffff"
+  }
+  g_snapshot: {
+    label: "Snapshot at submission time\n(respondent_organization_id)"
+    shape: diamond
+    style.fill: "#ffffff"
+  }
+}
+
+# Wiring --------------------------------------------------------------
+inputs.actor -> engine
+inputs.capability -> engine
+inputs.target -> engine
+
+engine.layer2 -> guards.g_primitives
+engine.layer5 -> guards.g_confidential
+engine.layer3 -> guards.g_directional
+engine.layer3 -> guards.g_sibling
+engine.layer3 -> guards.g_null
+guards.g_auditor -> engine.layer2
+guards.g_crud -> engine.layer3
+guards.g_pii -> engine.layer2
+guards.g_snapshot -> engine.layer2
