@@ -6,6 +6,7 @@ use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Gate;
 
 /**
  * Phase CFA-06 — Cluster-read sanitization for Meeting.
@@ -64,6 +65,11 @@ class MeetingResource extends JsonResource
             'agenda' => $this->agenda,
             'minutes' => $isClusterRead ? null : $this->minutes,
             'status' => $this->status,
+            'allowed_actions' => [
+                'update' => Gate::allows('update', $this->resource),
+                'delete' => Gate::allows('delete', $this->resource),
+                'view_agenda' => Gate::allows('view', $this->resource),
+            ],
             'organizer' => $this->whenLoaded('organizer', fn () => [
                 'id' => $this->organizer->id,
                 'name' => $this->organizer->name,

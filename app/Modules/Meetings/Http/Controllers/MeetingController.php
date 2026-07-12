@@ -88,7 +88,14 @@ class MeetingController extends Controller
         $this->authorize('view', $meeting);
         $meeting->load(['organizer:id,name', 'attendees:id,name', 'subject', 'category:id,name']);
 
-        return response()->json($meeting);
+        $payload = (new \App\Modules\Meetings\Http\Resources\MeetingResource($meeting))->resolve(request());
+        $payload['allowed_actions'] = [
+            'update' => \Illuminate\Support\Facades\Gate::allows('update', $meeting),
+            'delete' => \Illuminate\Support\Facades\Gate::allows('delete', $meeting),
+            'view_agenda' => \Illuminate\Support\Facades\Gate::allows('view', $meeting),
+        ];
+
+        return response()->json($payload);
     }
 
     public function store(StoreMeetingRequest $request): JsonResponse
@@ -151,9 +158,29 @@ class MeetingController extends Controller
             }
             $this->assertSameOrganization($subject);
             $validated['subject_type'] = $modelClass;
+            // When the meeting is re-bound to a subject whose organization
+            // differs from the meeting's own, follow the subject so the
+            // (subject_type, subject_id, organization_id) triple stays
+            // consistent — even for super_admin, who otherwise bypasses the
+            // org-isolation guard above. organization_id is intentionally
+            // absent from UpdateMeetingRequest::rules() (it is derived),
+            // so validated() drops it; we attach it locally here and
+            // forceFill() it after update() to keep the triple intact.
+            $validated['organization_id'] = $subject->organization_id;
         }
 
-        $meeting->update($validated);
+        // Persist every editable field first.
+        $meeting->fill($validated);
+        $meeting->save();
+        // organization_id is absent from UpdateMeetingRequest::rules(), so
+        // FormRequest::validated() never includes it — even when the
+        // controller derives a new value above. Persist it separately so
+        // the (subject_type, subject_id, organization_id) triple stays
+        // consistent for the super_admin cross-org case.
+        if (array_key_exists('organization_id', $validated)) {
+            $meeting->forceFill(['organization_id' => $validated['organization_id']])
+                ->save();
+        }
         $meeting->load(['organizer:id,name', 'attendees:id,name', 'subject', 'category:id,name']);
 
         return response()->json(['message' => 'تم تحديث الاجتماع بنجاح', 'meeting' => $meeting]);

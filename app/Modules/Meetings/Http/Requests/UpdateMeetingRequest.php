@@ -2,7 +2,6 @@
 
 namespace App\Modules\Meetings\Http\Requests;
 
-use App\Modules\Meetings\Models\Meeting;
 use App\Modules\Meetings\Support\DecidableType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -55,7 +54,7 @@ class UpdateMeetingRequest extends FormRequest
             'virtual_link' => ['nullable', 'url', 'max:2048'],
             'agenda' => ['nullable', 'string', 'max:20000'],
             'minutes' => ['nullable', 'string', 'max:20000'],
-            'status' => ['nullable', Rule::in(Meeting::statusValues())],
+            'status' => ['prohibited'],
             'organizer_id' => ['required', 'integer', $this->orgScopedUserRule()],
             'subject_type' => ['nullable', Rule::in(DecidableType::aliases())],
             'subject_id' => ['required_with:subject_type', 'integer'],
