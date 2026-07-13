@@ -58,7 +58,11 @@ class StoreDepartmentRequest extends FormRequest
         ];
 
         if ($user->isSuperAdmin()) {
-            $rules['organization_id'] = ['nullable', 'exists:organizations,id'];
+            $rules['organization_id'] = [
+                Rule::requiredIf($user->organization_id === null),
+                'nullable',
+                'exists:organizations,id',
+            ];
         }
 
         return $rules;
