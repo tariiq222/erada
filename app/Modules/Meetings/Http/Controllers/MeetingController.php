@@ -7,6 +7,7 @@ use App\Modules\Meetings\Http\Requests\DeleteMeetingRequest;
 use App\Modules\Meetings\Http\Requests\StoreMeetingRequest;
 use App\Modules\Meetings\Http\Requests\UpdateMeetingRequest;
 use App\Modules\Meetings\Http\Requests\UpdateMinutesRequest;
+use App\Modules\Meetings\Http\Resources\MeetingResource;
 use App\Modules\Meetings\Models\Meeting;
 use App\Modules\Meetings\Notifications\AgendaRequestedNotification;
 use App\Modules\Meetings\Notifications\MeetingScheduledNotification;
@@ -15,6 +16,7 @@ use App\Modules\Meetings\Support\DecidableType;
 use App\Modules\Shared\Traits\HasOrganizationScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -88,11 +90,11 @@ class MeetingController extends Controller
         $this->authorize('view', $meeting);
         $meeting->load(['organizer:id,name', 'attendees:id,name', 'subject', 'category:id,name']);
 
-        $payload = (new \App\Modules\Meetings\Http\Resources\MeetingResource($meeting))->resolve(request());
+        $payload = (new MeetingResource($meeting))->resolve(request());
         $payload['allowed_actions'] = [
-            'update' => \Illuminate\Support\Facades\Gate::allows('update', $meeting),
-            'delete' => \Illuminate\Support\Facades\Gate::allows('delete', $meeting),
-            'view_agenda' => \Illuminate\Support\Facades\Gate::allows('view', $meeting),
+            'update' => Gate::allows('update', $meeting),
+            'delete' => Gate::allows('delete', $meeting),
+            'view_agenda' => Gate::allows('view', $meeting),
         ];
 
         return response()->json($payload);
