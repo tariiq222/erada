@@ -1,6 +1,12 @@
 name: CI
 
 on:
+  workflow_dispatch:
+    inputs:
+      shards:
+        description: Number of PostgreSQL PHPUnit shards
+        required: false
+        default: '4'
   push:
     branches: [main, develop]
   pull_request:
@@ -150,17 +156,10 @@ jobs:
       - name: Generate app key
         run: php artisan key:generate
 
-      - name: Run migrations
-        env:
-          DB_CONNECTION: pgsql
-          DB_HOST: 127.0.0.1
-          DB_PORT: 5432
-          DB_DATABASE: iradah_pmo_test
-          DB_USERNAME: iradah
-          DB_PASSWORD: secret
-        run: php artisan migrate --force
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
-      - name: Run tests
+      - name: Run sharded PHPUnit suite
         env:
           DB_CONNECTION: pgsql
           DB_HOST: 127.0.0.1
@@ -168,59 +167,20 @@ jobs:
           DB_DATABASE: iradah_pmo_test
           DB_USERNAME: iradah
           DB_PASSWORD: secret
-        # The full suite has a pre-existing non-deterministic flake set: a
-        # different handful of tests fails per run from cross-test state leakage,
-        # yet every one passes in isolation. A full re-run rarely comes back
-        # clean (each run flakes a fresh subset), so instead re-run ONLY the
-        # tests that failed — in isolation they pass, so a green targeted re-run
-        # proves the first-pass failures were flake, while a real regression
-        # still fails the re-run. A large failure set (>25) is treated as real
-        # breakage and not retried.
         run: |
-          set -o pipefail
-          if php artisan test --log-junit=junit-1.xml; then
-            exit 0
-          fi
-          echo "::group::Extracting failed test classes for targeted re-run"
-          # Re-run at CLASS granularity, not per-method: several flaky tests only
-          # pass when their whole class runs (intra-class setup), so a per-method
-          # --filter loses that. Each failed test's class passes in isolation.
-          FAILED=$(php -r '
-            $d = new DOMDocument();
-            $d->load("junit-1.xml");
-            $x = new DOMXPath($d);
-            $classes = [];
-            foreach ($x->query("//testcase[failure or error]") as $c) {
-              $fqcn = $c->getAttribute("class");
-              $short = substr(strrchr($fqcn, "\\"), 1) ?: $fqcn;
-              $classes[$short] = true;
-            }
-            $classes = array_keys($classes);
-            if (count($classes) > 25) { fwrite(STDERR, "TOO_MANY\n"); exit(2); }
-            echo implode("|", array_map(fn($c) => preg_quote($c, "/"), $classes));
-          ') || { echo "::error::Too many failing classes — treating as real breakage"; exit 1; }
-          echo "Failed classes: $FAILED"
-          echo "::endgroup::"
-          if [ -z "$FAILED" ]; then
-            echo "::error::Test run failed but no failed testcase parsed"
-            exit 1
-          fi
-          echo "::warning::First pass failed; re-running the failed test classes in isolation (known full-suite flake)"
-          php artisan test --filter="$FAILED"
+          python3 scripts/shard-tests.py \
+            --shards "${{ inputs.shards || '4' }}" \
+            --host 127.0.0.1 --port 5432 \
+            --user iradah --password secret \
+            --prefix iradah_pmo_test_shard
 
-      - name: Run tests with coverage
-        # Duplicate full-suite run kept only for the coverage number; it is
-        # subject to the same flake, so it must not gate the build (the retried
-        # step above is the authoritative pass/fail).
-        continue-on-error: true
-        env:
-          DB_CONNECTION: pgsql
-          DB_HOST: 127.0.0.1
-          DB_PORT: 5432
-          DB_DATABASE: iradah_pmo_test
-          DB_USERNAME: iradah
-          DB_PASSWORD: secret
-        run: composer test:coverage -- --no-progress
+      - name: Upload shard reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phpunit-shard-reports-${{ matrix.php }}
+          path: storage/app/test-shards/
+          if-no-files-found: warn
 
   # ═══════════════════════════════════════════════════════════════
   # Job 3: Code Quality
