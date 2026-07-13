@@ -206,6 +206,36 @@ class AuthController extends Controller
                 ]);
             }
 
+            // 4b. التحقق من أن مؤسسة المستخدم نشطة — بوابة OrgAdmin (Task 4)
+            // مرآة لـ EnsureUserIsActive middleware: إذا تم تعطيل المؤسسة بعد
+            // إصدار التوكن، الـ middleware يرفض الطلبات اللاحقة، وهذه البوابة
+            // تمنع إصدار توكن جديد أصلاً.
+            $org = $user->organization;
+            if ($org !== null && $org->is_active === false) {
+                Log::warning('Inactive organization login attempt', [
+                    'user_id' => $user->id,
+                    'organization_id' => $org->id,
+                    'ip' => $ip,
+                ]);
+
+                $this->securityService->recordFailedAttempt(
+                    $user->email,
+                    $ip,
+                    $userAgent
+                );
+
+                try {
+                    ActivityLog::logFailedLogin($user->email, $ip, $userAgent);
+                } catch (\Exception $e) {
+                    Log::warning('Failed to log inactive-org login attempt: '.$e->getMessage());
+                }
+
+                return response()->json([
+                    'message' => self::UNIFIED_LOGIN_ERROR_MESSAGE,
+                    'reason' => 'organization_inactive',
+                ], 401);
+            }
+
             // 5. تسجيل الدخول الناجح
             $this->securityService->recordSuccessfulLogin($user, $ip, $userAgent);
 
