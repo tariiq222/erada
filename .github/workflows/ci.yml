@@ -433,4 +433,8 @@ jobs:
           DB_USERNAME: iradah
           DB_PASSWORD: secret
           SANCTUM_STATEFUL_DOMAINS: localhost:8000,127.0.0.1:8000
-        run: npx playwright test e2e/core-auth-and-orgs.spec.ts --project=chromium
+        run: |
+          # The contract PHPUnit tests use RefreshDatabase and may replace the
+          # seeded demo rows; restore the browser fixture after those tests.
+          php artisan users:reset-demo-passwords
+          npx playwright test e2e/core-auth-and-orgs.spec.ts --project=chromium
