@@ -102,7 +102,7 @@ test.describe('Core — Admin Dashboard & Organizations', () => {
     await page.request.get('/sanctum/csrf-cookie');
     const response = await page.request.post('/api/login', {
       data: { email: 'admin@admin.com', password: 'password' },
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'X-Skip-Csrf': '1' },
     });
     expect(response.ok()).toBeTruthy();
     await page.goto('/dashboard');
