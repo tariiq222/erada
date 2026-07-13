@@ -80,6 +80,15 @@ export interface Recommendation {
   decidable?: { id: number; name: string } | null;
   deferredBy?: { id: number; name: string } | null;
   tasks?: RecommendationTaskLink[];
+  allowed_actions?: {
+    update: boolean;
+    delete: boolean;
+    approve: boolean;
+    accept: boolean;
+    reject: boolean;
+    defer: boolean;
+    complete: boolean;
+  };
   // Legacy compat (Direction A → B). The standalone Recommendation pages
   // still read these. They will be deleted in Phase R4.
   /** @deprecated use meeting_id + a separate Decision join if needed. */
@@ -143,8 +152,8 @@ export interface MeetingAttendeePivot {
 export interface MeetingAttendee {
   id: number;
   name: string;
-  email: string;
-  pivot: MeetingAttendeePivot;
+  email?: string;
+  pivot?: MeetingAttendeePivot;
 }
 
 export interface Meeting {
@@ -176,6 +185,11 @@ export interface Meeting {
   recommendations_count?: number;
   decisions?: Array<{ id: number; title: string; reference_number: string }>;
   recommendations?: Array<{ id: number; title: string; reference_number: string }>;
+  allowed_actions?: {
+    update: boolean;
+    delete: boolean;
+    view_agenda: boolean;
+  };
 }
 
 export interface MeetingCategory {

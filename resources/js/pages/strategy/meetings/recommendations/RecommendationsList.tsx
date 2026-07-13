@@ -12,7 +12,6 @@ const RecommendationsList: React.FC = () => {
     useRecommendationsList();
 
   const canCreate = useCan('recommendations.create');
-  const canEdit = useCan('recommendations.edit');
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -21,7 +20,6 @@ const RecommendationsList: React.FC = () => {
       <RecommendationsTable
         recommendations={recommendations}
         loading={loading}
-        canEdit={canEdit}
         currentPage={pagination.currentPage}
         lastPage={pagination.lastPage}
         total={pagination.total}

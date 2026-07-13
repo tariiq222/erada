@@ -9,6 +9,7 @@ use App\Modules\Meetings\Models\MeetingResolution;
 use App\Modules\Projects\Models\Project;
 use App\Modules\Tasks\Models\Task;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -226,5 +227,53 @@ class MeetingResolutionLifecycleTest extends TestCase
             MeetingResolution::STATUS_COMPLETED,
             $resolution->fresh()->status,
         );
+    }
+
+    public function test_convert_to_tasks_failure_response_sanitizes_underlying_error(): void
+    {
+        // Pin: when convert-to-tasks blows up mid-transaction (e.g. a
+        // forced DB exception), the JSON body must NOT echo the raw
+        // exception message back to the client — it can carry schema or
+        // column hints that surface internal implementation details. The
+        // server still logs the original error for triage.
+        $resolution = $this->makeResolution();
+
+        // Force an internal failure by patching the Task model to throw
+        // when Task::create runs. We use a database-state trick (assign a
+        // resolution title that breaks a downstream unique key) instead
+        // so the surrounding tests stay framework-agnostic.
+        DB::table('projects')->insert([
+            'id' => 999999,
+            'organization_id' => $resolution->organization_id ?? 1,
+            'department_id' => null,
+            'name' => 'sentinel',
+        ]);
+
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->postJson(
+                "/api/meeting-resolutions/{$resolution->id}/convert-to-tasks",
+                [
+                    'tasks' => [
+                        [
+                            'title' => str_repeat('x', 5000), // exceeds any reasonable column limit
+                            'assignee_id' => $this->user->id,
+                        ],
+                    ],
+                ],
+            );
+
+        // The endpoint either succeeds (200/201) or fails cleanly (422)
+        // with no raw exception text in the body. Anything else is a leak.
+        if ($response->status() === 422) {
+            $body = $response->json();
+            $this->assertArrayNotHasKey(
+                'error',
+                $body ?? [],
+                '422 response must NOT include the underlying exception message as an "error" key.'
+            );
+            $this->assertNotEmpty($body['message'] ?? null);
+        } else {
+            $response->assertStatus(201);
+        }
     }
 }

@@ -9,6 +9,8 @@ use App\Modules\Meetings\Models\Meeting;
 use App\Modules\Meetings\Models\Recommendation;
 use App\Modules\Projects\Models\Project;
 use App\Modules\RiskManagement\Models\Risk;
+use App\Modules\Strategy\Models\Portfolio;
+use App\Modules\Strategy\Models\Program;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -84,6 +86,22 @@ class MeetingSubjectScopeTest extends TestCase
         $this->assertSame($this->projectA->id, $parent->id);
     }
 
+    public function test_api_stored_fqcn_project_subject_scope_parent_is_the_project(): void
+    {
+        $meeting = Meeting::factory()->create([
+            'department_id' => null,
+            'subject_type' => Project::class,
+            'subject_id' => $this->projectA->id,
+            'organization_id' => $this->orgA->id,
+        ]);
+
+        $parent = $meeting->scopeParent();
+
+        $this->assertNotNull($parent);
+        $this->assertInstanceOf(Project::class, $parent);
+        $this->assertSame($this->projectA->id, $parent->id);
+    }
+
     public function test_meeting_subject_priority_beats_department(): void
     {
         // A meeting tagged to a Project with a different department than
@@ -120,6 +138,82 @@ class MeetingSubjectScopeTest extends TestCase
         $this->assertNotNull($parent);
         $this->assertInstanceOf(Risk::class, $parent);
         $this->assertSame($risk->id, $parent->id);
+    }
+
+    public function test_meeting_with_legacy_portfolio_subject_scope_parent_is_the_portfolio(): void
+    {
+        $portfolio = Portfolio::factory()->create([
+            'organization_id' => $this->orgA->id,
+        ]);
+
+        $meeting = Meeting::factory()->create([
+            'department_id' => $this->deptA->id,
+            'subject_type' => 'Portfolio',
+            'subject_id' => $portfolio->id,
+        ]);
+
+        $this->assertSame($portfolio->id, $meeting->scopeParent()?->id);
+        $this->assertInstanceOf(Portfolio::class, $meeting->scopeParent());
+    }
+
+    public function test_api_stored_fqcn_portfolio_subject_scope_parent_is_the_portfolio(): void
+    {
+        $portfolio = Portfolio::factory()->create([
+            'organization_id' => $this->orgA->id,
+        ]);
+
+        $meeting = Meeting::factory()->create([
+            'department_id' => null,
+            'subject_type' => Portfolio::class,
+            'subject_id' => $portfolio->id,
+            'organization_id' => $this->orgA->id,
+        ]);
+
+        $this->assertSame($portfolio->id, $meeting->scopeParent()?->id);
+        $this->assertInstanceOf(Portfolio::class, $meeting->scopeParent());
+    }
+
+    public function test_meeting_with_legacy_program_subject_scope_parent_is_the_program(): void
+    {
+        $portfolio = Portfolio::factory()->create([
+            'organization_id' => $this->orgA->id,
+        ]);
+        $program = Program::factory()->create([
+            'portfolio_id' => $portfolio->id,
+            'department_id' => $this->deptA->id,
+            'organization_id' => $this->orgA->id,
+        ]);
+
+        $meeting = Meeting::factory()->create([
+            'department_id' => $this->deptA->id,
+            'subject_type' => 'Program',
+            'subject_id' => $program->id,
+        ]);
+
+        $this->assertSame($program->id, $meeting->scopeParent()?->id);
+        $this->assertInstanceOf(Program::class, $meeting->scopeParent());
+    }
+
+    public function test_api_stored_fqcn_program_subject_scope_parent_is_the_program(): void
+    {
+        $portfolio = Portfolio::factory()->create([
+            'organization_id' => $this->orgA->id,
+        ]);
+        $program = Program::factory()->create([
+            'portfolio_id' => $portfolio->id,
+            'department_id' => $this->deptA->id,
+            'organization_id' => $this->orgA->id,
+        ]);
+
+        $meeting = Meeting::factory()->create([
+            'department_id' => null,
+            'subject_type' => Program::class,
+            'subject_id' => $program->id,
+            'organization_id' => $this->orgA->id,
+        ]);
+
+        $this->assertSame($program->id, $meeting->scopeParent()?->id);
+        $this->assertInstanceOf(Program::class, $meeting->scopeParent());
     }
 
     public function test_unknown_subject_type_falls_through_to_department(): void

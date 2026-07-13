@@ -229,10 +229,11 @@ class DirectionBSelfApprovalTest extends TestCase
 
         $policy = new RecommendationPolicy;
 
-        // The action_item policy actions route through update() (the
-        // accept/reject/defer/complete surface) — they should not trigger
-        // the self-approval block.
-        $this->assertTrue($policy->approve($user, $actionItem)); // routes to RECOMMENDATIONS_ACCEPT
+        // Action items use their dedicated accept ability; approve is
+        // ruling-only. Accept/reject/defer must not trigger the ruling
+        // self-approval block.
+        $this->assertFalse($policy->approve($user, $actionItem));
+        $this->assertTrue($policy->accept($user, $actionItem));
         $this->assertTrue($policy->reject($user, $actionItem)); // shared reject
         $this->assertTrue($policy->defer($user, $actionItem));  // shared defer
     }

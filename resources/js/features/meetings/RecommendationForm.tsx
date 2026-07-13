@@ -16,7 +16,7 @@ import {
 } from '@shared/ui';
 import { IconClipboardCheck, IconClipboardList, IconDeviceFloppy, IconX } from '@shared/ui/icons';
 import { useToast } from '@shared/ui/Toast';
-import { recommendationsApi } from './api';
+import { meetingsApi, recommendationsApi } from './api';
 import { usersApi } from '@entities/user';
 import type {
   DecidableAlias,
@@ -66,6 +66,7 @@ const PRIORITY_OPTIONS: { value: RecommendationPriority; labelKey: string }[] = 
 ];
 
 interface FormState {
+  meeting_id: string;
   kind: RecommendationKind;
   title: string;
   description: string;
@@ -90,11 +91,13 @@ const FQCN_TO_ALIAS: Record<string, DecidableAlias> = {
 
 const buildInitial = (
   initial: Partial<Recommendation> | undefined,
+  prefill: RecommendationFormProps['prefill'],
 ): FormState => {
   const decidableAlias = initial?.decidable_type
     ? (FQCN_TO_ALIAS[initial.decidable_type] ?? '')
     : '';
   return {
+    meeting_id: prefill?.meeting_id ? String(prefill.meeting_id) : initial?.meeting_id ? String(initial.meeting_id) : '',
     kind: initial?.kind ?? 'ruling',
     title: initial?.title ?? '',
     description: initial?.description ?? '',
@@ -118,11 +121,26 @@ const RecommendationForm: React.FC<RecommendationFormProps> = ({
 }) => {
   const { t } = useTranslation();
   const { showToast } = useToast();
-  const [data, setData] = useState<FormState>(() => buildInitial(initial));
+  const [data, setData] = useState<FormState>(() => buildInitial(initial, prefill));
   const [users, setUsers] = useState<UserOption[]>([]);
+  const [meetings, setMeetings] = useState<Array<{ id: number; title: string; reference_number: string }>>([]);
   const [saving, setSaving] = useState(false);
 
-  const meetingId = prefill?.meeting_id ?? initial?.meeting_id ?? null;
+  useEffect(() => {
+    setData(buildInitial(initial, prefill));
+  // Reinitialize only when the loaded record or fixed meeting changes; full
+  // object dependencies would wipe in-progress edits on parent re-renders.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial?.id, prefill?.meeting_id]);
+
+  useEffect(() => {
+    meetingsApi.getAll({ per_page: '100' })
+      .then((res) => {
+        const list = (res as { data?: Array<{ id: number; title: string; reference_number: string }> }).data ?? [];
+        setMeetings(list);
+      })
+      .catch(() => setMeetings([]));
+  }, []);
 
   useEffect(() => {
     // Lazy-load users only when the assignee picker is reachable.
@@ -130,7 +148,7 @@ const RecommendationForm: React.FC<RecommendationFormProps> = ({
     usersApi
       .getList()
       .then((res) => {
-        const list = (res as unknown as UserOption[]) ?? [];
+        const list = (Array.isArray(res) ? res : (res as { data?: UserOption[] }).data) ?? [];
         setUsers(list);
       })
       .catch(() => setUsers([]));
@@ -141,6 +159,7 @@ const RecommendationForm: React.FC<RecommendationFormProps> = ({
   };
 
   const validationError = useMemo<string | null>(() => {
+    if (!data.meeting_id) return t('common.required');
     if (!data.title.trim()) return t('common.required');
     if (data.kind === 'ruling' && !data.type) return t('common.required');
     if (data.kind === 'action_item' && !data.assignee_id) return t('common.required');
@@ -161,10 +180,11 @@ const RecommendationForm: React.FC<RecommendationFormProps> = ({
     setSaving(true);
     try {
       const payload = {
-        meeting_id: meetingId,
+        meeting_id: Number(data.meeting_id),
         kind: data.kind,
         title: data.title.trim(),
         description: data.description.trim() || null,
+        priority: data.priority,
         decidable_type: data.decidable_type || null,
         decidable_id: data.decidable_id ? Number(data.decidable_id) : null,
         ...(data.kind === 'ruling'
@@ -176,14 +196,12 @@ const RecommendationForm: React.FC<RecommendationFormProps> = ({
           : {
               assignee_id: data.assignee_id ? Number(data.assignee_id) : null,
               due_date: data.due_date || null,
-              priority: data.priority,
             }),
       };
       const result = initial?.id
         ? await recommendationsApi.update(initial.id, payload)
         : await recommendationsApi.create(payload);
-      const recommendation = ((result as { data?: Recommendation }).data ??
-        result) as Recommendation;
+      const recommendation = result as Recommendation;
       showToast(
         'success',
         initial?.id
@@ -192,7 +210,9 @@ const RecommendationForm: React.FC<RecommendationFormProps> = ({
       );
       if (onSuccess) onSuccess(recommendation);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : t('common.error_occurred');
+      const msg = typeof err === 'object' && err !== null && 'message' in err && typeof err.message === 'string'
+        ? err.message
+        : t('common.error_occurred');
       showToast('error', msg);
     } finally {
       setSaving(false);
@@ -225,6 +245,21 @@ const RecommendationForm: React.FC<RecommendationFormProps> = ({
               <Radio value="action_item" label={t('meetings.recommendation.form.kind_action_item', { defaultValue: 'إجراء (مهمة)' })} />
             </RadioGroup>
           </div>
+
+          <Select
+            label={t('meetings.recommendation.fields.meeting', { defaultValue: 'الاجتماع' })}
+            value={data.meeting_id}
+            onChange={(e) => setField('meeting_id', e.target.value)}
+            options={[
+              { value: '', label: t('meetings.recommendation.form.select_meeting', { defaultValue: 'اختر الاجتماع' }) },
+              ...meetings.map((meeting) => ({
+                value: String(meeting.id),
+                label: `${meeting.reference_number} — ${meeting.title}`,
+              })),
+            ]}
+            disabled={Boolean(prefill?.meeting_id)}
+            required
+          />
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input

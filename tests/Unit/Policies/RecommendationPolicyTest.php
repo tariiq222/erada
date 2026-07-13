@@ -213,7 +213,7 @@ class RecommendationPolicyTest extends TestCase
 
     // ========== Phase 5.B — before() super_admin hook ==========
 
-    public function test_super_admin_before_hook_short_circuits_to_true(): void
+    public function test_super_admin_before_hook_preserves_lifecycle_invariants(): void
     {
         $sa = $this->makeUser('super_admin');
 
@@ -222,9 +222,11 @@ class RecommendationPolicyTest extends TestCase
         $this->assertTrue($this->policy->before($sa, 'create'));
         $this->assertTrue($this->policy->before($sa, 'update'));
         $this->assertTrue($this->policy->before($sa, 'delete'));
-        $this->assertTrue($this->policy->before($sa, 'approve'));
-        $this->assertTrue($this->policy->before($sa, 'reject'));
-        $this->assertTrue($this->policy->before($sa, 'defer'));
+        $this->assertNull($this->policy->before($sa, 'approve'));
+        $this->assertNull($this->policy->before($sa, 'reject'));
+        $this->assertNull($this->policy->before($sa, 'defer'));
+        $this->assertNull($this->policy->before($sa, 'accept'));
+        $this->assertNull($this->policy->before($sa, 'complete'));
     }
 
     public function test_non_super_admin_before_hook_returns_null(): void

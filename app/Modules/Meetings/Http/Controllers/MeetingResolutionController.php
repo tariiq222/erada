@@ -14,6 +14,7 @@ use App\Modules\Meetings\Models\ResolutionLink;
 use App\Modules\Meetings\Notifications\ResolutionConvertedToTasksNotification;
 use App\Modules\Meetings\Notifications\ResolutionRecordedNotification;
 use App\Modules\Meetings\Support\MeetingOrgGuard;
+use App\Modules\Projects\Models\Project;
 use App\Modules\Tasks\Enums\TaskStatus;
 use App\Modules\Tasks\Enums\TaskType;
 use App\Modules\Tasks\Models\Task;
@@ -22,6 +23,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Phase 1 / Direction R — Meeting Resolutions Foundation.
@@ -217,16 +219,24 @@ class MeetingResolutionController extends Controller
         $validated = $request->validated();
 
         $resolution = DB::transaction(function () use ($resolution, $validated) {
-            $resolution->update($validated);
+            // Serialize links-only replacements as well as attribute updates.
+            // Without locking the parent, two requests can both delete and
+            // reinsert pivots, producing a mixed last-writer result.
+            $lockedResolution = MeetingResolution::query()
+                ->whereKey($resolution->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $lockedResolution->update($validated);
 
             if (array_key_exists('links', $validated)) {
-                $resolution->links()->delete();
+                $lockedResolution->links()->delete();
                 if (! empty($validated['links'])) {
-                    $this->syncLinks($resolution, $validated['links']);
+                    $this->syncLinks($lockedResolution, $validated['links']);
                 }
             }
 
-            return $resolution->fresh();
+            return $lockedResolution->fresh();
         });
 
         $resolution->load(['owner:id,name', 'creator:id,name', 'links']);
@@ -307,39 +317,71 @@ class MeetingResolutionController extends Controller
     {
         $this->authorize('convertToTasks', $resolution);
 
-        // Re-conversion guard: once a resolution has spawned tasks it cannot
-        // spawn another batch. The SPA disables the button after the first
-        // successful call; this 409 protects against duplicate POSTs.
-        if (! $resolution->canTransitionTo(MeetingResolution::STATUS_CONVERTED_TO_TASKS)) {
-            return response()->json(['message' => 'لا يمكن تحويل المخرج في الحالة الحالية'], 409);
-        }
-
         $payload = $request->validated()['tasks'];
         $authId = auth()->id();
 
-        // Resolve linkable-type metadata from the resolution_links pivot
-        // so a single resolution can simultaneously link to a project (via
-        // tasks.project_id) and a risk (via a separate Task with
-        // source_type='Risk'). Currently the tasks schema has no `risk_id`
-        // column, so risk linking is exposed in the payload but rejected
-        // at validation time — see ConvertResolutionToTasksRequest.
-        $resolution->loadMissing('links');
-
         try {
             $created = DB::transaction(function () use ($resolution, $payload, $authId) {
+                // Serialize conversion attempts on the canonical row. Route
+                // model binding happens before this transaction and can be
+                // stale by the time the request reaches the controller.
+                $lockedResolution = MeetingResolution::query()
+                    ->whereKey($resolution->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                if (! $lockedResolution->canTransitionTo(MeetingResolution::STATUS_CONVERTED_TO_TASKS)) {
+                    return null;
+                }
+
+                $links = $lockedResolution->links()->lockForUpdate()->get();
+                $lockedResolution->setRelation('links', $links);
+                $lockedResolution->loadMissing('meeting:id,department_id');
+
+                $fallbackProjectId = $links
+                    ->firstWhere('linkable_type', ResolutionLink::TYPE_PROJECT)
+                    ?->linkable_id;
+                $resolvedProjectIds = [];
+                foreach ($payload as $index => $taskInput) {
+                    $projectId = $taskInput['project_id'] ?? $fallbackProjectId;
+                    $resolvedProjectIds[$index] = $projectId === null ? null : (int) $projectId;
+                }
+
+                // FormRequest validation protects the normal request path,
+                // while this check is deliberately inside the row-locked
+                // transaction. It closes the super-admin bypass and the race
+                // where a project/link changes between validation and insert.
+                $candidateProjectIds = array_values(array_unique(array_filter(
+                    $resolvedProjectIds,
+                    fn (?int $projectId): bool => $projectId !== null,
+                )));
+                $validProjectIds = empty($candidateProjectIds)
+                    ? []
+                    : Project::query()
+                        ->whereIn('id', $candidateProjectIds)
+                        ->where('organization_id', $lockedResolution->organization_id)
+                        ->sharedLock()
+                        ->pluck('id')
+                        ->map(fn ($projectId): int => (int) $projectId)
+                        ->all();
+
+                $projectErrors = [];
+                foreach ($resolvedProjectIds as $index => $projectId) {
+                    if ($projectId !== null && ! in_array($projectId, $validProjectIds, true)) {
+                        $projectErrors["tasks.{$index}.project_id"] = 'المشروع غير موجود أو لا ينتمي إلى مؤسسة المخرج.';
+                    }
+                }
+                if ($projectErrors !== []) {
+                    throw ValidationException::withMessages($projectErrors);
+                }
+
                 $rows = [];
-                $assigneeTaskInputs = []; // assignee_id => [row, ...] (in-order)
-                foreach ($payload as $taskInput) {
+                foreach ($payload as $index => $taskInput) {
                     // Derive project_id from the payload OR (if absent) from
                     // a `linkable_type=project` resolution_link, so a
                     // resolution linked to a project auto-attaches all
                     // spawned tasks to it.
-                    $projectId = $taskInput['project_id'] ?? null;
-                    if ($projectId === null) {
-                        $projectLink = $resolution->links
-                            ->firstWhere('linkable_type', ResolutionLink::TYPE_PROJECT);
-                        $projectId = $projectLink?->linkable_id;
-                    }
+                    $projectId = $resolvedProjectIds[$index];
 
                     $assignee = (int) $taskInput['assignee_id'];
                     $row = [
@@ -359,42 +401,48 @@ class MeetingResolutionController extends Controller
                         'owner_id' => $authId,
                         'created_by' => $authId,
                         'project_id' => $projectId,
-                        'department_id' => $resolution->meeting?->department_id,
+                        'department_id' => $lockedResolution->meeting?->department_id,
                         // Phase 3 polymorphic source: short basename token
                         // (matching Task::SOURCE_CLASS_MAP). Engine walks
                         // MeetingResolution → Meeting → Department on
                         // scopeParent().
                         'source_type' => 'MeetingResolution',
-                        'source_id' => $resolution->id,
-                        'organization_id' => $resolution->organization_id,
+                        'source_id' => $lockedResolution->id,
+                        'organization_id' => $lockedResolution->organization_id,
                         'created_at' => now(),
                         'updated_at' => now(),
                     ];
                     $rows[] = $row;
-                    $assigneeTaskInputs[$assignee][] = $row;
                 }
 
-                // Bulk insert is faster than N round-trips and respects the
-                // outer transaction. If any row fails validation the whole
-                // batch rolls back via the DB::transaction wrapper.
-                Task::insert($rows);
+                // Capture every generated bigint id from PostgreSQL RETURNING
+                // so the response and notifications refer only to this request.
+                // Query Builder insertGetId() avoids model events just like the
+                // previous bulk insert while removing the time-window heuristic.
+                $insertedTaskIds = [];
+                foreach ($rows as $row) {
+                    $insertedTaskIds[] = (int) DB::table('tasks')->insertGetId($row, 'id');
+                }
 
-                // Reload the inserted rows so we can group them by assignee
-                // for the post-commit notification. We use insert() + reload
-                // instead of ::create() per row to keep the payload compact
-                // and avoid N+1 model events firing on sibling rows.
-                $tasks = Task::query()
-                    ->where('source_type', 'MeetingResolution')
-                    ->where('source_id', $resolution->id)
-                    ->where('created_at', '>=', now()->subSeconds(2))
-                    ->orderBy('id')
-                    ->limit(count($rows))
-                    ->get();
+                $tasksById = Task::query()
+                    ->whereKey($insertedTaskIds)
+                    ->get()
+                    ->keyBy(fn (Task $task): int => (int) $task->id);
+                $tasks = collect($insertedTaskIds)
+                    ->map(function (int $taskId) use ($tasksById): Task {
+                        $task = $tasksById->get($taskId);
+
+                        if (! $task instanceof Task) {
+                            throw new \RuntimeException("Inserted task {$taskId} could not be reloaded.");
+                        }
+
+                        return $task;
+                    });
 
                 // Flip the resolution status — this is the canonical
                 // signal for the SPA to hide the convert button and
                 // surface the tasks_count / completion_percentage card.
-                $resolution->update([
+                $lockedResolution->update([
                     'status' => MeetingResolution::STATUS_CONVERTED_TO_TASKS,
                 ]);
 
@@ -413,16 +461,27 @@ class MeetingResolutionController extends Controller
                     'per_assignee' => $perAssignee,
                 ];
             });
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             Log::error('Failed to convert meeting resolution to tasks', [
                 'resolution_id' => $resolution->id,
                 'error' => $e->getMessage(),
             ]);
 
+            // Deliberately do NOT echo the underlying exception message
+            // back to the client — it can carry schema/column names,
+            // stack-trace hints, or other internal implementation details.
+            // The original message is preserved in the log above for
+            // ops triage; the API surfaces only a localized generic
+            // string.
             return response()->json([
                 'message' => 'فشل تحويل المخرج إلى مهام',
-                'error' => $e->getMessage(),
             ], 422);
+        }
+
+        if ($created === null) {
+            return response()->json(['message' => 'لا يمكن تحويل المخرج في الحالة الحالية'], 409);
         }
 
         $createdTasks = $created['tasks'] ?? collect();
@@ -519,6 +578,12 @@ class MeetingResolutionController extends Controller
      */
     protected function syncLinks(MeetingResolution $resolution, array $links): void
     {
+        if (DB::transactionLevel() < 1) {
+            throw new \LogicException('Resolution links must be synchronized inside a database transaction.');
+        }
+
+        $this->validateAndLockLinkTargets($resolution, $links);
+
         $authId = auth()->id();
         $rows = [];
         foreach ($links as $link) {
@@ -533,6 +598,60 @@ class MeetingResolutionController extends Controller
             ];
         }
         ResolutionLink::insert($rows);
+    }
+
+    /**
+     * Revalidate link targets in the write transaction and hold shared row
+     * locks until the pivot insert commits. This prevents a target from being
+     * soft-deleted or moved to another organization after FormRequest UX
+     * validation but before the resolution link is persisted.
+     *
+     * @param  array<int, array{linkable_type:string, linkable_id:int, link_role?:string|null}>  $links
+     */
+    protected function validateAndLockLinkTargets(MeetingResolution $resolution, array $links): void
+    {
+        $validIdsByType = [];
+
+        foreach (ResolutionLink::typeValues() as $type) {
+            $requestedIds = collect($links)
+                ->where('linkable_type', $type)
+                ->pluck('linkable_id')
+                ->map(fn ($linkableId): int => (int) $linkableId)
+                ->unique()
+                ->values()
+                ->all();
+
+            if ($requestedIds === []) {
+                continue;
+            }
+
+            $linkableClass = ResolutionLink::resolveClass($type);
+            if ($linkableClass === null) {
+                continue;
+            }
+
+            $validIdsByType[$type] = $linkableClass::query()
+                ->whereKey($requestedIds)
+                ->where('organization_id', $resolution->organization_id)
+                ->sharedLock()
+                ->pluck('id')
+                ->map(fn ($linkableId): int => (int) $linkableId)
+                ->all();
+        }
+
+        $errors = [];
+        foreach ($links as $index => $link) {
+            $type = $link['linkable_type'];
+            $linkableId = (int) $link['linkable_id'];
+
+            if (! in_array($linkableId, $validIdsByType[$type] ?? [], true)) {
+                $errors["links.{$index}.linkable_id"] = 'العنصر المرتبط غير موجود أو لا ينتمي إلى مؤسسة الاجتماع.';
+            }
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
     }
 
     protected function notifyOwnerIfNew(MeetingResolution $resolution): void

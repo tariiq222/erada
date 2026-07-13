@@ -35,8 +35,6 @@ const MeetingView: React.FC = () => {
   const { meeting, loading, deleting, remove, start, complete, cancel } = useMeetingView(id);
   const [showDelete, setShowDelete] = useState(false);
 
-  const canEdit = useCan('meetings.edit');
-  const canDelete = useCan('meetings.delete');
   // Phase 1 / Direction R: the new ResolutionsSection consumes a wider
   // permission shape than the legacy Recommendation-backed section did.
   // We grant everything via the engine — `useCan` falls back to
@@ -52,6 +50,10 @@ const MeetingView: React.FC = () => {
   const canResCancel = useCan('meeting_resolutions.cancel');
 
   if (loading || !meeting) return <MeetingViewSkeleton />;
+
+  const canEdit = meeting.allowed_actions?.update ?? false;
+  const canDelete = meeting.allowed_actions?.delete ?? false;
+  const canViewAgenda = meeting.allowed_actions?.view_agenda ?? false;
 
   return (
     <div className="space-y-4">
@@ -92,10 +94,10 @@ const MeetingView: React.FC = () => {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-4">
           <MeetingOverview meeting={meeting} />
-          <MeetingAgenda meetingId={meeting.id} currentUserId={user?.id} />
+          {canViewAgenda && <MeetingAgenda meetingId={meeting.id} currentUserId={user?.id} />}
         </div>
         <div className="space-y-4">
-          <MeetingStatusActions meeting={meeting} onStart={start} onComplete={complete} onCancel={cancel} />
+          {canEdit && <MeetingStatusActions meeting={meeting} canEdit onStart={start} onComplete={complete} onCancel={cancel} />}
           <MeetingAttendees meeting={meeting} />
         </div>
       </div>

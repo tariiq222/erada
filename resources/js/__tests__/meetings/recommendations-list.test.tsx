@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('@shared/contexts/AuthContext', () => ({
@@ -41,6 +41,7 @@ vi.mock('@features/meetings/api', () => ({
           status_label: 'مقترح',
           priority_label: 'متوسطة',
           is_overdue: false,
+          allowed_actions: { update: true, delete: false },
           decision: { id: 18, title: 'قرار', reference_number: 'DEC-2026-0018' },
           assignee: { id: 7, name: 'أحمد' },
         },
@@ -66,7 +67,11 @@ describe('RecommendationsList', () => {
         <RecommendationsList />
       </MemoryRouter>,
     );
-    await waitFor(() => expect(screen.getByText('توصية اختبار')).toBeInTheDocument());
+    expect(await screen.findByText('توصية اختبار')).toBeInTheDocument();
     expect(screen.getByText('REC-2026-0001')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'common.edit' })).toHaveAttribute(
+      'href',
+      '/strategy/meetings/recommendations/1/edit',
+    );
   });
 });

@@ -6,6 +6,11 @@ import { useToast } from '@shared/ui/Toast';
 import { meetingsApi } from '@features/meetings/api';
 import type { Meeting } from '@features/meetings/types';
 
+const messageFor = (err: unknown, fallback: string): string =>
+  typeof err === 'object' && err !== null && 'message' in err && typeof err.message === 'string'
+    ? err.message
+    : fallback;
+
 export function useMeetingView(id: string | undefined) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -40,8 +45,7 @@ export function useMeetingView(id: string | undefined) {
       showToast('success', t('meetings.meeting.messages.deleted'));
       navigate('/strategy/meetings');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : t('common.error_occurred');
-      showToast('error', msg);
+      showToast('error', messageFor(err, t('common.error_occurred')));
     } finally {
       setDeleting(false);
     }
@@ -54,7 +58,9 @@ export function useMeetingView(id: string | undefined) {
       showToast('success', t('meetings.meeting.messages.started'));
       await fetch();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : t('common.error_occurred');
+      const msg = typeof err === 'object' && err !== null && 'message' in err && typeof err.message === 'string'
+        ? err.message
+        : t('common.error_occurred');
       showToast('error', msg);
     }
   }, [meeting, fetch, showToast, t]);
@@ -66,7 +72,9 @@ export function useMeetingView(id: string | undefined) {
       showToast('success', t('meetings.meeting.messages.completed_msg'));
       await fetch();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : t('common.error_occurred');
+      const msg = typeof err === 'object' && err !== null && 'message' in err && typeof err.message === 'string'
+        ? err.message
+        : t('common.error_occurred');
       showToast('error', msg);
     }
   }, [meeting, fetch, showToast, t]);
@@ -78,8 +86,7 @@ export function useMeetingView(id: string | undefined) {
       showToast('success', t('meetings.meeting.messages.cancelled_msg'));
       await fetch();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : t('common.error_occurred');
-      showToast('error', msg);
+      showToast('error', messageFor(err, t('common.error_occurred')));
     }
   }, [meeting, fetch, showToast, t]);
 

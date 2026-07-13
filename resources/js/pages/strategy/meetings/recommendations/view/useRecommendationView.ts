@@ -5,6 +5,11 @@ import { useToast } from '@shared/ui/Toast';
 import { recommendationsApi } from '@features/meetings/api';
 import type { Recommendation } from '@features/meetings/types';
 
+const messageFor = (err: unknown, fallback: string): string =>
+  typeof err === 'object' && err !== null && 'message' in err && typeof err.message === 'string'
+    ? err.message
+    : fallback;
+
 export function useRecommendationView(id: string | undefined) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -40,25 +45,29 @@ export function useRecommendationView(id: string | undefined) {
       showToast('success', t('meetings.recommendation.messages.deleted'));
       navigate('/strategy/meetings/recommendations');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : t('common.error_occurred');
-      showToast('error', msg);
+      showToast('error', messageFor(err, t('common.error_occurred')));
     } finally {
       setDeleting(false);
     }
   }, [recommendation, navigate, showToast, t]);
 
   const transition = useCallback(
-    async (action: 'accept' | 'reject' | 'defer' | 'complete') => {
+    async (action: 'approve' | 'accept' | 'reject' | 'defer' | 'complete') => {
       if (!recommendation) return;
-      await recommendationsApi[action](recommendation.id);
-      const msgKey = {
-        accept: 'accepted',
-        reject: 'rejected',
-        defer: 'deferred',
-        complete: 'completed_msg',
-      }[action];
-      showToast('success', t(`meetings.recommendation.messages.${msgKey}`));
-      await fetch();
+      try {
+        await recommendationsApi[action](recommendation.id);
+        const msgKey = {
+          approve: 'approved',
+          accept: 'accepted',
+          reject: 'rejected',
+          defer: 'deferred',
+          complete: 'completed_msg',
+        }[action];
+        showToast('success', t(`meetings.recommendation.messages.${msgKey}`));
+        await fetch();
+      } catch (err: unknown) {
+        showToast('error', messageFor(err, t('common.error_occurred')));
+      }
     },
     [recommendation, fetch, showToast, t],
   );
@@ -68,6 +77,7 @@ export function useRecommendationView(id: string | undefined) {
     loading,
     deleting,
     remove,
+    approve: () => transition('approve'),
     accept: () => transition('accept'),
     reject: () => transition('reject'),
     defer: () => transition('defer'),

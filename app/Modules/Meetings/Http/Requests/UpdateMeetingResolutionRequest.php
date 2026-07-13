@@ -3,14 +3,16 @@
 namespace App\Modules\Meetings\Http\Requests;
 
 use App\Modules\Core\Http\Requests\Concerns\ScopesUsersToOrganization;
+use App\Modules\Meetings\Http\Requests\Concerns\ValidatesResolutionLinks;
 use App\Modules\Meetings\Models\MeetingResolution;
 use App\Modules\Meetings\Models\ResolutionLink;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class UpdateMeetingResolutionRequest extends FormRequest
 {
-    use ScopesUsersToOrganization;
+    use ScopesUsersToOrganization, ValidatesResolutionLinks;
 
     public function authorize(): bool
     {
@@ -32,5 +34,16 @@ class UpdateMeetingResolutionRequest extends FormRequest
             'links.*.linkable_id' => ['required_with:links', 'integer', 'min:1'],
             'links.*.link_role' => ['nullable', Rule::in(ResolutionLink::roleValues())],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            $resolution = $this->route('resolution');
+
+            if ($resolution instanceof MeetingResolution) {
+                $this->validateResolutionLinks($validator, $resolution->organization_id);
+            }
+        });
     }
 }

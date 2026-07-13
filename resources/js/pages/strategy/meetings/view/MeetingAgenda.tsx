@@ -38,8 +38,11 @@ const MeetingAgenda: React.FC<Props> = ({ meetingId, currentUserId }) => {
       setItems(res.data);
       setCanManage(res.can_manage);
       setRequestedAt(res.agenda_requested_at);
-    } catch {
-      showToast('error', t('common.error_occurred'));
+    } catch (err: unknown) {
+      const message = typeof err === 'object' && err !== null && 'message' in err && typeof err.message === 'string'
+        ? err.message
+        : t('common.error_occurred');
+      showToast('error', message);
     } finally {
       setLoading(false);
     }
@@ -47,8 +50,7 @@ const MeetingAgenda: React.FC<Props> = ({ meetingId, currentUserId }) => {
 
   useEffect(() => { void load(); }, [load]);
 
-  const addItem = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const addItem = async () => {
     if (!title.trim()) return;
     setAdding(true);
     try {
@@ -57,8 +59,11 @@ const MeetingAgenda: React.FC<Props> = ({ meetingId, currentUserId }) => {
       setTitle('');
       setDescription('');
       showToast('success', res.message);
-    } catch {
-      showToast('error', t('common.error_occurred'));
+    } catch (err: unknown) {
+      const message = typeof err === 'object' && err !== null && 'message' in err && typeof err.message === 'string'
+        ? err.message
+        : t('common.error_occurred');
+      showToast('error', message);
     } finally {
       setAdding(false);
     }
@@ -133,7 +138,7 @@ const MeetingAgenda: React.FC<Props> = ({ meetingId, currentUserId }) => {
         )}
 
         {/* Option 1: write your own point */}
-        <form onSubmit={addItem} className="space-y-2 rounded-md border border-[var(--border-default)] p-3">
+        <div className="space-y-2 rounded-md border border-[var(--border-default)] p-3">
           <span className="block text-sm font-medium text-[var(--text-secondary)]">
             {canManage ? t('meetings.agenda.add_own') : t('meetings.agenda.add_as_invitee')}
           </span>
@@ -149,11 +154,11 @@ const MeetingAgenda: React.FC<Props> = ({ meetingId, currentUserId }) => {
             rows={2}
           />
           <div className="flex justify-end">
-            <Button type="submit" size="sm" leftIcon={<IconPlus className="h-4 w-4" />} disabled={adding || !title.trim()}>
+            <Button type="button" size="sm" leftIcon={<IconPlus className="h-4 w-4" />} onClick={addItem} disabled={adding || !title.trim()}>
               {t('meetings.agenda.add_button')}
             </Button>
           </div>
-        </form>
+        </div>
 
         {/* Approved agenda (the actual list) */}
         <div className="space-y-2">

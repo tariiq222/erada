@@ -14,12 +14,14 @@ use App\Modules\Meetings\Http\Requests\UpdateRecommendationRequest;
 use App\Modules\Meetings\Models\Meeting;
 use App\Modules\Meetings\Models\Recommendation;
 use App\Modules\Meetings\Notifications\RecommendationAssignedNotification;
+use App\Modules\Meetings\Support\DecidableType;
 use App\Modules\Meetings\Support\MeetingOrgGuard;
 use App\Modules\Shared\Traits\HasOrganizationScope;
 use App\Modules\Tasks\Models\Task;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
 
 class RecommendationController extends Controller
@@ -56,7 +58,7 @@ class RecommendationController extends Controller
         }
 
         $query = Recommendation::query()
-            ->with(['meeting:id,title', 'assignee:id,name'])
+            ->with(['meeting:id,title,reference_number', 'assignee:id,name'])
             ->visibleTo($user);
 
         if ($meetingId = $request->query('meeting_id')) {
@@ -80,10 +82,19 @@ class RecommendationController extends Controller
                 ->whereDate('due_date', '<', now());
         }
 
-        return response()->json(
-            $query->orderBy('due_date', 'asc')
-                ->paginate(min((int) $request->get('per_page', 15), 100))
-        );
+        $page = $query->orderBy('due_date', 'asc')
+            ->paginate(min((int) $request->get('per_page', 15), 100));
+
+        $page->setCollection($page->getCollection()->map(function (Recommendation $recommendation) {
+            $recommendation->setAttribute('allowed_actions', [
+                'update' => Gate::allows('update', $recommendation),
+                'delete' => Gate::allows('delete', $recommendation),
+            ]);
+
+            return $recommendation;
+        }));
+
+        return response()->json($page);
     }
 
     public function list(Request $request): JsonResponse
@@ -103,9 +114,20 @@ class RecommendationController extends Controller
     public function show(Recommendation $recommendation): JsonResponse
     {
         $this->authorize('view', $recommendation);
-        $recommendation->load(['meeting:id,title', 'assignee:id,name']);
+        $recommendation->load(['meeting:id,title,reference_number', 'assignee:id,name']);
 
-        return response()->json($recommendation);
+        $payload = $recommendation->toArray();
+        $payload['allowed_actions'] = [
+            'update' => Gate::allows('update', $recommendation),
+            'delete' => Gate::allows('delete', $recommendation),
+            'approve' => Gate::allows('approve', $recommendation),
+            'accept' => Gate::allows('accept', $recommendation),
+            'reject' => Gate::allows('reject', $recommendation),
+            'defer' => Gate::allows('defer', $recommendation),
+            'complete' => Gate::allows('complete', $recommendation),
+        ];
+
+        return response()->json($payload);
     }
 
     /**
@@ -119,6 +141,7 @@ class RecommendationController extends Controller
     public function store(StoreRecommendationRequest $request): JsonResponse
     {
         $validated = $request->validated();
+        $validated = $this->normalizeDecidableType($validated);
 
         if (! empty($validated['meeting_id'])) {
             $meeting = Meeting::find($validated['meeting_id']);
@@ -171,6 +194,7 @@ class RecommendationController extends Controller
     {
         $this->authorize('update', $recommendation);
         $validated = $request->validated();
+        $validated = $this->normalizeDecidableType($validated);
 
         // Phase 5.B: if the request moves the recommendation to a different
         // meeting, ensure the new meeting is in the actor's organization
@@ -218,7 +242,7 @@ class RecommendationController extends Controller
 
     public function accept(Recommendation $recommendation): JsonResponse
     {
-        $this->authorize('update', $recommendation);
+        $this->authorize('accept', $recommendation);
 
         return DB::transaction(function () use ($recommendation) {
             if (! $recommendation->canTransitionTo(Recommendation::STATUS_ACCEPTED)) {
@@ -336,7 +360,7 @@ class RecommendationController extends Controller
 
     public function complete(Recommendation $recommendation): JsonResponse
     {
-        $this->authorize('update', $recommendation);
+        $this->authorize('complete', $recommendation);
 
         // Completion gate (Direction B): an action_item recommendation cannot
         // be marked complete while it still has open (non-terminal) tasks
@@ -435,5 +459,14 @@ class RecommendationController extends Controller
             ->whereNotIn('status', ['completed', 'cancelled'])
             ->pluck('id')
             ->all();
+    }
+
+    private function normalizeDecidableType(array $validated): array
+    {
+        if (isset($validated['decidable_type'])) {
+            $validated['decidable_type'] = DecidableType::classFor($validated['decidable_type']);
+        }
+
+        return $validated;
     }
 }

@@ -19,10 +19,10 @@ use App\Modules\Meetings\Support\MeetingOrgGuard;
  *   reject(ruling)    ->  Capability::RECOMMENDATIONS_REJECT
  *   defer(ruling)     ->  Capability::RECOMMENDATIONS_DEFER
  *
- *   accept(action_item) -> Capability::RECOMMENDATIONS_ACCEPT (via update())
+ *   accept(action_item) -> Capability::RECOMMENDATIONS_ACCEPT
  *   reject(action_item) -> Capability::RECOMMENDATIONS_REJECT (shared with ruling)
  *   defer(action_item)  -> Capability::RECOMMENDATIONS_DEFER  (shared with ruling)
- *   complete(action_item) -> Capability::RECOMMENDATIONS_COMPLETE (via update())
+ *   complete(action_item) -> Capability::RECOMMENDATIONS_COMPLETE
  *
  * Self-approval block (ruling only): the user who recorded a recommendation
  * (requested_by) cannot also be the one who decides it (approve/reject/defer).
@@ -42,16 +42,26 @@ use App\Modules\Meetings\Support\MeetingOrgGuard;
  */
 class RecommendationPolicy
 {
+    /** @var array<int, string> */
+    public const LIFECYCLE_ABILITIES = [
+        'approve',
+        'reject',
+        'defer',
+        'accept',
+        'complete',
+    ];
+
     /**
-     * Super Admin يتجاوز كل الصلاحيات.
+     * Super admins bypass ordinary resource gates, but lifecycle actions must
+     * still reach their policy method so kind and four-eyes checks run.
      */
     public function before(User $user, string $ability): ?bool
     {
-        if ($user->isSuperAdmin()) {
-            return true;
+        if (! $user->isSuperAdmin()) {
+            return null;
         }
 
-        return null;
+        return in_array($ability, self::LIFECYCLE_ABILITIES, true) ? null : true;
     }
 
     public function viewAny(User $user): bool
@@ -137,17 +147,40 @@ class RecommendationPolicy
             return false;
         }
 
-        if ($rec->kind === Recommendation::KIND_RULING) {
-            if (! AccessDecision::can($user, Capability::RECOMMENDATIONS_APPROVE, $rec)) {
-                return false;
-            }
-
-            return ! $this->isSelfApproval($user, $rec);
+        if ($rec->kind !== Recommendation::KIND_RULING) {
+            return false;
         }
 
-        // Action-item accept() routes through update() (RECOMMENDATIONS_EDIT)
-        // and accepts proposed/deferred -> accepted.
+        if (! AccessDecision::can($user, Capability::RECOMMENDATIONS_APPROVE, $rec)) {
+            return false;
+        }
+
+        return ! $this->isSelfApproval($user, $rec);
+    }
+
+    /**
+     * Accept is only valid for action items and requires its own capability;
+     * generic edit permission is intentionally insufficient.
+     */
+    public function accept(User $user, Recommendation $rec): bool
+    {
+        if (! $this->precheck($user, $rec) || $rec->kind !== Recommendation::KIND_ACTION_ITEM) {
+            return false;
+        }
+
         return AccessDecision::can($user, Capability::RECOMMENDATIONS_ACCEPT, $rec);
+    }
+
+    /**
+     * Completing an action item is a lifecycle transition, not a generic edit.
+     */
+    public function complete(User $user, Recommendation $rec): bool
+    {
+        if (! $this->precheck($user, $rec) || $rec->kind !== Recommendation::KIND_ACTION_ITEM) {
+            return false;
+        }
+
+        return AccessDecision::can($user, Capability::RECOMMENDATIONS_COMPLETE, $rec);
     }
 
     /**

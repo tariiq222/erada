@@ -114,7 +114,23 @@ class RecommendationControllerTest extends TestCase
             'organization_id' => $this->user->organization_id,
         ]);
         $response = $this->actingAs($this->user, 'sanctum')->getJson('/api/recommendations');
-        $response->assertStatus(200)->assertJsonStructure(['data']);
+        $response->assertStatus(200)->assertJsonStructure([
+            'data' => [[
+                'allowed_actions' => ['update', 'delete'],
+            ]],
+        ]);
+    }
+
+    public function test_show_returns_record_aware_allowed_actions(): void
+    {
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->getJson("/api/recommendations/{$this->ruling->id}");
+
+        $response->assertOk()
+            ->assertJsonPath('allowed_actions.update', true)
+            ->assertJsonPath('allowed_actions.delete', true)
+            ->assertJsonPath('allowed_actions.approve', false)
+            ->assertJsonPath('allowed_actions.accept', false);
     }
 
     public function test_can_create_a_recommendation(): void

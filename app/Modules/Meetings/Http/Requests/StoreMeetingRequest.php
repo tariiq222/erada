@@ -92,7 +92,9 @@ class StoreMeetingRequest extends FormRequest
             'virtual_link' => ['nullable', 'url', 'max:2048'],
             'agenda' => ['nullable', 'string', 'max:20000'],
             'minutes' => ['nullable', 'string', 'max:20000'],
-            'status' => ['nullable', Rule::in([Meeting::STATUS_SCHEDULED, Meeting::STATUS_IN_PROGRESS])],
+            // Status transitions are owned by /start, /complete and /cancel.
+            // New meetings always start scheduled under server control.
+            'status' => ['prohibited'],
             'organizer_id' => ['required', 'integer', $this->orgScopedUserRule()],
             'subject_type' => ['nullable', Rule::in(DecidableType::aliases())],
             'subject_id' => ['nullable', 'required_with:subject_type', 'integer'],

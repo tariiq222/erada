@@ -21,7 +21,9 @@ const MeetingAttendees: React.FC<Props> = ({ meeting }) => {
             {list.map((a) => (
               <li key={a.id} className="flex items-center justify-between py-2 text-sm">
                 <span className="text-[var(--text-primary)]">{a.name}</span>
-                <span className="text-xs text-[var(--text-tertiary)]">{a.pivot.role}</span>
+                {a.pivot?.role && (
+                  <span className="text-xs text-[var(--text-tertiary)]">{a.pivot.role}</span>
+                )}
               </li>
             ))}
           </ul>

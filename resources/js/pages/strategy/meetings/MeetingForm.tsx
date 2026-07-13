@@ -115,7 +115,9 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ mode: _mode = 'page', initial
         navigate(`/strategy/meetings/${meeting.id}`);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : t('common.error_occurred');
+      const msg = typeof err === 'object' && err !== null && 'message' in err && typeof err.message === 'string'
+        ? err.message
+        : t('common.error_occurred');
       showToast('error', msg);
     }
   };

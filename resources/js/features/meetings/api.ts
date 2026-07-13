@@ -1,6 +1,7 @@
 import { api } from '@shared/api/client';
 import type {
   MeetingCategory,
+  Meeting,
   MeetingCreatePayload,
   MeetingSettings,
   MeetingSettingsPayload,
@@ -28,8 +29,12 @@ const qs = (params?: Record<string, string | number | boolean | undefined>): str
 export const meetingsApi = {
   getAll: (params?: Record<string, string>) => api.get(`/meetings${qs(params)}`),
   getOne: (id: number) => api.get(`/meetings/${id}`),
-  create: (data: MeetingCreatePayload) => api.post('/meetings', data),
-  update: (id: number, data: Partial<MeetingCreatePayload>) => api.put(`/meetings/${id}`, data),
+  create: (data: MeetingCreatePayload) =>
+    api.post<{ message: string; meeting: Meeting }>('/meetings', data)
+      .then(({ meeting }) => meeting),
+  update: (id: number, data: Partial<MeetingCreatePayload>) =>
+    api.put<{ message: string; meeting: Meeting }>(`/meetings/${id}`, data)
+      .then(({ meeting }) => meeting),
   delete: (id: number) => api.delete(`/meetings/${id}`),
   start: (id: number) => api.post(`/meetings/${id}/start`),
   complete: (id: number) => api.post(`/meetings/${id}/complete`),
@@ -96,15 +101,15 @@ export const recommendationsApi = {
     api.get<{ data: Recommendation[] } | Recommendation[]>(`/recommendations${qs(params)}`),
   getOne: (id: number) => api.get<Recommendation>(`/recommendations/${id}`),
   create: (data: RecommendationCreatePayload) =>
-    api.post<{ message?: string; data?: Recommendation } | Recommendation>(
+    api.post<{ message: string; recommendation: Recommendation }>(
       '/recommendations',
       data,
-    ),
+    ).then(({ recommendation }) => recommendation),
   update: (id: number, data: Partial<RecommendationCreatePayload>) =>
-    api.put<{ message?: string; data?: Recommendation } | Recommendation>(
+    api.put<{ message: string; recommendation: Recommendation }>(
       `/recommendations/${id}`,
       data,
-    ),
+    ).then(({ recommendation }) => recommendation),
   delete: (id: number) => api.delete<{ message: string }>(`/recommendations/${id}`),
   // ruling-only
   approve: (id: number) => api.post<Recommendation>(`/recommendations/${id}/approve`),

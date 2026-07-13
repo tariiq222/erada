@@ -885,8 +885,8 @@ const App: React.FC = () => {
 														element={
 															<RequirePermission
 																config={{
-																	permission:
-																		"meetings.edit",
+															permission:
+																"meetings.create",
 																}}
 															>
 																<MeetingForm mode="page" />
@@ -939,7 +939,7 @@ const App: React.FC = () => {
 														element={
 															<RequirePermission
 																config={{
-																	permission: "meetings.view",
+																permission: "recommendations.view",
 																}}
 															>
 																<RecommendationsList />
@@ -951,7 +951,7 @@ const App: React.FC = () => {
 														element={
 															<RequirePermission
 																config={{
-																	permission: "meetings.record_decisions",
+																permission: "recommendations.create",
 																}}
 															>
 																<RecommendationForm mode="page" />
@@ -963,7 +963,7 @@ const App: React.FC = () => {
 														element={
 															<RequirePermission
 																config={{
-																	permission: "meetings.view",
+																permission: "recommendations.view",
 																}}
 															>
 																<RecommendationView />
@@ -975,7 +975,7 @@ const App: React.FC = () => {
 														element={
 															<RequirePermission
 																config={{
-																	permission: "meetings.record_decisions",
+																permission: "recommendations.edit",
 																}}
 															>
 																<RecommendationForm mode="page" />

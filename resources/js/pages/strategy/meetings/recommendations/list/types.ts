@@ -11,7 +11,7 @@ export interface RecommendationPaginated {
 export interface RecommendationListFilters {
   status: string;
   priority: string;
-  decision_id: string;
+  meeting_id: string;
   assignee_id: string;
   overdue: boolean;
   page: number;

@@ -129,16 +129,20 @@ const ResolutionForm: React.FC<ResolutionFormProps> = ({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    // Lazy-load the user list whenever the owner field is reachable.
-    if (!data.owner_id && !initial?.owner_id) return;
+    let active = true;
     usersApi
       .getList()
       .then((res) => {
-        const list = (res as unknown as UserOption[]) ?? [];
-        setUsers(list);
+        const list = (Array.isArray(res)
+          ? res
+          : (res as { data?: UserOption[] }).data) ?? [];
+        if (active) setUsers(list);
       })
-      .catch(() => setUsers([]));
-  }, [data.owner_id, initial?.owner_id]);
+      .catch(() => {
+        if (active) setUsers([]);
+      });
+    return () => { active = false; };
+  }, []);
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setData((cur) => ({ ...cur, [key]: value }));

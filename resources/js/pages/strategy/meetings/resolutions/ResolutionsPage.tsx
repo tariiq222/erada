@@ -130,8 +130,8 @@ const ResolutionsPage: React.FC = () => {
       };
       if (filters.kind) params.kind = filters.kind;
       if (filters.status) params.status = filters.status;
-      if (filters.owner) params.owner = filters.owner;
-      if (filters.overdue_only) params.overdue_only = '1';
+      if (filters.owner) params.owner_id = filters.owner;
+      if (filters.overdue_only) params.overdue = '1';
 
       const qs = new URLSearchParams(params).toString();
       const res = (await api.get(`/meeting-resolutions?${qs}`)) as ResolutionListResponse;

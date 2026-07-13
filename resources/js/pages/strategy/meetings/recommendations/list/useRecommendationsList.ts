@@ -14,7 +14,7 @@ export function useRecommendationsList() {
   const [filters, setFiltersState] = useState<RecommendationListFilters>(() => ({
     status: '',
     priority: '',
-    decision_id: searchParams.get('decision_id') ?? '',
+    meeting_id: searchParams.get('meeting_id') ?? '',
     assignee_id: '',
     overdue: false,
     page: 1,
@@ -26,7 +26,7 @@ export function useRecommendationsList() {
       const params: Record<string, string> = { page: String(filters.page) };
       if (filters.status) params.status = filters.status;
       if (filters.priority) params.priority = filters.priority;
-      if (filters.decision_id) params.decision_id = filters.decision_id;
+      if (filters.meeting_id) params.meeting_id = filters.meeting_id;
       if (filters.assignee_id) params.assignee_id = filters.assignee_id;
       if (filters.overdue) params.overdue = '1';
 
@@ -60,7 +60,7 @@ export function useRecommendationsList() {
     setFiltersState({
       status: '',
       priority: '',
-      decision_id: '',
+      meeting_id: '',
       assignee_id: '',
       overdue: false,
       page: 1,

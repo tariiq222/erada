@@ -4,8 +4,12 @@ namespace App\Modules\Meetings\Http\Resources;
 
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Models\User;
+use App\Modules\Meetings\Models\Meeting;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Gate;
 
 /**
  * Phase CFA-06 — Cluster-read sanitization for Meeting.
@@ -28,7 +32,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *   - attendees (id + name only — preserved)
  *   - category (id + name only — preserved)
  *   - organization_id, department_id (FK pointers — needed for FE)
- *   - subject, subject_type, subject_id (FK pointers)
+ *   - subject_type, subject_id (FK pointers)
+ *   - subject (id plus name/title only)
  *
  * The sanitization is enforced at the Resource layer; the controller
  * does NOT pre-filter relations, so a cluster actor's Meeting::find()
@@ -44,13 +49,7 @@ class MeetingResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $user = $request?->user();
-        $isClusterRead = $user !== null
-            && ! $user->isSuperAdmin()
-            && $this->resource->exists
-            && $this->resource->organization_id !== null
-            && (int) $user->organization_id !== (int) $this->resource->organization_id
-            && AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW);
+        $isClusterRead = self::isClusterRead($request?->user(), $this->resource);
 
         return [
             'id' => $this->id,
@@ -61,9 +60,14 @@ class MeetingResource extends JsonResource
             'duration_minutes' => $this->duration_minutes,
             'location' => $this->location,
             'virtual_link' => $isClusterRead ? null : $this->virtual_link,
-            'agenda' => $this->agenda,
+            'agenda' => $isClusterRead ? null : $this->agenda,
             'minutes' => $isClusterRead ? null : $this->minutes,
             'status' => $this->status,
+            'allowed_actions' => [
+                'update' => Gate::allows('update', $this->resource),
+                'delete' => Gate::allows('delete', $this->resource),
+                'view_agenda' => Gate::allows('view', $this->resource),
+            ],
             'organizer' => $this->whenLoaded('organizer', fn () => [
                 'id' => $this->organizer->id,
                 'name' => $this->organizer->name,
@@ -76,7 +80,9 @@ class MeetingResource extends JsonResource
             'category_id' => $this->category_id,
             'subject_type' => $this->subject_type,
             'subject_id' => $this->subject_id,
-            'subject' => $this->whenLoaded('subject', fn () => $this->subject),
+            'subject' => $this->whenLoaded('subject', fn () => $isClusterRead
+                ? self::clusterSubject($this->subject)
+                : $this->subject),
             'organization_id' => $this->organization_id,
             'department_id' => $this->department_id,
             'reminder_sent_at' => $this->reminder_sent_at?->toIso8601String(),
@@ -112,5 +118,33 @@ class MeetingResource extends JsonResource
             'updated_at' => $this->updated_at?->toIso8601String(),
             'deleted_at' => $this->deleted_at?->toIso8601String(),
         ];
+    }
+
+    public static function isClusterRead(?User $user, Meeting $meeting): bool
+    {
+        return $user !== null
+            && ! $user->isSuperAdmin()
+            && $meeting->exists
+            && $meeting->organization_id !== null
+            && (int) $user->organization_id !== (int) $meeting->organization_id
+            && AccessDecision::can($user, Capability::CLUSTER_TREE_VIEW);
+    }
+
+    /** @return array{id: int|string, name?: mixed, title?: mixed}|null */
+    private static function clusterSubject(?Model $subject): ?array
+    {
+        if ($subject === null) {
+            return null;
+        }
+
+        $payload = ['id' => $subject->getKey()];
+
+        if ($subject->getAttribute('name') !== null) {
+            $payload['name'] = $subject->getAttribute('name');
+        } elseif ($subject->getAttribute('title') !== null) {
+            $payload['title'] = $subject->getAttribute('title');
+        }
+
+        return $payload;
     }
 }

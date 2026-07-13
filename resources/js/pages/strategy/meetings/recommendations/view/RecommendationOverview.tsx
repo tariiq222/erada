@@ -45,18 +45,18 @@ const RecommendationOverview: React.FC<Props> = ({ recommendation }) => {
         <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <dt className="text-xs text-[var(--text-tertiary)]">
-              {t('meetings.recommendation.fields.decision')}
+              {t('meetings.recommendation.fields.meeting', { defaultValue: 'الاجتماع' })}
             </dt>
             <dd className="text-sm">
-              {recommendation.decision ? (
+              {recommendation.meeting ? (
                 <Link
-                  to={`/strategy/decisions/${recommendation.decision_id}`}
+                  to={`/strategy/meetings/${recommendation.meeting.id}`}
                   className="text-[var(--accent-default)] hover:underline"
                 >
-                  {recommendation.decision.reference_number}: {recommendation.decision.title}
+                  {recommendation.meeting.reference_number}: {recommendation.meeting.title}
                 </Link>
               ) : (
-                `#${recommendation.decision_id}`
+                '—'
               )}
             </dd>
           </div>

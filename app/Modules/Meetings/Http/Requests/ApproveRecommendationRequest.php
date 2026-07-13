@@ -2,17 +2,15 @@
 
 namespace App\Modules\Meetings\Http\Requests;
 
-use App\Modules\Core\Authorization\Capability;
 use App\Modules\Meetings\Models\Recommendation;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
  * ApproveRecommendationRequest
  *
- * Target-aware authorize: routes through Capability::RECOMMENDATIONS_APPROVE
- * for rulings, Capability::RECOMMENDATIONS_ACCEPT for action_item kind.
- * The RecommendationPolicy::approve() handles the kind branch + self-approval
- * guard so this FormRequest stays focused on input rules.
+ * Target-aware authorization is ruling-only. Action items move through the
+ * dedicated accept endpoint; RecommendationPolicy::approve() also enforces
+ * the self-approval guard.
  */
 class ApproveRecommendationRequest extends FormRequest
 {

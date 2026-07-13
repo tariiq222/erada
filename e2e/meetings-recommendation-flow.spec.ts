@@ -87,7 +87,7 @@ test.describe('Recommendation lifecycle (Direction B)', () => {
         await loginAsAdmin(page);
         await page.goto(`/strategy/meetings/${meeting.id}`);
         await expect(
-            page.getByText('قرارات وإجراءات الاجتماع').first(),
+            page.getByRole('heading', { name: 'مخرجات الاجتماع' }),
         ).toBeVisible({ timeout: 15000 });
     }
 
@@ -338,6 +338,85 @@ test.describe('Recommendation lifecycle (Direction B)', () => {
             () => document.documentElement.lang,
         );
         expect(lang.startsWith('ar')).toBeTruthy();
+    });
+
+    test('creates a ruling with a same-organization project target through the real form', async ({
+        page,
+    }) => {
+        await openMeetingView(page);
+
+        const projectName = `E2E recommendation target ${Date.now()}`;
+        const projectResponse = await authedFetch(page, {
+            method: 'POST',
+            path: '/api/projects',
+            body: {
+                name: projectName,
+                type: 'development',
+                status: 'draft',
+                save_as_draft: true,
+            },
+        });
+        expect(projectResponse.status).toBe(201);
+        const projectBody = projectResponse.body as {
+            data?: { id?: number };
+            project?: { id?: number };
+        };
+        const projectId = projectBody.data?.id ?? projectBody.project?.id;
+        expect(projectId).toBeTruthy();
+
+        try {
+            await page.goto(
+                `/strategy/meetings/recommendations/new?meeting_id=${meeting.id}`,
+            );
+            const form = page.locator('form');
+            await expect(form).toBeVisible({ timeout: 10000 });
+
+            const title = `E2E targeted ruling ${Date.now()}`;
+            await form.getByLabel('العنوان').fill(title);
+            await page.getByLabel('نوع الكيان').click();
+            await page.getByRole('option', { name: 'مشروع', exact: true }).click();
+            await form.getByLabel('معرّف الكيان').fill(String(projectId));
+            await page.getByLabel('نوع القرار', { exact: true }).click();
+            await page.getByRole('option', { name: 'موافقة', exact: true }).click();
+            const recommendationResponsePromise = page.waitForResponse(
+                (response) =>
+                    response.request().method() === 'POST'
+                    && new URL(response.url()).pathname === '/api/recommendations',
+            );
+            const recommendationNavigationPromise = page.waitForURL(
+                '**/strategy/meetings/recommendations/*',
+                { timeout: 10000 },
+            );
+            await form.getByRole('button', { name: /إنشاء|حفظ/ }).click();
+            const recommendationResponse = await recommendationResponsePromise;
+            expect(recommendationResponse.ok()).toBeTruthy();
+            await recommendationNavigationPromise;
+
+            await expect(page.getByText(title).first()).toBeVisible({ timeout: 10000 });
+
+            const recommendations = await authedFetch(page, {
+                method: 'GET',
+                path: `/api/recommendations?meeting_id=${meeting.id}`,
+            });
+            expect(recommendations.ok).toBeTruthy();
+            const rows = (recommendations.body as { data?: Array<{
+                id: number;
+                title: string;
+                decidable_type: string | null;
+                decidable_id: number | null;
+            }> }).data ?? [];
+            const created = rows.find((row) => row.title === title);
+            expect(created).toMatchObject({
+                decidable_type: 'App\\Modules\\Projects\\Models\\Project',
+                decidable_id: projectId,
+            });
+            seededRecommendationIds.push(created!.id);
+        } finally {
+            await authedFetch(page, {
+                method: 'DELETE',
+                path: `/api/projects/${projectId}`,
+            });
+        }
     });
 
     test('defer warning alert shows role=alert when submit goes empty, then card remains pending', async ({

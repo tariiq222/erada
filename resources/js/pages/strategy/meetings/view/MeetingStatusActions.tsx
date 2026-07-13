@@ -6,12 +6,13 @@ import type { Meeting } from '@features/meetings/types';
 
 interface Props {
   meeting: Meeting;
+  canEdit: boolean;
   onStart: () => Promise<void>;
   onComplete: () => Promise<void>;
   onCancel: () => Promise<void>;
 }
 
-const MeetingStatusActions: React.FC<Props> = ({ meeting, onStart, onComplete, onCancel }) => {
+const MeetingStatusActions: React.FC<Props> = ({ meeting, canEdit, onStart, onComplete, onCancel }) => {
   const { t } = useTranslation();
   const canStart = meeting.status === 'scheduled';
   const canComplete = meeting.status === 'in_progress';
@@ -24,17 +25,17 @@ const MeetingStatusActions: React.FC<Props> = ({ meeting, onStart, onComplete, o
       </CardHeader>
       <CardContent className="flex flex-wrap gap-2">
         <Tooltip content={canStart ? t('meetings.meeting.actions.start') : t('meetings.meeting.messages.invalid_transition')}>
-          <Button leftIcon={<IconPlayerPlay className="h-4 w-4" />} disabled={!canStart} onClick={onStart} size="sm">
+          <Button leftIcon={<IconPlayerPlay className="h-4 w-4" />} disabled={!canEdit || !canStart} onClick={onStart} size="sm">
             {t('meetings.meeting.actions.start')}
           </Button>
         </Tooltip>
         <Tooltip content={canComplete ? t('meetings.meeting.actions.complete') : t('meetings.meeting.messages.invalid_transition')}>
-          <Button leftIcon={<IconCheck className="h-4 w-4" />} disabled={!canComplete} onClick={onComplete} size="sm">
+          <Button leftIcon={<IconCheck className="h-4 w-4" />} disabled={!canEdit || !canComplete} onClick={onComplete} size="sm">
             {t('meetings.meeting.actions.complete')}
           </Button>
         </Tooltip>
         <Tooltip content={canCancel ? t('meetings.meeting.actions.cancel') : t('meetings.meeting.messages.invalid_transition')}>
-          <Button variant="danger" leftIcon={<IconX className="h-4 w-4" />} disabled={!canCancel} onClick={onCancel} size="sm">
+          <Button variant="danger" leftIcon={<IconX className="h-4 w-4" />} disabled={!canEdit || !canCancel} onClick={onCancel} size="sm">
             {t('meetings.meeting.actions.cancel')}
           </Button>
         </Tooltip>

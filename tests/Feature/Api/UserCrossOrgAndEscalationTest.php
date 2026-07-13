@@ -195,6 +195,47 @@ class UserCrossOrgAndEscalationTest extends TestCase
         $this->assertContains('admin', $created->fresh()->roles->pluck('name')->all());
     }
 
+    public function test_super_admin_store_rejects_department_from_a_different_target_organization(): void
+    {
+        $actor = $this->makeUser('super_admin', $this->orgA);
+
+        $response = $this->actingAs($actor, 'sanctum')
+            ->postJson('/api/users', [
+                'name' => 'Invalid Department User',
+                'email' => 'invalid.department@example.com',
+                'password' => 'Password123!',
+                'organization_id' => $this->orgB->id,
+                'department_id' => $this->deptA->id,
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors('department_id');
+        $this->assertDatabaseMissing('users', [
+            'email' => 'invalid.department@example.com',
+        ]);
+    }
+
+    public function test_super_admin_store_accepts_department_from_the_target_organization(): void
+    {
+        $actor = $this->makeUser('super_admin', $this->orgA);
+
+        $response = $this->actingAs($actor, 'sanctum')
+            ->postJson('/api/users', [
+                'name' => 'Valid Department User',
+                'email' => 'valid.department@example.com',
+                'password' => 'Password123!',
+                'organization_id' => $this->orgB->id,
+                'department_id' => $this->deptB->id,
+            ]);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('users', [
+            'email' => 'valid.department@example.com',
+            'organization_id' => $this->orgB->id,
+            'department_id' => $this->deptB->id,
+        ]);
+    }
+
     public function test_user_store_accepts_scoped_definition_role_without_spatie_role(): void
     {
         $actor = $this->makeUser('org_viewer', $this->orgA);

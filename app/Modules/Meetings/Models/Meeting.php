@@ -13,6 +13,8 @@ use App\Modules\Projects\Models\Milestone;
 use App\Modules\Projects\Models\Project;
 use App\Modules\RiskManagement\Models\Risk;
 use App\Modules\Shared\Traits\HasOrganizationScope;
+use App\Modules\Strategy\Models\Portfolio;
+use App\Modules\Strategy\Models\Program;
 use Database\Factories\MeetingFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -183,6 +185,8 @@ class Meeting extends Model implements ScopeAware
         'IncidentReport' => IncidentReport::class,
         'Kpi' => Kpi::class,
         'Milestone' => Milestone::class,
+        'Portfolio' => Portfolio::class,
+        'Program' => Program::class,
     ];
 
     public function scopeParent(): ?Model
@@ -195,6 +199,13 @@ class Meeting extends Model implements ScopeAware
         // the subject row is missing.
         if ($this->subject_type !== null && $this->subject_id !== null) {
             $subjectClass = self::SUBJECT_CLASS_MAP[$this->subject_type] ?? null;
+            if ($subjectClass === null && in_array($this->subject_type, self::SUBJECT_CLASS_MAP, true)) {
+                // API writes store the fully-qualified morph class, while
+                // legacy rows store the short basename token. Resolve both
+                // through the same explicit allowlist so scoped authorization
+                // follows the actual meeting subject in either representation.
+                $subjectClass = $this->subject_type;
+            }
             if ($subjectClass !== null) {
                 $resolved = AccessDecision::resolveScopeParent($subjectClass, (int) $this->subject_id);
                 if ($resolved instanceof Model) {

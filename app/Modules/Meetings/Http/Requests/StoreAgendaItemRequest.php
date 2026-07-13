@@ -3,6 +3,7 @@
 namespace App\Modules\Meetings\Http\Requests;
 
 use App\Modules\Meetings\Models\Meeting;
+use App\Modules\Meetings\Support\MeetingOrgGuard;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -29,6 +30,13 @@ class StoreAgendaItemRequest extends FormRequest
         $user = $this->user();
 
         if (! $user) {
+            return false;
+        }
+
+        // Cluster-tree widening is read-only. An organizer/attendee shortcut
+        // must never let a user from an ancestor organization write agenda
+        // content into a descendant organization's meeting.
+        if (! app(MeetingOrgGuard::class)->sameOrganizationForMeeting($user, $meeting)) {
             return false;
         }
 

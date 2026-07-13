@@ -133,13 +133,21 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(MeetingResolution::class, MeetingResolutionPolicy::class);
         Gate::policy(ActivityLog::class, ActivityLogPolicy::class);
 
-        // Super Admin يتجاوز جميع الصلاحيات
-        Gate::before(function (User $user) {
-            if ($user->isSuperAdmin()) {
-                return true;
+        // Super admins bypass ordinary gates. Recommendation lifecycle actions
+        // deliberately reach RecommendationPolicy so kind and four-eyes
+        // invariants remain enforced even for a super admin.
+        Gate::before(function (User $user, string $ability, array $arguments): ?bool {
+            if (! $user->isSuperAdmin()) {
+                return null;
             }
 
-            return null;
+            $target = $arguments[0] ?? null;
+            if ($target instanceof Recommendation
+                && in_array($ability, RecommendationPolicy::LIFECYCLE_ABILITIES, true)) {
+                return null;
+            }
+
+            return true;
         });
 
         // Listen for scheduled task failures (Laravel 12: Illuminate\Console\Events\ScheduledTaskFailed).

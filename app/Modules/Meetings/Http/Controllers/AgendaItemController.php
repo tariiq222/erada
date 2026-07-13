@@ -8,6 +8,7 @@ use App\Modules\Meetings\Http\Requests\StoreAgendaItemRequest;
 use App\Modules\Meetings\Http\Requests\UpdateAgendaItemRequest;
 use App\Modules\Meetings\Models\Meeting;
 use App\Modules\Meetings\Models\MeetingAgendaItem;
+use App\Modules\Meetings\Support\MeetingOrgGuard;
 use App\Modules\Shared\Traits\HasOrganizationScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -157,6 +158,11 @@ class AgendaItemController extends Controller
     private function authorizeParticipate(Meeting $meeting): void
     {
         $user = request()->user();
+
+        abort_unless(
+            $user !== null && app(MeetingOrgGuard::class)->sameOrganizationForMeeting($user, $meeting),
+            403,
+        );
 
         $allowed = $user->isSuperAdmin()
             || (int) $meeting->organizer_id === (int) $user->id

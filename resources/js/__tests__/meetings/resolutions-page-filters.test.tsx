@@ -1,11 +1,15 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
+const translation = vi.hoisted(() => ({
+  t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
+}));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
+    t: translation.t,
     i18n: { changeLanguage: vi.fn(), language: 'ar' },
   }),
 }));
@@ -101,6 +105,24 @@ describe('ResolutionsPage filters', () => {
     render(<MemoryRouter><ResolutionsPage /></MemoryRouter>);
     await waitFor(() => {
       expect(mocks.get).toHaveBeenCalledWith(expect.stringContaining('/meeting-resolutions'));
+    });
+  });
+
+  it('uses the API filter names for owner and overdue-only', async () => {
+    mocks.get.mockResolvedValue({ data: [], meta: { current_page: 1, last_page: 1, per_page: 15, total: 0 } });
+    render(<MemoryRouter><ResolutionsPage /></MemoryRouter>);
+
+    await waitFor(() => expect(mocks.get).toHaveBeenCalled());
+    const ownerInput = screen.getByPlaceholderText('بحث...');
+    const overdue = screen.getByLabelText(/متأخرة فقط/);
+
+    fireEvent.change(ownerInput, { target: { value: '7' } });
+    fireEvent.click(overdue);
+
+    await waitFor(() => {
+      const calls = mocks.get.mock.calls.map(([url]) => String(url)).join('\n');
+      expect(calls).toContain('owner_id=7');
+      expect(calls).toContain('overdue=1');
     });
   });
 

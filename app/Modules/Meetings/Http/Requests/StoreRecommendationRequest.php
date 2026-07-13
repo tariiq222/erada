@@ -3,13 +3,16 @@
 namespace App\Modules\Meetings\Http\Requests;
 
 use App\Modules\Core\Http\Requests\Concerns\ScopesUsersToOrganization;
+use App\Modules\Meetings\Http\Requests\Concerns\ValidatesRecommendationTarget;
 use App\Modules\Meetings\Models\Recommendation;
+use App\Modules\Meetings\Support\DecidableType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class StoreRecommendationRequest extends FormRequest
 {
     use ScopesUsersToOrganization;
+    use ValidatesRecommendationTarget;
 
     public function authorize(): bool
     {
@@ -34,7 +37,9 @@ class StoreRecommendationRequest extends FormRequest
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:5000'],
             'priority' => ['required', Rule::in(Recommendation::priorityValues())],
-            'status' => ['nullable', Rule::in(Recommendation::statusValues())],
+            // Status is owned exclusively by the lifecycle endpoints. Allowing
+            // it here would let a creator bypass approval / completion gates.
+            'status' => ['prohibited'],
 
             // Ruling-specific: type must be supplied when kind=ruling.
             'type' => [
@@ -46,8 +51,8 @@ class StoreRecommendationRequest extends FormRequest
 
             // Ruling-linkable target (the polymorphic parent the ruling is
             // about — e.g. Project, Program). Optional.
-            'decidable_type' => ['nullable', 'string', 'max:255'],
-            'decidable_id' => ['nullable', 'integer'],
+            'decidable_type' => ['nullable', 'required_with:decidable_id', Rule::in(DecidableType::aliases())],
+            'decidable_id' => ['nullable', 'required_with:decidable_type', 'integer'],
 
             // Action_item specific: assignee + due_date are required when
             // kind=action_item.

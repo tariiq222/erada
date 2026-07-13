@@ -1,111 +1,93 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Card, CardContent, CardHeader, CardTitle, Tooltip } from '@shared/ui';
-import { IconCheck, IconX, IconClock, IconCircleCheck } from '@shared/ui/icons';
+import { IconCheck, IconCircleCheck, IconClock, IconX } from '@shared/ui/icons';
 import type { Recommendation } from '@features/meetings/types';
 
 interface Props {
   recommendation: Recommendation;
-  // Per-action capability gates (frontend ↔ backend parity). When `false`
-  // the corresponding button is disabled and a localized tooltip explains
-  // the missing capability. The parent computes these via `useCan` so the
-  // page can additionally hide actions that are entirely irrelevant for
-  // the current user/role.
+  canApprove: boolean;
   canAccept: boolean;
   canReject: boolean;
   canDefer: boolean;
   canComplete: boolean;
+  onApprove: () => Promise<void>;
   onAccept: () => Promise<void>;
   onReject: () => Promise<void>;
   onDefer: () => Promise<void>;
   onComplete: () => Promise<void>;
 }
 
-const RecommendationStatusActions: React.FC<Props> = ({
-  recommendation,
-  canAccept,
-  canReject,
-  canDefer,
-  canComplete,
-  onAccept,
-  onReject,
-  onDefer,
-  onComplete,
-}) => {
+const RecommendationStatusActions: React.FC<Props> = (props) => {
   const { t } = useTranslation();
-  // Status-driven transition gates (independent of capabilities).
-  const statusCanAccept =
-    recommendation.status === 'proposed' || recommendation.status === 'deferred';
-  const statusCanReject =
-    recommendation.status === 'proposed' || recommendation.status === 'deferred';
-  const statusCanDefer =
-    recommendation.status === 'proposed' || recommendation.status === 'accepted';
-  const statusCanComplete = recommendation.status === 'accepted';
+  const isRuling = props.recommendation.kind === 'ruling';
+  const status = props.recommendation.status;
   const invalid = t('meetings.recommendation.messages.invalid_transition');
-  const missingCap = t('common.no_permission', { defaultValue: 'لا تملك صلاحية' });
-
-  // Combined: the button is enabled only when BOTH the status permits the
-  // transition AND the user has the per-action capability. Tooltip explains
-  // which constraint blocks.
-  const acceptOk = statusCanAccept && canAccept;
-  const rejectOk = statusCanReject && canReject;
-  const deferOk = statusCanDefer && canDefer;
-  const completeOk = statusCanComplete && canComplete;
-
-  const reasonFor = (statusOk: boolean, capOk: boolean): string => {
-    if (!statusOk) return invalid;
-    if (!capOk) return missingCap;
-    return '';
+  const reasonFor = (statusOk: boolean) => statusOk ? '' : invalid;
+  const ruling = {
+    approve: status === 'pending' || status === 'deferred',
+    reject: status === 'pending' || status === 'deferred',
+    defer: status === 'pending' || status === 'approved',
   };
+  const actionItem = {
+    accept: status === 'proposed' || status === 'deferred',
+    reject: status === 'proposed' || status === 'deferred',
+    defer: status === 'proposed' || status === 'accepted',
+    complete: status === 'accepted',
+  };
+
+  const hasVisibleAction = isRuling
+    ? props.canApprove || props.canReject || props.canDefer
+    : props.canAccept || props.canReject || props.canDefer || props.canComplete;
+
+  if (!hasVisibleAction) return null;
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{t('meetings.recommendation.fields.status')}</CardTitle>
-      </CardHeader>
+      <CardHeader><CardTitle>{t('meetings.recommendation.fields.status')}</CardTitle></CardHeader>
       <CardContent className="flex flex-wrap gap-2">
-        <Tooltip content={reasonFor(statusCanAccept, canAccept)}>
-          <Button
-            leftIcon={<IconCheck className="h-4 w-4" />}
-            disabled={!acceptOk}
-            aria-label={t('meetings.recommendation.actions.accept')}
-            onClick={onAccept}
-          >
-            {t('meetings.recommendation.actions.accept')}
-          </Button>
-        </Tooltip>
-        <Tooltip content={reasonFor(statusCanReject, canReject)}>
-          <Button
-            variant="danger"
-            leftIcon={<IconX className="h-4 w-4" />}
-            disabled={!rejectOk}
-            aria-label={t('meetings.recommendation.actions.reject')}
-            onClick={onReject}
-          >
-            {t('meetings.recommendation.actions.reject')}
-          </Button>
-        </Tooltip>
-        <Tooltip content={reasonFor(statusCanDefer, canDefer)}>
-          <Button
-            variant="outline"
-            leftIcon={<IconClock className="h-4 w-4" />}
-            disabled={!deferOk}
-            aria-label={t('meetings.recommendation.actions.defer')}
-            onClick={onDefer}
-          >
-            {t('meetings.recommendation.actions.defer')}
-          </Button>
-        </Tooltip>
-        <Tooltip content={reasonFor(statusCanComplete, canComplete)}>
-          <Button
-            leftIcon={<IconCircleCheck className="h-4 w-4" />}
-            disabled={!completeOk}
-            aria-label={t('meetings.recommendation.actions.complete')}
-            onClick={onComplete}
-          >
-            {t('meetings.recommendation.actions.complete')}
-          </Button>
-        </Tooltip>
+        {isRuling ? (
+          <>
+            {props.canApprove && <Tooltip content={reasonFor(ruling.approve)}>
+              <Button leftIcon={<IconCheck className="h-4 w-4" />} disabled={!ruling.approve || !props.canApprove} aria-label={t('meetings.recommendation.actions.approve')} onClick={props.onApprove}>
+                {t('meetings.recommendation.actions.approve')}
+              </Button>
+            </Tooltip>}
+            {props.canReject && <Tooltip content={reasonFor(ruling.reject)}>
+              <Button variant="danger" leftIcon={<IconX className="h-4 w-4" />} disabled={!ruling.reject || !props.canReject} aria-label={t('meetings.recommendation.actions.reject')} onClick={props.onReject}>
+                {t('meetings.recommendation.actions.reject')}
+              </Button>
+            </Tooltip>}
+            {props.canDefer && <Tooltip content={reasonFor(ruling.defer)}>
+              <Button variant="outline" leftIcon={<IconClock className="h-4 w-4" />} disabled={!ruling.defer || !props.canDefer} aria-label={t('meetings.recommendation.actions.defer')} onClick={props.onDefer}>
+                {t('meetings.recommendation.actions.defer')}
+              </Button>
+            </Tooltip>}
+          </>
+        ) : (
+          <>
+            {props.canAccept && <Tooltip content={reasonFor(actionItem.accept)}>
+              <Button leftIcon={<IconCheck className="h-4 w-4" />} disabled={!actionItem.accept || !props.canAccept} aria-label={t('meetings.recommendation.actions.accept')} onClick={props.onAccept}>
+                {t('meetings.recommendation.actions.accept')}
+              </Button>
+            </Tooltip>}
+            {props.canReject && <Tooltip content={reasonFor(actionItem.reject)}>
+              <Button variant="danger" leftIcon={<IconX className="h-4 w-4" />} disabled={!actionItem.reject || !props.canReject} aria-label={t('meetings.recommendation.actions.reject')} onClick={props.onReject}>
+                {t('meetings.recommendation.actions.reject')}
+              </Button>
+            </Tooltip>}
+            {props.canDefer && <Tooltip content={reasonFor(actionItem.defer)}>
+              <Button variant="outline" leftIcon={<IconClock className="h-4 w-4" />} disabled={!actionItem.defer || !props.canDefer} aria-label={t('meetings.recommendation.actions.defer')} onClick={props.onDefer}>
+                {t('meetings.recommendation.actions.defer')}
+              </Button>
+            </Tooltip>}
+            {props.canComplete && <Tooltip content={reasonFor(actionItem.complete)}>
+              <Button leftIcon={<IconCircleCheck className="h-4 w-4" />} disabled={!actionItem.complete || !props.canComplete} aria-label={t('meetings.recommendation.actions.complete')} onClick={props.onComplete}>
+                {t('meetings.recommendation.actions.complete')}
+              </Button>
+            </Tooltip>}
+          </>
+        )}
       </CardContent>
     </Card>
   );

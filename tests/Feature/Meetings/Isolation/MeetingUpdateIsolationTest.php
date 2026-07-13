@@ -7,6 +7,7 @@ use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Meetings\Models\Meeting;
+use App\Modules\Projects\Models\Project;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
@@ -145,5 +146,57 @@ class MeetingUpdateIsolationTest extends TestCase
             ->putJson("/api/meetings/{$meetingA->id}", $payload);
 
         $response->assertStatus(403);
+    }
+
+    public function test_super_admin_rebinding_to_cross_org_subject_realigns_organization(): void
+    {
+        // Pin: when super_admin rebinds a meeting to a subject from a
+        // different organization, meetings.organization_id MUST follow the
+        // subject. Otherwise we end up with a row whose organization_id
+        // no longer agrees with (subject_type, subject_id) — a scope and
+        // capability drift.
+        $orgA = Organization::factory()->create();
+        $orgB = Organization::factory()->create();
+        $deptA = Department::factory()->create(['organization_id' => $orgA->id]);
+        $deptB = Department::factory()->create(['organization_id' => $orgB->id]);
+        $organizerA = User::factory()->create(['organization_id' => $orgA->id]);
+        $meetingA = Meeting::factory()->create([
+            'organization_id' => $orgA->id,
+            'organizer_id' => $organizerA->id,
+            'department_id' => $deptA->id,
+            'subject_type' => null,
+            'subject_id' => null,
+        ]);
+
+        $orgBProject = Project::factory()->create([
+            'organization_id' => $orgB->id,
+            'department_id' => $deptB->id,
+        ]);
+
+        $superAdmin = User::factory()->create([
+            'organization_id' => $orgA->id,
+            'department_id' => $deptA->id,
+        ]);
+        $superAdmin->assignRole('super_admin');
+
+        $payload = $this->validUpdatePayload($organizerA->id);
+        $payload['subject_type'] = 'project';
+        $payload['subject_id'] = $orgBProject->id;
+
+        $this->actingAs($superAdmin, 'sanctum')
+            ->putJson("/api/meetings/{$meetingA->id}", $payload)
+            ->assertStatus(200);
+
+        $fresh = $meetingA->fresh();
+        $this->assertSame(
+            $orgB->id,
+            $fresh->organization_id,
+            'Meeting organization_id must follow the new subject organization.'
+        );
+        $this->assertSame(
+            Project::class,
+            $fresh->subject_type,
+        );
+        $this->assertSame($orgBProject->id, $fresh->subject_id);
     }
 }

@@ -7,6 +7,7 @@ use App\Modules\Meetings\Http\Requests\DeleteMeetingRequest;
 use App\Modules\Meetings\Http\Requests\StoreMeetingRequest;
 use App\Modules\Meetings\Http\Requests\UpdateMeetingRequest;
 use App\Modules\Meetings\Http\Requests\UpdateMinutesRequest;
+use App\Modules\Meetings\Http\Resources\MeetingResource;
 use App\Modules\Meetings\Models\Meeting;
 use App\Modules\Meetings\Notifications\AgendaRequestedNotification;
 use App\Modules\Meetings\Notifications\MeetingScheduledNotification;
@@ -15,6 +16,7 @@ use App\Modules\Meetings\Support\DecidableType;
 use App\Modules\Shared\Traits\HasOrganizationScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -67,10 +69,16 @@ class MeetingController extends Controller
                 ->whereNull('reminder_sent_at');
         }
 
-        return response()->json(
-            $query->orderBy('scheduled_at', 'desc')
-                ->paginate(min((int) $request->get('per_page', 15), 100))
-        );
+        $meetings = $query->orderBy('scheduled_at', 'desc')
+            ->paginate(min((int) $request->get('per_page', 15), 100));
+
+        // Keep the legacy paginator envelope while applying the same
+        // cross-organization redaction used by show().
+        $meetings->setCollection($meetings->getCollection()->map(
+            fn (Meeting $meeting): array => (new MeetingResource($meeting))->resolve($request),
+        ));
+
+        return response()->json($meetings);
     }
 
     public function list(Request $request): JsonResponse
@@ -88,7 +96,14 @@ class MeetingController extends Controller
         $this->authorize('view', $meeting);
         $meeting->load(['organizer:id,name', 'attendees:id,name', 'subject', 'category:id,name']);
 
-        return response()->json($meeting);
+        $payload = (new MeetingResource($meeting))->resolve(request());
+        $payload['allowed_actions'] = [
+            'update' => Gate::allows('update', $meeting),
+            'delete' => Gate::allows('delete', $meeting),
+            'view_agenda' => Gate::allows('view', $meeting),
+        ];
+
+        return response()->json($payload);
     }
 
     public function store(StoreMeetingRequest $request): JsonResponse
@@ -151,9 +166,29 @@ class MeetingController extends Controller
             }
             $this->assertSameOrganization($subject);
             $validated['subject_type'] = $modelClass;
+            // When the meeting is re-bound to a subject whose organization
+            // differs from the meeting's own, follow the subject so the
+            // (subject_type, subject_id, organization_id) triple stays
+            // consistent — even for super_admin, who otherwise bypasses the
+            // org-isolation guard above. organization_id is intentionally
+            // absent from UpdateMeetingRequest::rules() (it is derived),
+            // so validated() drops it; we attach it locally here and
+            // forceFill() it after update() to keep the triple intact.
+            $validated['organization_id'] = $subject->organization_id;
         }
 
-        $meeting->update($validated);
+        // Persist every editable field first.
+        $meeting->fill($validated);
+        $meeting->save();
+        // organization_id is absent from UpdateMeetingRequest::rules(), so
+        // FormRequest::validated() never includes it — even when the
+        // controller derives a new value above. Persist it separately so
+        // the (subject_type, subject_id, organization_id) triple stays
+        // consistent for the super_admin cross-org case.
+        if (array_key_exists('organization_id', $validated)) {
+            $meeting->forceFill(['organization_id' => $validated['organization_id']])
+                ->save();
+        }
         $meeting->load(['organizer:id,name', 'attendees:id,name', 'subject', 'category:id,name']);
 
         return response()->json(['message' => 'تم تحديث الاجتماع بنجاح', 'meeting' => $meeting]);
@@ -216,9 +251,16 @@ class MeetingController extends Controller
     public function attendees(Meeting $meeting): JsonResponse
     {
         $this->authorize('view', $meeting);
-        $meeting->load('attendees:id,name,email');
+        $meeting->load('attendees:id,name,email,phone');
 
-        return response()->json(['data' => $meeting->attendees]);
+        $attendees = MeetingResource::isClusterRead(request()->user(), $meeting)
+            ? $meeting->attendees->map(fn ($attendee): array => [
+                'id' => $attendee->id,
+                'name' => $attendee->name,
+            ])
+            : $meeting->attendees;
+
+        return response()->json(['data' => $attendees]);
     }
 
     public function requestAgenda(Meeting $meeting): JsonResponse

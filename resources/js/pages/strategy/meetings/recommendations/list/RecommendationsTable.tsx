@@ -10,7 +10,6 @@ import { STATUS_COLORS, PRIORITY_COLORS } from './constants';
 interface Props {
   recommendations: Recommendation[];
   loading: boolean;
-  canEdit: boolean;
   currentPage: number;
   lastPage: number;
   total: number;
@@ -20,7 +19,6 @@ interface Props {
 const RecommendationsTable: React.FC<Props> = ({
   recommendations,
   loading,
-  canEdit,
   currentPage,
   lastPage,
   total,
@@ -49,17 +47,17 @@ const RecommendationsTable: React.FC<Props> = ({
       ),
     },
     {
-      key: 'decision',
-      header: t('meetings.recommendation.fields.decision'),
+      key: 'meeting',
+      header: t('meetings.recommendation.fields.meeting', { defaultValue: 'الاجتماع' }),
       render: (r) => (
-        <Link
-          to={`/strategy/decisions/${r.decision_id}`}
-          className="text-sm text-[var(--accent-default)] hover:underline"
-        >
-          {r.decision
-            ? `${r.decision.reference_number}: ${r.decision.title}`
-            : `#${r.decision_id}`}
-        </Link>
+        r.meeting ? (
+          <Link
+            to={`/strategy/meetings/${r.meeting.id}`}
+            className="text-sm text-[var(--accent-default)] hover:underline"
+          >
+            {r.meeting.reference_number}: {r.meeting.title}
+          </Link>
+        ) : '—'
       ),
     },
     {
@@ -124,7 +122,7 @@ const RecommendationsTable: React.FC<Props> = ({
             label={t('common.view')}
             to={`/strategy/meetings/recommendations/${r.id}`}
           />
-          {canEdit && (
+          {r.allowed_actions?.update === true && (
             <RowAction
               icon={IconPencil}
               label={t('common.edit')}

@@ -17,9 +17,10 @@ use App\Modules\Core\Models\User;
  * resolve against the canonical dotted capability strings (`meetings.view`,
  * `recommendations.approve`, ...).
  *
- * Each entry is the engine's record-less check (no target Model), which
- * AccessDecision::can() walks through the actor's scoped roles to decide.
- * Record-scoped checks happen at the FormRequest authorize() / Policy layer.
+ * Recommendation flags aggregate any granting scope so the SPA can expose an
+ * action where it is usable; the FormRequest / Policy layer still performs the
+ * target-bound decision. Recommendation create remains the engine's
+ * record-less check because it has no existing target.
  *
  * Wire keys (canonical after Phase 5.A):
  *   - meetings.view                          <-> Capability::MEETINGS_VIEW
@@ -58,15 +59,15 @@ class MeetingsCapabilityProvider implements CapabilityProvider
             Capability::MEETINGS_EDIT => AccessDecision::can($user, Capability::MEETINGS_EDIT),
             Capability::MEETINGS_DELETE => AccessDecision::can($user, Capability::MEETINGS_DELETE),
             Capability::MEETINGS_RECORD_DECISIONS => AccessDecision::can($user, Capability::MEETINGS_RECORD_DECISIONS),
-            Capability::RECOMMENDATIONS_VIEW => AccessDecision::can($user, Capability::RECOMMENDATIONS_VIEW),
+            Capability::RECOMMENDATIONS_VIEW => $this->hasRecommendationGrant($user, Capability::RECOMMENDATIONS_VIEW),
             Capability::RECOMMENDATIONS_CREATE => AccessDecision::can($user, Capability::RECOMMENDATIONS_CREATE),
-            Capability::RECOMMENDATIONS_EDIT => AccessDecision::can($user, Capability::RECOMMENDATIONS_EDIT),
-            Capability::RECOMMENDATIONS_DELETE => AccessDecision::can($user, Capability::RECOMMENDATIONS_DELETE),
-            Capability::RECOMMENDATIONS_APPROVE => AccessDecision::can($user, Capability::RECOMMENDATIONS_APPROVE),
-            Capability::RECOMMENDATIONS_REJECT => AccessDecision::can($user, Capability::RECOMMENDATIONS_REJECT),
-            Capability::RECOMMENDATIONS_DEFER => AccessDecision::can($user, Capability::RECOMMENDATIONS_DEFER),
-            Capability::RECOMMENDATIONS_ACCEPT => AccessDecision::can($user, Capability::RECOMMENDATIONS_ACCEPT),
-            Capability::RECOMMENDATIONS_COMPLETE => AccessDecision::can($user, Capability::RECOMMENDATIONS_COMPLETE),
+            Capability::RECOMMENDATIONS_EDIT => $this->hasRecommendationGrant($user, Capability::RECOMMENDATIONS_EDIT),
+            Capability::RECOMMENDATIONS_DELETE => $this->hasRecommendationGrant($user, Capability::RECOMMENDATIONS_DELETE),
+            Capability::RECOMMENDATIONS_APPROVE => $this->hasRecommendationGrant($user, Capability::RECOMMENDATIONS_APPROVE),
+            Capability::RECOMMENDATIONS_REJECT => $this->hasRecommendationGrant($user, Capability::RECOMMENDATIONS_REJECT),
+            Capability::RECOMMENDATIONS_DEFER => $this->hasRecommendationGrant($user, Capability::RECOMMENDATIONS_DEFER),
+            Capability::RECOMMENDATIONS_ACCEPT => $this->hasRecommendationGrant($user, Capability::RECOMMENDATIONS_ACCEPT),
+            Capability::RECOMMENDATIONS_COMPLETE => $this->hasRecommendationGrant($user, Capability::RECOMMENDATIONS_COMPLETE),
             Capability::MEETING_RESOLUTIONS_VIEW => AccessDecision::can($user, Capability::MEETING_RESOLUTIONS_VIEW),
             Capability::MEETING_RESOLUTIONS_CREATE => AccessDecision::can($user, Capability::MEETING_RESOLUTIONS_CREATE),
             Capability::MEETING_RESOLUTIONS_UPDATE => AccessDecision::can($user, Capability::MEETING_RESOLUTIONS_UPDATE),
@@ -77,5 +78,27 @@ class MeetingsCapabilityProvider implements CapabilityProvider
             Capability::MEETING_RESOLUTIONS_COMPLETE => AccessDecision::can($user, Capability::MEETING_RESOLUTIONS_COMPLETE),
             Capability::MEETING_RESOLUTIONS_CANCEL => AccessDecision::can($user, Capability::MEETING_RESOLUTIONS_CANCEL),
         ];
+    }
+
+    /**
+     * The SPA asks whether a record-scoped recommendation action is available
+     * anywhere in the user's granted scope. Create intentionally remains a
+     * record-less check because it has no existing recommendation target.
+     */
+    private function hasRecommendationGrant(User $user, string $capability): bool
+    {
+        if ($user->isSuperAdmin()
+            || AccessDecision::can($user, $capability)
+            || AccessDecision::grantsAtOrganization($user, $capability)) {
+            return true;
+        }
+
+        foreach (AccessDecision::grantingScopes($user, $capability) as $scopeIds) {
+            if ($scopeIds !== []) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

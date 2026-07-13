@@ -3,10 +3,14 @@
 namespace App\Modules\Meetings\Http\Requests;
 
 use App\Modules\Core\Http\Requests\Concerns\ScopesUsersToOrganization;
+use App\Modules\Meetings\Http\Requests\Concerns\ValidatesResolutionLinks;
+use App\Modules\Meetings\Models\Meeting;
 use App\Modules\Meetings\Models\MeetingResolution;
 use App\Modules\Meetings\Models\ResolutionLink;
+use App\Modules\Meetings\Support\MeetingOrgGuard;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 /**
  * Phase 1 / Direction R — create a new typed meeting output.
@@ -19,23 +23,31 @@ use Illuminate\Validation\Rule;
  */
 class StoreMeetingResolutionRequest extends FormRequest
 {
-    use ScopesUsersToOrganization;
+    use ScopesUsersToOrganization, ValidatesResolutionLinks;
 
     public function authorize(): bool
     {
-        return $this->user()?->can('create', MeetingResolution::class) ?? false;
+        $user = $this->user();
+        $meeting = $this->route('meeting');
+
+        if (! $user || ! $meeting instanceof Meeting) {
+            return false;
+        }
+
+        if (! app(MeetingOrgGuard::class)->sameOrganizationForMeeting($user, $meeting)) {
+            return false;
+        }
+
+        return $user->can('create', MeetingResolution::class);
     }
 
     public function rules(): array
     {
         return [
             'meeting_id' => [
-                'required',
+                'sometimes',
                 'integer',
-                Rule::exists('meetings', 'id')->when(
-                    ! $this->user() || ! $this->user()->isSuperAdmin(),
-                    fn ($rule) => $rule->where('organization_id', $this->user()?->organization_id)
-                ),
+                Rule::in([(int) $this->route('meeting')->getKey()]),
             ],
             'kind' => ['required', Rule::in(MeetingResolution::kindValues())],
             'title' => ['required', 'string', 'max:255'],
@@ -51,6 +63,17 @@ class StoreMeetingResolutionRequest extends FormRequest
         ];
     }
 
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            $meeting = $this->route('meeting');
+
+            if ($meeting instanceof Meeting) {
+                $this->validateResolutionLinks($validator, $meeting->organization_id);
+            }
+        });
+    }
+
     public function messages(): array
     {
         return [
@@ -58,7 +81,7 @@ class StoreMeetingResolutionRequest extends FormRequest
             'kind.in' => 'نوع المخرج يجب أن يكون توصية أو قرار.',
             'owner_id.required' => 'يجب تحديد مسؤول المخرج.',
             'title.required' => 'عنوان المخرج مطلوب.',
-            'meeting_id.required' => 'يجب ربط المخرج بالاجتماع.',
+            'meeting_id.in' => 'معرّف الاجتماع في الطلب لا يطابق الاجتماع في المسار.',
         ];
     }
 }

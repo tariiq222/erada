@@ -20,7 +20,9 @@ const RecommendationsFilters: React.FC<Props> = ({ filters, onChange, onReset })
           options={[
             { value: '', label: t('common.all') },
             { value: 'proposed', label: t('meetings.recommendation.statuses.proposed') },
+            { value: 'pending', label: t('meetings.recommendation.statuses.pending') },
             { value: 'accepted', label: t('meetings.recommendation.statuses.accepted') },
+            { value: 'approved', label: t('meetings.recommendation.statuses.approved') },
             { value: 'rejected', label: t('meetings.recommendation.statuses.rejected') },
             { value: 'deferred', label: t('meetings.recommendation.statuses.deferred') },
             { value: 'completed', label: t('meetings.recommendation.statuses.completed') },
@@ -40,11 +42,11 @@ const RecommendationsFilters: React.FC<Props> = ({ filters, onChange, onReset })
           ]}
         />
       </FilterField>
-      <FilterField label={t('meetings.recommendation.list.filters.decision')}>
+      <FilterField label={t('meetings.recommendation.fields.meeting', { defaultValue: 'الاجتماع' })}>
         <Input
           type="number"
-          value={filters.decision_id}
-          onChange={(e) => onChange('decision_id', e.target.value)}
+          value={filters.meeting_id}
+          onChange={(e) => onChange('meeting_id', e.target.value)}
         />
       </FilterField>
       <div className="shrink-0">

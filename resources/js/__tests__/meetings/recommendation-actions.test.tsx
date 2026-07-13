@@ -62,10 +62,12 @@ describe('RecommendationStatusActions — per-action capability gating', () => {
       <MemoryRouter>
         <RecommendationStatusActions
           recommendation={mockRecommendation}
+          canApprove={false}
           canAccept={true}
           canReject={false}
           canDefer={false}
           canComplete={false}
+          onApprove={vi.fn()}
           onAccept={vi.fn()}
           onReject={vi.fn()}
           onDefer={vi.fn()}
@@ -74,16 +76,13 @@ describe('RecommendationStatusActions — per-action capability gating', () => {
       </MemoryRouter>,
     );
 
-    // All four action buttons render; only Accept is enabled.
+    // Missing capabilities hide their actions rather than presenting dead controls.
     const acceptBtn = screen.getByRole('button', { name: 'meetings.recommendation.actions.accept' });
-    const rejectBtn = screen.getByRole('button', { name: 'meetings.recommendation.actions.reject' });
-    const deferBtn = screen.getByRole('button', { name: 'meetings.recommendation.actions.defer' });
-    const completeBtn = screen.getByRole('button', { name: 'meetings.recommendation.actions.complete' });
 
     expect(acceptBtn).not.toBeDisabled();
-    expect(rejectBtn).toBeDisabled();
-    expect(deferBtn).toBeDisabled();
-    expect(completeBtn).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'meetings.recommendation.actions.reject' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'meetings.recommendation.actions.defer' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'meetings.recommendation.actions.complete' })).toBeNull();
   });
 
   it('disables every action when no capabilities are granted', () => {
@@ -91,10 +90,12 @@ describe('RecommendationStatusActions — per-action capability gating', () => {
       <MemoryRouter>
         <RecommendationStatusActions
           recommendation={mockRecommendation}
+          canApprove={false}
           canAccept={false}
           canReject={false}
           canDefer={false}
           canComplete={false}
+          onApprove={vi.fn()}
           onAccept={vi.fn()}
           onReject={vi.fn()}
           onDefer={vi.fn()}
@@ -103,10 +104,10 @@ describe('RecommendationStatusActions — per-action capability gating', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('button', { name: 'meetings.recommendation.actions.accept' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'meetings.recommendation.actions.reject' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'meetings.recommendation.actions.defer' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'meetings.recommendation.actions.complete' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'meetings.recommendation.actions.accept' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'meetings.recommendation.actions.reject' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'meetings.recommendation.actions.defer' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'meetings.recommendation.actions.complete' })).toBeNull();
   });
 
   it('keeps a button disabled when the status forbids the transition even if capability is granted', () => {
@@ -116,10 +117,12 @@ describe('RecommendationStatusActions — per-action capability gating', () => {
       <MemoryRouter>
         <RecommendationStatusActions
           recommendation={mockRecommendation}
+          canApprove={false}
           canAccept={true}
           canReject={true}
           canDefer={true}
           canComplete={true}
+          onApprove={vi.fn()}
           onAccept={vi.fn()}
           onReject={vi.fn()}
           onDefer={vi.fn()}
@@ -132,5 +135,28 @@ describe('RecommendationStatusActions — per-action capability gating', () => {
     expect(screen.getByRole('button', { name: 'meetings.recommendation.actions.reject' })).not.toBeDisabled();
     expect(screen.getByRole('button', { name: 'meetings.recommendation.actions.defer' })).not.toBeDisabled();
     expect(screen.getByRole('button', { name: 'meetings.recommendation.actions.complete' })).toBeDisabled();
+  });
+
+  it('exposes approve for a pending ruling instead of the action-item accept transition', () => {
+    render(
+      <MemoryRouter>
+        <RecommendationStatusActions
+          recommendation={{ ...mockRecommendation, kind: 'ruling', status: 'pending' }}
+          canApprove={true}
+          canAccept={true}
+          canReject={true}
+          canDefer={true}
+          canComplete={true}
+          onApprove={vi.fn()}
+          onAccept={vi.fn()}
+          onReject={vi.fn()}
+          onDefer={vi.fn()}
+          onComplete={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('button', { name: 'meetings.recommendation.actions.approve' })).not.toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'meetings.recommendation.actions.accept' })).toBeNull();
   });
 });

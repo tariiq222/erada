@@ -75,11 +75,31 @@ class MeetingControllerTest extends TestCase
         $this->assertDatabaseHas('meetings', ['title' => 'اجتماع جديد']);
     }
 
+    public function test_store_cannot_bypass_the_meeting_status_transition_endpoints(): void
+    {
+        $response = $this->actingAs($this->user, 'sanctum')->postJson('/api/meetings', [
+            'title' => 'محاولة تجاوز حالة الاجتماع',
+            'scheduled_at' => now()->addDays(2)->toIso8601String(),
+            'duration_minutes' => 60,
+            'organizer_id' => $this->user->id,
+            'subject_type' => 'project',
+            'subject_id' => $this->project->id,
+            'status' => Meeting::STATUS_IN_PROGRESS,
+        ]);
+
+        $response->assertStatus(422)->assertJsonValidationErrors(['status']);
+        $this->assertDatabaseMissing('meetings', ['title' => 'محاولة تجاوز حالة الاجتماع']);
+    }
+
     public function test_can_show_a_meeting(): void
     {
         $m = $this->makeMeeting();
         $response = $this->actingAs($this->user, 'sanctum')->getJson("/api/meetings/{$m->id}");
-        $response->assertStatus(200)->assertJson(['id' => $m->id]);
+        $response->assertStatus(200)
+            ->assertJson(['id' => $m->id])
+            ->assertJsonPath('allowed_actions.update', true)
+            ->assertJsonPath('allowed_actions.delete', true)
+            ->assertJsonPath('allowed_actions.view_agenda', true);
     }
 
     public function test_can_update_a_meeting(): void
@@ -94,6 +114,25 @@ class MeetingControllerTest extends TestCase
 
         $response->assertStatus(200);
         $this->assertDatabaseHas('meetings', ['id' => $m->id, 'title' => 'عنوان محدث']);
+    }
+
+    public function test_update_cannot_bypass_the_meeting_status_transition_endpoints(): void
+    {
+        $meeting = $this->makeMeeting(['status' => Meeting::STATUS_SCHEDULED]);
+
+        $response = $this->actingAs($this->user, 'sanctum')->putJson("/api/meetings/{$meeting->id}", [
+            'title' => $meeting->title,
+            'scheduled_at' => $meeting->scheduled_at->toIso8601String(),
+            'duration_minutes' => $meeting->duration_minutes,
+            'organizer_id' => $this->user->id,
+            'status' => Meeting::STATUS_COMPLETED,
+        ]);
+
+        $response->assertStatus(422)->assertJsonValidationErrors(['status']);
+        $this->assertDatabaseHas('meetings', [
+            'id' => $meeting->id,
+            'status' => Meeting::STATUS_SCHEDULED,
+        ]);
     }
 
     public function test_can_soft_delete_a_meeting(): void

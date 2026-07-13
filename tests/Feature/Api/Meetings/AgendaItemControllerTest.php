@@ -32,7 +32,11 @@ class AgendaItemControllerTest extends TestCase
         $this->seed(RolesAndPermissionsSeeder::class);
         $dept = Department::factory()->create();
 
-        $this->organizer = User::factory()->create(['department_id' => $dept->id, 'is_active' => true]);
+        $this->organizer = User::factory()->create([
+            'department_id' => $dept->id,
+            'organization_id' => $dept->organization_id,
+            'is_active' => true,
+        ]);
         $this->organizer->assignRole('super_admin');
 
         $this->attendee = User::factory()->create([

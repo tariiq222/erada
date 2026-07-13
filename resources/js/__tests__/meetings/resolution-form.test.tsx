@@ -22,14 +22,8 @@ vi.mock('@features/meetings/resolutions/api', () => ({
   },
 }));
 
-vi.mock('@features/meetings/api', () => ({
+vi.mock('@entities/user', () => ({
   usersApi: { getList: mocks.usersGetList },
-  meetingsApi: {},
-  recommendationsApi: {},
-  meetingCategoriesApi: {},
-  meetingSettingsApi: {},
-  agendaItemsApi: {},
-  notificationsApi: {},
 }));
 
 vi.mock('@shared/contexts/AuthContext', () => ({
@@ -43,30 +37,53 @@ vi.mock('@shared/ui/Toast', () => ({
 import ResolutionForm from '@features/meetings/resolutions/ResolutionForm';
 
 describe('ResolutionForm — kind mandatory + owner mandatory', () => {
-  it('renders the kind radio with both options', () => {
+  it('renders the kind radio with both options', async () => {
     render(<ResolutionForm mode="modal" meetingId={1} onSuccess={() => {}} onCancel={() => {}} />);
     expect(screen.getAllByText(/توصية/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/قرار/).length).toBeGreaterThan(0);
+    await waitFor(() => expect(mocks.usersGetList).toHaveBeenCalled());
   });
 
   it('submits with kind=recommendation and owner_id', async () => {
     mocks.createForMeeting.mockClear();
+    render(
+      <ResolutionForm
+        mode="modal"
+        meetingId={7}
+        initial={{ kind: 'recommendation', title: 'مخرج اجتماع', owner_id: 1 }}
+        onSuccess={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'إنشاء' }));
+
+    await waitFor(() => expect(mocks.createForMeeting).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({
+        meeting_id: 7,
+        kind: 'recommendation',
+        owner_id: 1,
+        title: 'مخرج اجتماع',
+      }),
+    ));
+  });
+
+  it('loads organization users before an owner is selected', async () => {
     render(<ResolutionForm mode="modal" meetingId={7} onSuccess={() => {}} onCancel={() => {}} />);
 
-    // The form must expose both kind options — that is the contract under
-    // test (Direction R pins kind as mandatory at the form layer).
     await waitFor(() => {
-      expect(screen.getAllByText(/توصية/).length).toBeGreaterThan(0);
-      expect(screen.getAllByText(/قرار/).length).toBeGreaterThan(0);
+      expect(mocks.usersGetList).toHaveBeenCalled();
     });
   });
 
-  it('does not expose approve/reject/adopt/deliberate in any field or label', () => {
+  it('does not expose approve/reject/adopt/deliberate in any field or label', async () => {
     const { container } = render(<ResolutionForm mode="modal" meetingId={1} onSuccess={() => {}} onCancel={() => {}} />);
     const html = container.innerHTML;
     expect(html).not.toMatch(/approve|اعتماد/i);
     expect(html).not.toMatch(/reject|رفض/i);
     expect(html).not.toMatch(/adopt/i);
     expect(html).not.toMatch(/deliberate/i);
+    await waitFor(() => expect(mocks.usersGetList).toHaveBeenCalled());
   });
 });

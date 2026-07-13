@@ -9,7 +9,6 @@ import {
   Card,
   CardContent,
 } from '@shared/ui';
-import { useCan } from '@shared/api/access';
 import { IconEdit, IconTrash } from '@shared/ui/icons';
 import { useRecommendationView, RecommendationOverview, RecommendationStatusActions } from './view';
 
@@ -29,18 +28,20 @@ const RecommendationViewSkeleton: React.FC = () => (
 const RecommendationView: React.FC = () => {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
-  const { recommendation, loading, deleting, remove, accept, reject, defer, complete } =
+  const { recommendation, loading, deleting, remove, approve, accept, reject, defer, complete } =
     useRecommendationView(id);
   const [showDelete, setShowDelete] = useState(false);
 
-  const canEdit = useCan('recommendations.edit');
-  const canDelete = useCan('recommendations.delete');
-  const canAccept = useCan('recommendations.accept');
-  const canReject = useCan('recommendations.reject');
-  const canDefer = useCan('recommendations.defer');
-  const canComplete = useCan('recommendations.complete');
-
   if (loading || !recommendation) return <RecommendationViewSkeleton />;
+
+  const allowed = recommendation.allowed_actions;
+  const canEdit = allowed?.update ?? false;
+  const canDelete = allowed?.delete ?? false;
+  const canApprove = allowed?.approve ?? false;
+  const canAccept = allowed?.accept ?? false;
+  const canReject = allowed?.reject ?? false;
+  const canDefer = allowed?.defer ?? false;
+  const canComplete = allowed?.complete ?? false;
 
   return (
     <div className="space-y-4">
@@ -86,10 +87,12 @@ const RecommendationView: React.FC = () => {
         <div>
           <RecommendationStatusActions
             recommendation={recommendation}
+            canApprove={canApprove}
             canAccept={canAccept}
             canReject={canReject}
             canDefer={canDefer}
             canComplete={canComplete}
+            onApprove={approve}
             onAccept={accept}
             onReject={reject}
             onDefer={defer}
