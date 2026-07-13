@@ -80,7 +80,7 @@ vi.mock('@shared/api/client', () => ({
           },
         });
       }
-      if (path === '/admin/organizations/42') {
+      if (path === '/organizations/42') {
         return Promise.resolve({
           data: {
             id: 42,

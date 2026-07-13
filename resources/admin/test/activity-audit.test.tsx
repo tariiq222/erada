@@ -69,10 +69,10 @@ describe('admin activity and audit contracts', () => {
     await adminApi.scopedRoleAudit.list({ user_id: 9, page: 3 });
     await adminApi.scopeTypes.list({ search: 'department' });
 
-    expect(apiGet).toHaveBeenNthCalledWith(1, '/admin/activity-logs?action=updated&page=2');
-    expect(apiBlob).toHaveBeenCalledWith('/admin/activity-logs/export?format=csv&action=updated');
-    expect(apiGet).toHaveBeenNthCalledWith(2, '/admin/scoped-roles/audit-logs?user_id=9&page=3');
-    expect(apiGet).toHaveBeenNthCalledWith(3, '/admin/scope-types?search=department');
+    expect(apiGet).toHaveBeenNthCalledWith(1, '/activity-logs?action=updated&page=2');
+    expect(apiBlob).toHaveBeenCalledWith('/activity-logs/export?format=csv&action=updated');
+    expect(apiGet).toHaveBeenNthCalledWith(2, '/authorization-role-assignments/audit-logs?user_id=9&page=3');
+    expect(apiGet).toHaveBeenNthCalledWith(3, '/scope-types?search=department');
   });
 
   it('applies activity filters and reports export authorization failures', async () => {
@@ -102,7 +102,7 @@ describe('admin activity and audit contracts', () => {
     await user.selectOptions(screen.getByLabelText(i18n.t('admin.activityLogs.fields.action')), 'updated');
     await user.click(screen.getByRole('button', { name: i18n.t('common.search') }));
 
-    await waitFor(() => expect(apiGet).toHaveBeenLastCalledWith('/admin/activity-logs?search=governance&action=updated&page=1&per_page=25'));
+    await waitFor(() => expect(apiGet).toHaveBeenLastCalledWith('/activity-logs?search=governance&action=updated&page=1&per_page=25'));
     await user.click(screen.getByRole('button', { name: /CSV/ }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Export forbidden');
   });
@@ -127,7 +127,7 @@ describe('admin activity and audit contracts', () => {
     await screen.findByText(i18n.t('admin.activityLogs.empty'));
     await user.click(screen.getByRole('button', { name: 'CSV' }));
 
-    await waitFor(() => expect(apiBlob).toHaveBeenCalledWith('/admin/activity-logs/export?format=csv'));
+    await waitFor(() => expect(apiBlob).toHaveBeenCalledWith('/activity-logs/export?format=csv'));
     expect(createObjectURL).toHaveBeenCalledWith(blob);
     expect(click).toHaveBeenCalledOnce();
     expect(downloadedFilename).toMatch(/^activity-log-\d{4}-\d{2}-\d{2}\.csv$/);
@@ -165,10 +165,10 @@ describe('admin activity and audit contracts', () => {
     await user.type(screen.getByLabelText(i18n.t('admin.scopedRolesAudit.filters.userId')), '9');
     await user.selectOptions(screen.getByLabelText(i18n.t('admin.scopedRolesAudit.fields.action')), 'role_assigned');
     await user.click(screen.getByRole('button', { name: i18n.t('common.search') }));
-    expect(apiGet).toHaveBeenLastCalledWith('/admin/scoped-roles/audit-logs?action=role_assigned&user_id=9&page=1&per_page=25');
+    expect(apiGet).toHaveBeenLastCalledWith('/authorization-role-assignments/audit-logs?action=role_assigned&user_id=9&page=1&per_page=25');
 
     await user.click(screen.getByRole('button', { name: i18n.t('common.next') }));
-    await waitFor(() => expect(apiGet).toHaveBeenLastCalledWith('/admin/scoped-roles/audit-logs?action=role_assigned&user_id=9&page=2&per_page=25'));
+    await waitFor(() => expect(apiGet).toHaveBeenLastCalledWith('/authorization-role-assignments/audit-logs?action=role_assigned&user_id=9&page=2&per_page=25'));
   });
 
   it('renders scope types as read-only with no phantom create action', async () => {

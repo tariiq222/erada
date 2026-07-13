@@ -81,7 +81,7 @@ describe('admin incident-type contracts', () => {
     render(<AdminRouter />);
     const select = await screen.findByLabelText(i18n.t('ovr.governing_department'));
     await actor.selectOptions(select, '4');
-    expect(apiPut).toHaveBeenCalledWith('/admin/governance-rules', { resource_type: 'ovr', governing_unit_id: 4 });
+    expect(apiPut).toHaveBeenCalledWith('/governance-rules', { resource_type: 'ovr', governing_unit_id: 4 });
     expect(await screen.findByRole('alert')).toHaveTextContent('Department belongs to another organization');
     expect(select).toHaveValue('');
   });
@@ -135,7 +135,7 @@ describe('admin incident-type contracts', () => {
     await waitFor(() => expect(select).toBeEnabled());
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     await actor.selectOptions(select, '');
-    await waitFor(() => expect(apiPut).toHaveBeenLastCalledWith('/admin/governance-rules', { resource_type: 'ovr', governing_unit_id: null }));
+    await waitFor(() => expect(apiPut).toHaveBeenLastCalledWith('/governance-rules', { resource_type: 'ovr', governing_unit_id: null }));
   });
 
   it('has mirrored translations for incident administration', () => {

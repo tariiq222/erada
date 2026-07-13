@@ -96,16 +96,16 @@ describe('admin role and governance contracts', () => {
     await adminApi.governance.list();
     await adminApi.governance.update({ resource_type: 'project', governing_unit_id: 3 });
 
-    expect(apiGet).toHaveBeenNthCalledWith(1, '/admin/roles');
-    expect(apiGet).toHaveBeenNthCalledWith(2, '/admin/roles/abilities');
-    expect(apiPost).toHaveBeenCalledWith('/admin/roles', { name: 'project_controller', scope_type: 'organization' });
-    expect(apiPut).toHaveBeenNthCalledWith(1, '/admin/roles/12', { reach: { projects: 'department' } });
-    expect(apiDelete).toHaveBeenCalledWith('/admin/roles/12');
-    expect(apiGet).toHaveBeenCalledWith('/admin/users?per_page=100');
-    expect(apiGet).toHaveBeenCalledWith('/admin/scoped-roles/user/9/access-summary');
+    expect(apiGet).toHaveBeenNthCalledWith(1, '/roles');
+    expect(apiGet).toHaveBeenNthCalledWith(2, '/roles/abilities');
+    expect(apiPost).toHaveBeenCalledWith('/roles', { name: 'project_controller', scope_type: 'organization' });
+    expect(apiPut).toHaveBeenNthCalledWith(1, '/roles/12', { reach: { projects: 'department' } });
+    expect(apiDelete).toHaveBeenCalledWith('/roles/12');
+    expect(apiGet).toHaveBeenCalledWith('/users?per_page=100');
+    expect(apiGet).toHaveBeenCalledWith('/authorization-role-assignments/user/9/access-summary');
     expect(apiGet).toHaveBeenCalledWith('/admin/departments?organization_id=17&per_page=100&page=1');
-    expect(apiGet).toHaveBeenCalledWith('/admin/governance-rules');
-    expect(apiPut).toHaveBeenNthCalledWith(2, '/admin/governance-rules', {
+    expect(apiGet).toHaveBeenCalledWith('/governance-rules');
+    expect(apiPut).toHaveBeenNthCalledWith(2, '/governance-rules', {
       resource_type: 'project',
       governing_unit_id: 3,
     });
@@ -132,7 +132,7 @@ describe('admin role and governance contracts', () => {
     await user.selectOptions(screen.getByLabelText(`Projects ${i18n.t('admin.roles.reach.label')}`), 'department');
     await user.click(screen.getByRole('button', { name: i18n.t('common.create') }));
 
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/admin/roles', {
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/roles', {
       name: 'project_controller',
       scope_type: 'organization',
       label_ar: '',
@@ -174,7 +174,7 @@ describe('admin role and governance contracts', () => {
 
     expect(await screen.findByText('Risk Reviewer')).toBeInTheDocument();
     expect(screen.getByText(/risks/)).toHaveTextContent(i18n.t('admin.roles.reach.department'));
-    expect(apiGet).toHaveBeenLastCalledWith('/admin/scoped-roles/user/9/access-summary');
+    expect(apiGet).toHaveBeenLastCalledWith('/authorization-role-assignments/user/9/access-summary');
   });
 
   it('serializes each governance rule save, rolls back failures, and clears the error on retry', async () => {
@@ -208,7 +208,7 @@ describe('admin role and governance contracts', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Forbidden department');
     expect(selection).toBeEnabled();
     expect(selection).toHaveValue('');
-    expect(apiPut).toHaveBeenCalledWith('/admin/governance-rules', {
+    expect(apiPut).toHaveBeenCalledWith('/governance-rules', {
       resource_type: 'project',
       governing_unit_id: 3,
     });
@@ -219,7 +219,7 @@ describe('admin role and governance contracts', () => {
     expect(selection).toBeEnabled();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(apiPut).toHaveBeenCalledTimes(2);
-    expect(apiPut).toHaveBeenLastCalledWith('/admin/governance-rules', {
+    expect(apiPut).toHaveBeenLastCalledWith('/governance-rules', {
       resource_type: 'project',
       governing_unit_id: 4,
     });
@@ -236,7 +236,7 @@ describe('admin role and governance contracts', () => {
 
     const customRow = await screen.findByRole('row', { name: /Project Controller/ });
     await user.click(within(customRow).getByRole('button', { name: i18n.t('common.delete') }));
-    expect(apiDelete).toHaveBeenCalledWith('/admin/roles/12');
+    expect(apiDelete).toHaveBeenCalledWith('/roles/12');
 
     const systemRow = screen.getByRole('row', { name: /Viewer/ });
     expect(within(systemRow).queryByRole('button', { name: i18n.t('common.delete') })).not.toBeInTheDocument();
@@ -257,14 +257,14 @@ describe('admin role and governance contracts', () => {
     await user.type(label, 'Updated Controller');
     await user.click(screen.getByRole('button', { name: i18n.t('common.save_changes') }));
 
-    expect(apiPut).toHaveBeenCalledWith('/admin/roles/12', expect.not.objectContaining({ scope_type: expect.anything() }));
+    expect(apiPut).toHaveBeenCalledWith('/roles/12', expect.not.objectContaining({ scope_type: expect.anything() }));
   });
 
   it('preserves the governing-departments bookmark as a governance redirect', async () => {
     apiGet.mockImplementation((path) => {
-      if (path === '/admin/roles/abilities') return Promise.resolve({ data: { groups: [] } });
-      if (path === '/admin/roles/scope-options') return Promise.resolve({ scopes: [{ key: 'organization', label: 'Organization' }] });
-      if (path === '/admin/governance-rules') return Promise.resolve({ data: [] });
+      if (path === '/roles/abilities') return Promise.resolve({ data: { groups: [] } });
+      if (path === '/roles/scope-options') return Promise.resolve({ scopes: [{ key: 'organization', label: 'Organization' }] });
+      if (path === '/governance-rules') return Promise.resolve({ data: [] });
       if (path.startsWith('/admin/departments?')) return Promise.resolve({ data: [], current_page: 1, last_page: 1, per_page: 100, total: 0 });
       return Promise.resolve({ data: role });
     });

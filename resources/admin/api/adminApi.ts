@@ -45,7 +45,7 @@ function queryString(params?: Record<string, QueryValue>): string {
 
 function exportQuery(format: 'csv' | 'json', params?: Record<string, QueryValue>): string {
   const suffix = queryString(params);
-  return `/admin/activity-logs/export?format=${format}${suffix ? `&${suffix.slice(1)}` : ''}`;
+  return `/activity-logs/export?format=${format}${suffix ? `&${suffix.slice(1)}` : ''}`;
 }
 
 export function apiErrorMessage(error: unknown, fallback: string): string {
@@ -63,18 +63,18 @@ export const adminApi = {
     api.get<AuditRecentResponse>(`/admin/audit/recent${queryString(params)}`),
   organizations: {
     list: (params?: Record<string, QueryValue>) =>
-      api.get<PaginatedResponse<Organization>>(`/admin/organizations${queryString(params)}`),
-    get: (id: number) => api.get<{ data: Organization }>(`/admin/organizations/${id}`),
-    create: (data: Partial<OrganizationInput>) => api.post('/admin/organizations', data),
+      api.get<PaginatedResponse<Organization>>(`/organizations${queryString(params)}`),
+    get: (id: number) => api.get<{ data: Organization }>(`/organizations/${id}`),
+    create: (data: Partial<OrganizationInput>) => api.post('/organizations', data),
     update: (id: number, data: Partial<OrganizationInput>) =>
-      api.put(`/admin/organizations/${id}`, data),
-    delete: (id: number) => api.delete(`/admin/organizations/${id}`),
+      api.put(`/organizations/${id}`, data),
+    delete: (id: number) => api.delete(`/organizations/${id}`),
     all: async () => {
       const data: Organization[] = [];
       let page = 1;
       let lastPage = 1;
       do {
-        const response = await api.get<PaginatedResponse<Organization>>(`/admin/organizations${queryString({ per_page: 100, page })}`);
+        const response = await api.get<PaginatedResponse<Organization>>(`/organizations${queryString({ per_page: 100, page })}`);
         data.push(...response.data);
         lastPage = response.meta.last_page;
         page += 1;
@@ -83,30 +83,30 @@ export const adminApi = {
     },
   },
   roles: {
-    list: () => api.get<{ data: RoleDefinition[]; meta: { total: number } }>('/admin/roles'),
-    get: (id: number) => api.get<{ data: RoleDefinition }>(`/admin/roles/${id}`),
-    abilities: () => api.get<{ data: AbilityRegistry }>('/admin/roles/abilities'),
-    scopeOptions: () => api.get<{ scopes: { key: string; label: string }[] }>('/admin/roles/scope-options'),
-    create: (data: RoleInput) => api.post('/admin/roles', data),
-    update: (id: number, data: RoleInput) => api.put(`/admin/roles/${id}`, data),
-    delete: (id: number) => api.delete(`/admin/roles/${id}`),
+    list: () => api.get<{ data: RoleDefinition[]; meta: { total: number } }>('/roles'),
+    get: (id: number) => api.get<{ data: RoleDefinition }>(`/roles/${id}`),
+    abilities: () => api.get<{ data: AbilityRegistry }>('/roles/abilities'),
+    scopeOptions: () => api.get<{ scopes: { key: string; label: string }[] }>('/roles/scope-options'),
+    create: (data: RoleInput) => api.post('/roles', data),
+    update: (id: number, data: RoleInput) => api.put(`/roles/${id}`, data),
+    delete: (id: number) => api.delete(`/roles/${id}`),
   },
   users: {
-    summary: () => api.get<{ data: AdminUserSummary[] }>('/admin/users?per_page=100'),
+    summary: () => api.get<{ data: AdminUserSummary[] }>('/users?per_page=100'),
     list: (params?: Record<string, QueryValue>) =>
-      api.get<RawPaginatedResponse<AdminUser>>(`/admin/users${queryString(params)}`),
-    get: (id: number) => api.get<AdminUser>(`/admin/users/${id}`),
-    security: (id: number) => api.get<{ security: UserSecurityStatus }>(`/admin/users/${id}/security`),
-    create: (data: Partial<AdminUserInput>) => api.post('/admin/users', data),
-    update: (id: number, data: Partial<AdminUserInput>) => api.put(`/admin/users/${id}`, data),
-    unlock: (id: number) => api.post(`/admin/users/${id}/unlock`, undefined),
-    delete: (id: number) => api.delete(`/admin/users/${id}`),
+      api.get<RawPaginatedResponse<AdminUser>>(`/users${queryString(params)}`),
+    get: (id: number) => api.get<AdminUser>(`/users/${id}`),
+    security: (id: number) => api.get<{ security: UserSecurityStatus }>(`/users/${id}/security`),
+    create: (data: Partial<AdminUserInput>) => api.post('/users', data),
+    update: (id: number, data: Partial<AdminUserInput>) => api.put(`/users/${id}`, data),
+    unlock: (id: number) => api.post(`/users/${id}/unlock`, undefined),
+    delete: (id: number) => api.delete(`/users/${id}`),
     all: async (organizationId: number) => {
       const data: AdminUser[] = [];
       let page = 1;
       let lastPage = 1;
       do {
-        const response = await api.get<RawPaginatedResponse<AdminUser>>(`/admin/users${queryString({ organization_id: organizationId, per_page: 100, page })}`);
+        const response = await api.get<RawPaginatedResponse<AdminUser>>(`/users${queryString({ organization_id: organizationId, per_page: 100, page })}`);
         data.push(...response.data);
         lastPage = response.last_page;
         page += 1;
@@ -116,7 +116,7 @@ export const adminApi = {
   },
   access: {
     summary: (userId: number) =>
-      api.get<{ data: AccessSummary }>(`/admin/scoped-roles/user/${userId}/access-summary`),
+      api.get<{ data: AccessSummary }>(`/authorization-role-assignments/user/${userId}/access-summary`),
   },
   departments: {
     list: (params?: Record<string, QueryValue>) =>
@@ -140,23 +140,23 @@ export const adminApi = {
     },
   },
   governance: {
-    list: () => api.get<{ data: GovernanceRule[] }>('/admin/governance-rules'),
+    list: () => api.get<{ data: GovernanceRule[] }>('/governance-rules'),
     update: (data: { resource_type: string; resource_subtype?: string | null; governing_unit_id: number | null }) =>
-      api.put('/admin/governance-rules', data),
+      api.put('/governance-rules', data),
   },
   activityLogs: {
     list: (params?: Record<string, QueryValue>) =>
-      api.get<PaginatedResponse<ActivityLogEntry>>(`/admin/activity-logs${queryString(params)}`),
+      api.get<PaginatedResponse<ActivityLogEntry>>(`/activity-logs${queryString(params)}`),
     export: (format: 'csv' | 'json', params?: Record<string, QueryValue>) =>
       api.blob(exportQuery(format, params)),
   },
   scopedRoleAudit: {
     list: (params?: Record<string, QueryValue>) =>
-      api.get<PaginatedResponse<ScopedRoleAuditLog>>(`/admin/scoped-roles/audit-logs${queryString(params)}`),
+      api.get<PaginatedResponse<ScopedRoleAuditLog>>(`/authorization-role-assignments/audit-logs${queryString(params)}`),
   },
   scopeTypes: {
     list: (params?: Record<string, QueryValue>) =>
-      api.get<PaginatedResponse<ScopeType>>(`/admin/scope-types${queryString(params)}`),
+      api.get<PaginatedResponse<ScopeType>>(`/scope-types${queryString(params)}`),
   },
   incidentTypes: {
     list: (params?: { include_inactive?: boolean }) =>
