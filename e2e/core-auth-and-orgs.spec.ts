@@ -104,7 +104,7 @@ test.describe('Core — Admin Dashboard & Organizations', () => {
       data: { email: 'admin@admin.com', password: 'password' },
       headers: { Accept: 'application/json', 'X-Skip-Csrf': '1' },
     });
-    expect(response.ok()).toBeTruthy();
+    expect(response.ok(), `admin API login failed (${response.status()}): ${await response.text()}`).toBeTruthy();
     await page.goto('/dashboard');
     await page.waitForURL('/dashboard', { timeout: 10000 });
   });
