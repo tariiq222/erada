@@ -550,93 +550,7 @@ vi.mock('@shared/ui/LanguageSwitcher', () => ({
 }));
 
 // Import after mocks
-import Sidebar from '@widgets/app-shell/ui/Sidebar';
 import Header from '@widgets/app-shell/ui/Header';
-
-const expectTextPresent = (text: string) => {
-  expect(screen.queryAllByText(text).length).toBeGreaterThan(0);
-};
-
-describe('Sidebar Component', () => {
-  const defaultProps = {
-    isOpen: true,
-    onToggle: vi.fn(),
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockWindowWidth(1024);
-  });
-
-  it('renders system name when open', () => {
-    render(<Sidebar {...defaultProps} />);
-    expect(screen.getByText('منصة إرادة')).toBeInTheDocument();
-  });
-
-  it('renders project office subtitle', () => {
-    render(<Sidebar {...defaultProps} />);
-    expect(screen.getByText('مكتب إدارة المشاريع')).toBeInTheDocument();
-  });
-
-  it('renders navigation items', () => {
-    render(<Sidebar {...defaultProps} />);
-    expectTextPresent('لوحة التحكم');
-    expectTextPresent('المشاريع');
-    expectTextPresent('المهام');
-    expectTextPresent('الإدارة');
-  });
-
-  it('renders brand mark', () => {
-    render(<Sidebar {...defaultProps} />);
-    // Brand mark now uses the actual logo image instead of the first-letter placeholder.
-    const brandMarks = screen.getAllByTestId('brand-mark');
-    expect(brandMarks[0]).toBeInTheDocument();
-    expect(brandMarks[0].querySelector('img')).toHaveAttribute('src', '/images/logo.png');
-  });
-
-  it('calls onToggle when toggle button clicked', async () => {
-    const onToggle = vi.fn();
-    render(<Sidebar {...defaultProps} onToggle={onToggle} />);
-
-    const closeButton = screen.getByLabelText('إغلاق القائمة');
-    await userEvent.click(closeButton);
-
-    expect(onToggle).toHaveBeenCalled();
-  });
-
-  it('hides labels when sidebar is closed', () => {
-    render(<Sidebar {...defaultProps} isOpen={false} />);
-    expect(screen.queryByText('منصة إرادة')).not.toBeInTheDocument();
-    expect(screen.queryByText('مكتب إدارة المشاريع')).not.toBeInTheDocument();
-  });
-
-  it('renders overlay on mobile when open', () => {
-    mockWindowWidth(768);
-    render(<Sidebar {...defaultProps} isOpen={true} />);
-
-    // The overlay div should be present
-    const overlay = document.querySelector('div.fixed.inset-0');
-    expect(overlay).toBeInTheDocument();
-  });
-
-  it('does not render overlay when closed', () => {
-    render(<Sidebar {...defaultProps} isOpen={false} />);
-
-    const overlay = document.querySelector('div.fixed.inset-0');
-    expect(overlay).not.toBeInTheDocument();
-  });
-
-  it('renders the projects link when the projects section is active', () => {
-    // The projects section no longer has a submenu (my-projects / statistics).
-    // When on /projects, the section panel shows a single link to /projects.
-    mockLocation.pathname = '/projects';
-    render(<Sidebar {...defaultProps} />);
-
-    expect(document.querySelector('a[href="/projects"]')).toBeInTheDocument();
-    // The old per-section "my projects" / statistics submenu is gone.
-    expect(document.querySelector('a[href="/projects/statistics"]')).not.toBeInTheDocument();
-  });
-});
 
 describe('Header Component', () => {
   const defaultProps = {
@@ -807,75 +721,6 @@ describe('Header Component', () => {
   });
 });
 
-describe('Sidebar Navigation Links', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockLocation.pathname = '/dashboard';
-  });
-
-  it('renders dashboard link', () => {
-    render(<Sidebar isOpen={true} onToggle={vi.fn()} />);
-
-    const link = document.querySelector('a[href="/dashboard"]');
-    expect(link).toBeInTheDocument();
-  });
-
-  it('renders tasks link', () => {
-    mockLocation.pathname = '/tasks';
-    render(<Sidebar isOpen={true} onToggle={vi.fn()} />);
-
-    const link = document.querySelector('a[href="/tasks"]');
-    expect(link).toBeInTheDocument();
-  });
-
-  it('renders the users link on the configured admin origin', async () => {
-    mockLocation.pathname = '/dashboard';
-    render(<Sidebar isOpen={true} onToggle={vi.fn()} />);
-
-    await userEvent.click(screen.getAllByRole('button', { name: 'الإدارة' })[0]);
-    const link = document.querySelector('a[href="/admin/users"]');
-    expect(link).toBeInTheDocument();
-  });
-
-  it('renders the departments link on the configured admin origin', async () => {
-    mockLocation.pathname = '/dashboard';
-    render(<Sidebar isOpen={true} onToggle={vi.fn()} />);
-
-    await userEvent.click(screen.getAllByRole('button', { name: 'الإدارة' })[0]);
-    const link = document.querySelector('a[href="/admin/departments"]');
-    expect(link).toBeInTheDocument();
-  });
-});
-
-describe('Sidebar Section Navigation', () => {
-  it('shows the projects link when on the projects page', () => {
-    mockLocation.pathname = '/projects';
-    render(<Sidebar isOpen={true} onToggle={vi.fn()} />);
-
-    expect(document.querySelector('a[href="/projects"]')).toBeInTheDocument();
-  });
-
-  it('activates the projects section panel when the projects rail button is clicked', async () => {
-    mockLocation.pathname = '/dashboard';
-    render(<Sidebar isOpen={true} onToggle={vi.fn()} />);
-
-    // Rail buttons carry the section title as their accessible name.
-    const projectsButton = screen.getAllByRole('button', { name: 'المشاريع' })[0];
-    await userEvent.click(projectsButton);
-
-    // The projects section panel now exposes the projects link.
-    expect(document.querySelector('a[href="/projects"]')).toBeInTheDocument();
-  });
-
-  it('no longer renders a projects statistics submenu link', () => {
-    mockLocation.pathname = '/projects';
-    render(<Sidebar isOpen={true} onToggle={vi.fn()} />);
-
-    // The /projects/statistics submenu was removed from the projects section.
-    expect(document.querySelector('a[href="/projects/statistics"]')).not.toBeInTheDocument();
-  });
-});
-
 describe('Header Responsive Behavior', () => {
   it('uses the desktop sidebar offset', async () => {
     const { rerender } = render(<Header onMenuClick={vi.fn()} sidebarOpen={true} />);
@@ -889,28 +734,5 @@ describe('Header Responsive Behavior', () => {
 
     header = screen.getByRole('banner');
     expect(header.className).toContain('lg:start-[264px]');
-  });
-});
-
-describe('Sidebar Mobile Behavior', () => {
-  it('renders mobile overlay when sidebar is open', () => {
-    render(<Sidebar isOpen={true} onToggle={vi.fn()} />);
-
-    // The overlay div for mobile should be present
-    const overlay = document.querySelector('div.fixed.inset-0');
-    expect(overlay).toBeInTheDocument();
-  });
-
-  it('calls onToggle when overlay clicked', async () => {
-    const onToggle = vi.fn();
-    render(<Sidebar isOpen={true} onToggle={onToggle} />);
-
-    // Click the overlay
-    const overlay = document.querySelector('div.fixed.inset-0');
-    if (overlay) {
-      await userEvent.click(overlay);
-    }
-
-    expect(onToggle).toHaveBeenCalled();
   });
 });

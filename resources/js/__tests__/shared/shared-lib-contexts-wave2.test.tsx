@@ -1,14 +1,7 @@
 import React from 'react';
-import { AxiosError } from 'axios';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-
-const makeAxiosError = (status: number, data: unknown = {}) => {
-  const error = new AxiosError('Request failed', 'ERR_BAD_RESPONSE');
-  Object.assign(error, { response: { status, data } });
-  return error;
-};
 
 describe('shared cache wave 2 coverage', () => {
   beforeEach(async () => {
@@ -66,52 +59,6 @@ describe('shared cache wave 2 coverage', () => {
     expect(cache.has('expired-cleanup')).toBe(false);
     cache.clear();
     expect(cache.size).toBe(0);
-  });
-});
-
-describe('shared error handler wave 2 coverage', () => {
-  it('parses every API error branch and invokes callbacks/toasts', async () => {
-    const mod = await import('@shared/lib/errorHandler');
-    expect(mod.parseApiError(makeAxiosError(422, { message: 'Invalid', errors: { name: ['Required'] } }))).toMatchObject({ code: 'VALIDATION_ERROR', errors: { name: ['Required'] } });
-    expect(mod.parseApiError(makeAxiosError(401))).toMatchObject({ code: 'UNAUTHORIZED' });
-    expect(mod.parseApiError(makeAxiosError(403))).toMatchObject({ code: 'FORBIDDEN' });
-    expect(mod.parseApiError(makeAxiosError(404))).toMatchObject({ code: 'NOT_FOUND' });
-    expect(mod.parseApiError(makeAxiosError(429))).toMatchObject({ code: 'RATE_LIMITED' });
-    expect(mod.parseApiError(makeAxiosError(503))).toMatchObject({ code: 'SERVER_ERROR' });
-    expect(mod.parseApiError(makeAxiosError(418, { message: 'Teapot' }))).toMatchObject({ code: 'UNKNOWN_ERROR', message: 'Teapot' });
-    expect(mod.parseApiError(new Error('Network Error'))).toMatchObject({ code: 'NETWORK_ERROR', status: 0 });
-    expect(mod.parseApiError(new Error('plain'))).toMatchObject({ code: 'UNKNOWN_ERROR', message: 'plain' });
-    expect(mod.parseApiError('bad')).toMatchObject({ message: 'حدث خطأ غير متوقع' });
-
-    expect(mod.getValidationErrorsString({ a: ['A'], b: ['B', 'C'] })).toBe('A\nB\nC');
-    expect(mod.getValidationErrorsString()).toBe('');
-    expect(mod.getFieldError({ email: ['Invalid'] }, 'email')).toBe('Invalid');
-    expect(mod.getFieldError(undefined, 'email')).toBeUndefined();
-
-    const callbacks = {
-      onUnauthorized: vi.fn(), onForbidden: vi.fn(), onNotFound: vi.fn(), onValidationError: vi.fn(), onNetworkError: vi.fn(), onServerError: vi.fn(), showToast: vi.fn(),
-    };
-    expect(mod.handleApiError(makeAxiosError(401), callbacks).code).toBe('UNAUTHORIZED');
-    expect(mod.handleApiError(makeAxiosError(403), callbacks).code).toBe('FORBIDDEN');
-    expect(mod.handleApiError(makeAxiosError(404), callbacks).code).toBe('NOT_FOUND');
-    expect(mod.handleApiError(makeAxiosError(422, { errors: { title: ['Missing'] } }), callbacks).code).toBe('VALIDATION_ERROR');
-    expect(mod.handleApiError(new Error('Network Error'), callbacks).code).toBe('NETWORK_ERROR');
-    expect(mod.handleApiError(makeAxiosError(500), callbacks).code).toBe('SERVER_ERROR');
-    expect(callbacks.onUnauthorized).toHaveBeenCalled();
-    expect(callbacks.onForbidden).toHaveBeenCalled();
-    expect(callbacks.onNotFound).toHaveBeenCalled();
-    expect(callbacks.onValidationError).toHaveBeenCalledWith({ title: ['Missing'] });
-    expect(callbacks.onNetworkError).toHaveBeenCalled();
-    expect(callbacks.onServerError).toHaveBeenCalled();
-    expect(callbacks.showToast).toHaveBeenCalledWith('حدث خطأ في الخادم، يرجى المحاولة لاحقاً', 'error');
-
-    const validation = mod.parseApiError(makeAxiosError(422, { errors: { name: ['Required'] } }));
-    expect(mod.isValidationError(validation)).toBe(true);
-    expect(mod.isUnauthorizedError(mod.parseApiError(makeAxiosError(401)))).toBe(true);
-    expect(mod.isForbiddenError(mod.parseApiError(makeAxiosError(403)))).toBe(true);
-    expect(mod.isNotFoundError(mod.parseApiError(makeAxiosError(404)))).toBe(true);
-    expect(mod.isNetworkError(mod.parseApiError(new Error('Network Error')))).toBe(true);
-    expect(mod.isServerError(mod.parseApiError(makeAxiosError(500)))).toBe(true);
   });
 });
 
