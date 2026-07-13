@@ -315,6 +315,7 @@ jobs:
           DB_PASSWORD: secret
         run: |
           php artisan db:seed --force
+          php artisan users:reset-demo-passwords
           # DemoDataSeeder is best-effort: its org wiring (departments/users lack
           # organization_id) predates the multi-org requirement and is separately
           # rotted. The base seed above already provides the admin user + roles the
@@ -407,6 +408,7 @@ jobs:
         run: |
           php artisan migrate --force
           php artisan db:seed --force
+          php artisan users:reset-demo-passwords
       - name: Run cutover preflight
         run: php artisan authz:cutover-preflight
       - name: Verify canonical auth contracts

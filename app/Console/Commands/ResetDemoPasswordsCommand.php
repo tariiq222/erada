@@ -23,7 +23,7 @@ class ResetDemoPasswordsCommand extends Command
 
     public function handle(): int
     {
-        if (! app()->environment(['local', 'staging'])) {
+        if (! app()->environment(['local', 'staging', 'testing'])) {
             $this->error('This command is not available in production.');
 
             return self::FAILURE;
