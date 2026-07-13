@@ -145,9 +145,9 @@ export const NASAQ_NAV_TREE: RawNavModule[] = [
     icon: "trend",
     path: "/performance/kpis",
     accent: "teal",
-    access: { anyCapabilities: ["strategy.view", "strategy.view"] },
+    access: { capability: "kpis.view" },
     children: [
-      CREATE("performance-kpis-create", "/performance/kpis/new", { capability: "strategy.create" }),
+      CREATE("performance-kpis-create", "/performance/kpis/new", { capability: "kpis.create" }),
       { key: "performance-kpis-all", labelKey: "nav.view_all", icon: "list", path: "/performance/kpis" },
     ],
   },

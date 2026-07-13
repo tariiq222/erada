@@ -1074,13 +1074,19 @@ const App: React.FC = () => {
 												/>
 
 												{/* Performance KPIs */}
-												{/* Phase Task-13: KPI route guards now use the canonical
-												   `kpis.*` capabilities exposed by
-												   App\Modules\Core\Authorization\Capability::KPIS_*. The
-												   previous `strategy.*` mapping was wrong — the Strategy
-												   CapabilityProvider surfaces `strategy.*` only, so users
-												   who legitimately hold `kpis.view` on actor.org were
-												   silently denied. */}
+												{/* Phase Task-13: KPI route guards use the canonical
+												   `kpis.*` capabilities listed under
+												   App\Modules\Core\Authorization\Capability::KPIS_*.
+												   The previous `strategy.*` mapping was wrong: the
+												   strategy capability family does not authorize KPI
+												   routes — the unified AccessDecision engine resolves
+												   `kpis.*` against Capability constants + canonical
+												   role grants surfaced through
+												   User::canonicalCapabilityNames(), not through the
+												   legacy/advisory CapabilityProvider tag. Users who
+												   legitimately hold `kpis.view` on actor.org were
+												   silently denied because the gate asked for a
+												   capability they were never granted. */}
 												<Route
 													path="/performance/kpis"
 													element={
