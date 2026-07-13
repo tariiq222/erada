@@ -34,6 +34,14 @@ type ResponseType = 'json' | 'blob';
 interface RequestOptions extends RequestInit {
   data?: unknown;
   responseType?: ResponseType;
+  /**
+   * Optional caller-supplied X-Idempotency-Key for state-changing requests.
+   * When omitted for a mutation, the client auto-generates a stable key for
+   * the lifetime of one request() invocation (including 419 CSRF retries).
+   * The same key MUST be reused for retries of the same logical intent;
+   * distinct mutations MUST get distinct keys.
+   */
+  idempotencyKey?: string;
 }
 
 export type { ApiError };
@@ -44,6 +52,42 @@ const PUBLIC_PATHS = ['/login', '/register', '/forgot-password', '/verify-2fa', 
 // التحقق مما إذا كان المسار الحالي عاماً
 function isPublicPath(path: string): boolean {
   return PUBLIC_PATHS.some(publicPath => path.startsWith(publicPath));
+}
+
+/**
+ * Endpoints whose responses must never be replayed via the idempotency
+ * cache because they carry credentials, recovery codes, or one-time tokens.
+ * Mirrors the backend's documented intent in
+ * app/Http/Middleware/IdempotencyKey.php (SENSITIVE_PATTERNS) plus login and
+ * register, which carry credentials and would surprise users on retry
+ * (e.g. wrong-password attempt followed by a retry returns the cached
+ * "wrong password" response).
+ */
+const IDEMPOTENCY_EXEMPT_PATTERNS: readonly RegExp[] = [
+  /^\/login\/?$/,
+  /^\/register\/?$/,
+  /^\/2fa\//,
+  /^\/password\//,
+];
+
+function isIdempotencyExempt(endpoint: string): boolean {
+  return IDEMPOTENCY_EXEMPT_PATTERNS.some(pattern => pattern.test(endpoint));
+}
+
+/**
+ * Generate a stable, sanitization-friendly idempotency key. The backend
+ * middleware accepts only [A-Za-z0-9_-] (max 255 chars); we use
+ * crypto.randomUUID when available and a v4-shaped fallback otherwise.
+ */
+function generateIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 class ApiClient {
@@ -140,7 +184,10 @@ class ApiClient {
     return `${method}:${endpoint}`;
   }
 
-  private buildFetchConfig(options: RequestOptions = {}): { config: RequestInit; method: string } {
+  private buildFetchConfig(
+    options: RequestOptions = {},
+    idempotencyKey: string | null = null,
+  ): { config: RequestInit; method: string } {
     const { data, responseType: _responseType, ...customConfig } = options;
     const method = customConfig.method || 'GET';
     const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
@@ -179,6 +226,12 @@ class ApiClient {
       .find(row => row.startsWith('XSRF-TOKEN='));
     if (xsrfCookie && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
       headers['X-XSRF-TOKEN'] = decodeURIComponent(xsrfCookie.split('=')[1]);
+    }
+
+    // معرف الـ idempotency: يُولَّد مرة واحدة لكل طلب متغيّر (POST/PUT/PATCH/DELETE)
+    // ويُعاد استخدامه عند إعادة المحاولة (مثلاً بعد 419) حتى لا تتسرّب قيمة جديدة.
+    if (idempotencyKey) {
+      headers['X-Idempotency-Key'] = idempotencyKey;
     }
 
     const config: RequestInit = {
@@ -239,9 +292,17 @@ class ApiClient {
 
     const requestKey = this.getRequestKey(endpoint, method);
 
+    // Idempotency key — يُحسب مرة واحدة لكل طلب متغيّر بحيث تحتفظ
+    // إعادة المحاولة (مثل 419) بنفس المفتاح ولا تتسرّب قيمة جديدة.
+    const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+    const idempotencyKey =
+      isMutation && !isIdempotencyExempt(endpoint)
+        ? options.idempotencyKey ?? generateIdempotencyKey()
+        : null;
+
     const requestPromise = (async (): Promise<T> => {
       try {
-        const { config } = this.buildFetchConfig(options);
+        const { config } = this.buildFetchConfig(options, idempotencyKey);
         const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
 
         // معالجة 401 Unauthorized
@@ -274,8 +335,8 @@ class ApiClient {
           // محاولة تجديد CSRF cookie وإعادة الطلب مرة واحدة فقط
           try {
             await this.refreshCsrfCookie();
-            // إعادة بناء الـ config مع الـ CSRF token الجديد
-            const { config: retryConfig } = this.buildFetchConfig(options);
+            // إعادة بناء الـ config مع الـ CSRF token الجديد ونفس مفتاح الـ idempotency
+            const { config: retryConfig } = this.buildFetchConfig(options, idempotencyKey);
             const retryResponse = await fetch(`${API_BASE_URL}${endpoint}`, retryConfig);
 
             if (retryResponse.ok) {
@@ -363,24 +424,24 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'GET' });
   }
 
-  post<T>(endpoint: string, data?: unknown) {
-    return this.request<T>(endpoint, { method: 'POST', data });
+  post<T>(endpoint: string, data?: unknown, options: RequestOptions = {}) {
+    return this.request<T>(endpoint, { method: 'POST', data, ...options });
   }
 
-  put<T>(endpoint: string, data?: unknown) {
-    return this.request<T>(endpoint, { method: 'PUT', data });
+  put<T>(endpoint: string, data?: unknown, options: RequestOptions = {}) {
+    return this.request<T>(endpoint, { method: 'PUT', data, ...options });
   }
 
-  patch<T>(endpoint: string, data?: unknown) {
-    return this.request<T>(endpoint, { method: 'PATCH', data });
+  patch<T>(endpoint: string, data?: unknown, options: RequestOptions = {}) {
+    return this.request<T>(endpoint, { method: 'PATCH', data, ...options });
   }
 
   blob(endpoint: string, options: Omit<RequestOptions, 'responseType'> = {}) {
     return this.request<Blob>(endpoint, { ...options, method: options.method || 'GET', responseType: 'blob' });
   }
 
-  delete<T>(endpoint: string) {
-    return this.request<T>(endpoint, { method: 'DELETE' });
+  delete<T>(endpoint: string, options: RequestOptions = {}) {
+    return this.request<T>(endpoint, { method: 'DELETE', ...options });
   }
 }
 
