@@ -9,7 +9,12 @@ import { ADMIN_NAV_ITEMS } from '@admin/widgets/admin-shell/AdminNavigation';
 
 vi.mock('@shared/contexts/AuthContext', () => ({
   useAuth: () => ({
-    user: { id: 1, name: 'System Admin', roles: ['super_admin'] },
+    user: {
+      id: 1,
+      name: 'System Admin',
+      is_super_admin: true,
+      is_org_admin: false,
+    },
     logout: vi.fn(),
   }),
 }));

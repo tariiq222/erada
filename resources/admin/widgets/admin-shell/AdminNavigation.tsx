@@ -15,13 +15,31 @@ import {
   IconUsers,
   IconUserShield,
 } from '@tabler/icons-react';
+import { useAuth } from '@shared/contexts/AuthContext';
 
 export interface AdminNavItem {
   href: string;
   labelKey: string;
   fallback: string;
-  group: 'governance' | 'controls';
+  /**
+   * `governance`/`controls` items are shown to any authenticated super admin.
+   * `system` items are restricted to backend `is_super_admin === true`.
+   * `org` items are visible to either super admins or org admins
+   * (`is_org_admin === true` OR `is_super_admin === true`).
+   */
+  group: 'governance' | 'controls' | 'system' | 'org';
   icon: ComponentType<{ className?: string }>;
+}
+
+export function isAdminNavItemVisible(
+  item: AdminNavItem,
+  user: { is_super_admin?: boolean; is_org_admin?: boolean } | null | undefined,
+): boolean {
+  if (item.group === 'system') return user?.is_super_admin === true;
+  if (item.group === 'org') {
+    return user?.is_super_admin === true || user?.is_org_admin === true;
+  }
+  return true;
 }
 
 export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
@@ -61,7 +79,8 @@ interface AdminNavigationProps {
 
 export function AdminNavigation({ mode, onNavigate }: AdminNavigationProps) {
   const { t } = useTranslation();
-  const groups: Array<AdminNavItem['group']> = ['governance', 'controls'];
+  const { user } = useAuth();
+  const groups: Array<AdminNavItem['group']> = ['governance', 'controls', 'system', 'org'];
 
   return (
     <nav
@@ -69,37 +88,45 @@ export function AdminNavigation({ mode, onNavigate }: AdminNavigationProps) {
       data-testid={`admin-${mode}-navigation`}
       className="flex-1 overflow-y-auto p-3"
     >
-      {groups.map((group) => (
-        <div key={group} className="mb-5 last:mb-0">
-          <p className="mb-2 px-3 text-xs font-semibold text-[var(--text-tertiary)]">
-            {group === 'governance'
-              ? t('admin.shell.sidebar.section_primary')
-              : t('admin.shell.sidebar.section_secondary')}
-          </p>
-          <ul className="space-y-1">
-            {ADMIN_NAV_ITEMS.filter((item) => item.group === group).map((item) => {
-              const Icon = item.icon;
-              return (
-                <li key={item.href}>
-                  <NavLink
-                    to={item.href}
-                    onClick={onNavigate}
-                    className={({ isActive }) => [
-                      'flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                      isActive
-                        ? 'bg-[var(--accent-default)] text-[var(--text-inverse)]'
-                        : 'text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]',
-                    ].join(' ')}
-                  >
-                    <Icon className="h-5 w-5 shrink-0" />
-                    <span>{t(item.labelKey, item.fallback)}</span>
-                  </NavLink>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
+      {groups.map((group) => {
+        const visibleItems = ADMIN_NAV_ITEMS.filter(
+          (item) => item.group === group && isAdminNavItemVisible(item, user),
+        );
+        if (visibleItems.length === 0) {
+          return null;
+        }
+        return (
+          <div key={group} className="mb-5 last:mb-0">
+            <p className="mb-2 px-3 text-xs font-semibold text-[var(--text-tertiary)]">
+              {group === 'governance'
+                ? t('admin.shell.sidebar.section_primary')
+                : t('admin.shell.sidebar.section_secondary')}
+            </p>
+            <ul className="space-y-1">
+              {visibleItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <li key={item.href}>
+                    <NavLink
+                      to={item.href}
+                      onClick={onNavigate}
+                      className={({ isActive }) => [
+                        'flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                        isActive
+                          ? 'bg-[var(--accent-default)] text-[var(--text-inverse)]'
+                          : 'text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary])',
+                      ].join(' ')}
+                    >
+                      <Icon className="h-5 w-5 shrink-0" />
+                      <span>{t(item.labelKey, item.fallback)}</span>
+                    </NavLink>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })}
     </nav>
   );
 }
