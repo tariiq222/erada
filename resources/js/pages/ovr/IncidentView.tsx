@@ -53,7 +53,11 @@ type LoadState =
 
 const IncidentView: React.FC = () => {
   const { t } = useTranslation();
-  const { tracking_token: trackingTokenParam } = useParams<{ tracking_token: string }>();
+  // Phase Task-13: authenticated incident detail is keyed on the
+  // enumerable report_number (matching IncidentReport::getRouteKeyName()),
+  // not on the per-report tracking_token (which only the public
+  // /ovr/track endpoint accepts). The URL segment is `:reportNumber`.
+  const { reportNumber } = useParams<{ reportNumber: string }>();
   const { showToast } = useToast();
   const canEdit = useCan('ovr.edit');
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
@@ -64,7 +68,7 @@ const IncidentView: React.FC = () => {
 
   useEffect(() => {
     let active = true;
-    if (!trackingTokenParam) {
+    if (!reportNumber) {
       setState({ kind: 'not_found' });
       return () => {
         active = false;
@@ -74,7 +78,7 @@ const IncidentView: React.FC = () => {
 
     const load = async () => {
       try {
-        const incident = (await incidentsApi.getOne(trackingTokenParam)) as Incident;
+        const incident = (await incidentsApi.getOne(reportNumber)) as Incident;
         if (!active) return;
         setState({ kind: 'ready', incident });
       } catch (error: unknown) {
@@ -92,7 +96,7 @@ const IncidentView: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [trackingTokenParam]);
+  }, [reportNumber]);
 
   const loadComments = React.useCallback(async (incident: Incident) => {
     try {
@@ -192,10 +196,10 @@ const IncidentView: React.FC = () => {
             size="sm"
             onClick={() => {
               setState({ kind: 'loading' });
-              if (trackingTokenParam) {
+              if (reportNumber) {
                 void (async () => {
                   try {
-                    const incident = (await incidentsApi.getOne(trackingTokenParam)) as Incident;
+                    const incident = (await incidentsApi.getOne(reportNumber)) as Incident;
                     setState({ kind: 'ready', incident });
                   } catch {
                     showToast('error', t('ovr.load_error'));
