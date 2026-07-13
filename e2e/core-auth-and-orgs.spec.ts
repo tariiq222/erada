@@ -95,12 +95,17 @@ test.describe('Core — Anonymous Login Flow', () => {
 
 test.describe('Core — Admin Dashboard & Organizations', () => {
   test.beforeEach(async ({ page }) => {
-    // Login as super_admin (admin@admin.com has full org/role permissions)
-    await page.goto('/login');
-    await page.waitForSelector('input[type="email"]', { timeout: 10000 });
-    await page.fill('input[type="email"]', 'admin@admin.com');
-    await page.fill('input[type="password"]', 'password');
-    await page.click('button[type="submit"]');
+    // Bootstrap each isolated browser context through the same Sanctum API the
+    // form uses. The anonymous block above covers the rendered login contract;
+    // using the API here avoids burning the shared five-per-minute login
+    // throttle across three independent admin tests and their CI retries.
+    await page.request.get('/sanctum/csrf-cookie');
+    const response = await page.request.post('/api/login', {
+      data: { email: 'admin@admin.com', password: 'password' },
+      headers: { Accept: 'application/json' },
+    });
+    expect(response.ok()).toBeTruthy();
+    await page.goto('/dashboard');
     await page.waitForURL('/dashboard', { timeout: 10000 });
   });
 
