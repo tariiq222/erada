@@ -8,7 +8,7 @@ import { api } from '@shared/api/client';
 import { AdminRouter } from '@admin/app/AdminRouter';
 import { adminApi } from '@admin/api/adminApi';
 
-const authState = { user: { id: 1, name: 'Control Admin', email: 'admin@example.test', department_id: null, phone: null, extension: null, job_title: null, is_active: true, roles: ['super_admin'], organization_id: 17 } satisfies User & { organization_id: number }, isLoading: false, isAuthenticated: true };
+const authState = { user: { id: 1, name: 'Control Admin', email: 'admin@example.test', department_id: null, phone: null, extension: null, job_title: null, is_active: true, is_super_admin: true, is_org_admin: false, organization_id: 17 } satisfies User & { organization_id: number }, isLoading: false, isAuthenticated: true };
 vi.mock('@shared/contexts/AuthContext', () => ({ AuthProvider: ({ children }: { children: React.ReactNode }) => children, useAuth: () => ({ ...authState, logout: vi.fn(), refreshUser: vi.fn() }) }));
 vi.mock('@shared/contexts/LocaleContext', () => ({ LocaleProvider: ({ children }: { children: React.ReactNode }) => children, useLocale: () => ({ locale: 'ar', direction: 'rtl', setLocale: vi.fn() }) }));
 vi.mock('@shared/contexts/ThemeContext', () => ({ ThemeProvider: ({ children }: { children: React.ReactNode }) => children, useTheme: () => ({ resolvedTheme: 'light', toggleTheme: vi.fn() }) }));
