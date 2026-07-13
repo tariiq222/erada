@@ -97,9 +97,11 @@ class RolesAndPermissionsSeeder extends Seeder
             ],
             'admin' => [
                 'label' => 'Organization Admin',
+                'label_ar' => 'مسؤول المنظمة',
+                'label_en' => 'Organization Admin',
                 'scope_type' => 'organization',
                 'is_admin_role' => true,
-                'capabilities' => Capability::all(),
+                'capabilities' => self::orgAdminCapabilities(),
             ],
             'viewer' => [
                 'label' => 'Viewer',
@@ -425,6 +427,34 @@ class RolesAndPermissionsSeeder extends Seeder
         }
 
         return array_values($mapped);
+    }
+
+    /**
+     * Strict OrgAdmin capability set for the canonical `admin` role.
+     *
+     * The brief (Task 3) requires the role to grant ONLY the curation list
+     * below; no `Capability::all()` and no module write surface that
+     * operators don't expect on an org-scoped admin boundary. Adding new
+     * capabilities here requires a deliberate decision — see
+     * `sdd/task-3-brief.md`.
+     *
+     * @return list<string>
+     */
+    private static function orgAdminCapabilities(): array
+    {
+        return [
+            Capability::USERS_VIEW,
+            Capability::USERS_CREATE,
+            Capability::USERS_EDIT,
+            Capability::DEPARTMENTS_VIEW,
+            Capability::DEPARTMENTS_CREATE,
+            Capability::DEPARTMENTS_EDIT,
+            Capability::DEPARTMENTS_DELETE,
+            Capability::ROLES_VIEW,
+            Capability::SETTINGS_VIEW,
+            Capability::SETTINGS_EDIT,
+            Capability::AUDIT_VIEW,
+        ];
     }
 
     /** @return list<string> */
