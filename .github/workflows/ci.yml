@@ -397,10 +397,12 @@ jobs:
         run: |
           cp .env.example .env
           php artisan key:generate
+          php artisan config:clear
       - name: Build canonical dataset
         run: |
           php artisan migrate --force
           php artisan db:seed --force
+          php artisan users:reset-demo-passwords
       - name: Run cutover preflight
         run: php artisan authz:cutover-preflight
       - name: Verify canonical auth contracts
@@ -412,4 +414,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run authenticated browser gate
+        env:
+          APP_URL: http://localhost:8000
+          SANCTUM_STATEFUL_DOMAINS: localhost:8000,127.0.0.1:8000
         run: npx playwright test e2e/core-auth-and-orgs.spec.ts --project=chromium

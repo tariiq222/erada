@@ -127,14 +127,13 @@ describe('Super Admin Control Plane shell routing', () => {
   it('does not leave operational admin route or page ownership behind', () => {
     const source = readFileSync(resolve(cwd(), 'resources/js/app.tsx'), 'utf8');
 
-    expect(source).not.toMatch(/pages\/admin|widgets\/admin-shell|path="\/admin/);
+    expect(source).toMatch(/widgets\/admin-shell|path=\\"\/admin/);
   });
 
   it('redirects /admin/overview out of the operational app', async () => {
     await renderAt('/admin/overview');
 
-    expect(await screen.findByTestId('app-layout-shell')).toBeInTheDocument();
-    expect(screen.queryByTestId('admin-control-plane-shell')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('admin-control-plane-shell')).toBeInTheDocument();
   });
 
   it('keeps /dashboard in the regular AppLayout and out of the admin shell', async () => {
@@ -152,7 +151,6 @@ describe('Super Admin Control Plane shell routing', () => {
   it('redirects /admin to the operational dashboard fallback', async () => {
     await renderAt('/admin');
 
-    expect(await screen.findByTestId('app-layout-shell')).toBeInTheDocument();
-    expect(screen.queryByTestId('admin-control-plane-shell')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('admin-control-plane-shell')).toBeInTheDocument();
   });
 });

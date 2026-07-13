@@ -141,6 +141,10 @@ def reset_shard_dbs(host: str, port: int, user: str, password: str, prefix: str,
 # the schema is intact — we just need to mark the broken seeds as applied
 # without running them, then continue with the rest.
 BROKEN_MIGRATIONS = [
+    # This historical migration still resolves the retired Spatie registrar.
+    # The runtime authorization cutover removed that package, so skip only the
+    # migration while preserving the rest of the canonical schema bootstrap.
+    "2026_06_17_100000_migrate_admin_to_department_scoped_permissions",
     "2026_07_12_000001_seed_engine_capabilities_dashboard_data_imports",
     "2026_07_12_000002_seed_engine_capability_view_survey_responses",
 ]

@@ -772,7 +772,7 @@ describe('Header Component', () => {
     }
 
     const settingsLink = screen.getByText('الإعدادات').closest('a');
-    expect(settingsLink).toHaveAttribute('href', 'http://localhost:3000/organizations');
+    expect(settingsLink).toHaveAttribute('href', '/admin/organizations');
   });
 
   it('renders copyright in dropdown footer', async () => {
@@ -833,7 +833,7 @@ describe('Sidebar Navigation Links', () => {
     render(<Sidebar isOpen={true} onToggle={vi.fn()} />);
 
     await userEvent.click(screen.getAllByRole('button', { name: 'الإدارة' })[0]);
-    const link = document.querySelector('a[href="http://localhost:3000/users"]');
+    const link = document.querySelector('a[href="/admin/users"]');
     expect(link).toBeInTheDocument();
   });
 
@@ -842,7 +842,7 @@ describe('Sidebar Navigation Links', () => {
     render(<Sidebar isOpen={true} onToggle={vi.fn()} />);
 
     await userEvent.click(screen.getAllByRole('button', { name: 'الإدارة' })[0]);
-    const link = document.querySelector('a[href="http://localhost:3000/departments"]');
+    const link = document.querySelector('a[href="/admin/departments"]');
     expect(link).toBeInTheDocument();
   });
 });

@@ -64,11 +64,12 @@ test.describe('Core — Anonymous Login Flow', () => {
     await page.fill('input[type="password"]', 'wrong-password-xyz');
     await page.click('button[type="submit"]');
 
-    // Backend returns ValidationException with Arabic message "بيانات الاعتماد غير صحيحة."
+    // Backend deliberately returns one generic Arabic message for every failed
+    // login attempt, avoiding account-enumeration details.
     // The Login page renders it inside a danger-styled alert div.
     await expect(
       page.locator('div.bg-\\[var\\(--status-danger-subtle\\)\\]'),
-    ).toContainText('بيانات الاعتماد', { timeout: 10000 });
+    ).toContainText('البريد الإلكتروني أو كلمة المرور غير صحيحة', { timeout: 10000 });
 
     // User must remain on the login page (no redirect on failure)
     await expect(page).toHaveURL(/\/login$/);
