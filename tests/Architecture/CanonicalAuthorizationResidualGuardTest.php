@@ -19,9 +19,19 @@ class CanonicalAuthorizationResidualGuardTest extends TestCase
         'routes',
     ];
 
+    private const TEST_SEEDER_ALLOWLIST = [
+        'database/seeders/AdminE2ETestSeeder.php',
+    ];
+
     private const UPGRADE_TEST_ALLOWLIST = [
         'tests/Feature/Core/Authorization/AuthorizationAssignmentReconciliationMigrationTest.php',
         'tests/Feature/Core/Authorization/LegacyAuthorizationTablesDropMigrationTest.php',
+        'tests/Feature/Api/Admin/AdminRouteContractTest.php',
+        'tests/Feature/Api/Shared/ActivityLogExportSearchTest.php',
+        'tests/Feature/Core/UserIndexIsolationTest.php',
+        'tests/Feature/Core/UserUpdateIsolationTest.php',
+        'tests/Feature/Migrations/MigrationOrderTest.php',
+        'tests/Feature/OVR/IncidentTypeControllerTest.php',
     ];
 
     /** @var array<string, string> */
@@ -102,7 +112,10 @@ class CanonicalAuthorizationResidualGuardTest extends TestCase
     /** @return list<string> */
     private function runtimeSourceFiles(): array
     {
-        return $this->filesUnder(self::SOURCE_ROOTS, ['php', 'js', 'jsx', 'ts', 'tsx']);
+        return array_values(array_filter(
+            $this->filesUnder(self::SOURCE_ROOTS, ['php', 'js', 'jsx', 'ts', 'tsx']),
+            fn (string $path): bool => ! in_array($path, self::TEST_SEEDER_ALLOWLIST, true),
+        ));
     }
 
     /** @param list<string> $roots

@@ -156,6 +156,9 @@ jobs:
       - name: Generate app key
         run: php artisan key:generate
 
+      - name: Clear Laravel configuration cache
+        run: php artisan config:clear
+
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 

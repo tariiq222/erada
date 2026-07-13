@@ -3,7 +3,6 @@
 namespace App\Modules\Core\Http\Requests;
 
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Rules\AssignableRoleKey;
 use App\Modules\HR\Models\Department;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -63,7 +62,7 @@ class UpdateUserRequest extends FormRequest
             'job_title' => ['nullable', 'string', 'max:255'],
             'is_active' => ['boolean'],
             'roles' => ['array'],
-            'roles.*' => ['string', new AssignableRoleKey],
+            'roles.*' => ['string'],
         ];
     }
 
@@ -92,7 +91,11 @@ class UpdateUserRequest extends FormRequest
                 return;
             }
 
-            if (in_array('super_admin', $roles, true) && ! $target->hasRole('super_admin')) {
+            $targetHasSuperAdmin = $target->activeCanonicalRoleAssignments()
+                ->whereHas('role', fn ($query) => $query->where('name', 'super_admin'))
+                ->exists();
+
+            if (in_array('super_admin', $roles, true) && ! $targetHasSuperAdmin) {
                 $validator->errors()->add(
                     'roles',
                     'لا يمكن منح دور المدير العام من شاشة تعديل المستخدم.'
