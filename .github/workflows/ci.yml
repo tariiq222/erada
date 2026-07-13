@@ -425,5 +425,12 @@ jobs:
       - name: Run authenticated browser gate
         env:
           APP_URL: http://localhost:8000
+          APP_ENV: testing
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: iradah_pmo_test
+          DB_USERNAME: iradah
+          DB_PASSWORD: secret
           SANCTUM_STATEFUL_DOMAINS: localhost:8000,127.0.0.1:8000
         run: npx playwright test e2e/core-auth-and-orgs.spec.ts --project=chromium
