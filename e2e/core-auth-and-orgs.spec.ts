@@ -123,8 +123,8 @@ test.describe('Core — Admin Dashboard & Organizations', () => {
   test('admin can list organizations', async ({ page }) => {
     await page.goto('/admin/organizations');
 
-    // OrganizationsList renders the Arabic title "إدارة المؤسسات" via t('admin.organizations.title')
-    await expect(page.locator('h1:has-text("إدارة المؤسسات")')).toBeVisible({ timeout: 15000 });
+    // OrganizationsList renders the Arabic title "المؤسسات" via t('admin.organizations.title')
+    await expect(page.locator('h1:has-text("المؤسسات")')).toBeVisible({ timeout: 15000 });
 
     // The search input is part of the list card
     await expect(page.locator('input[placeholder*="البحث"]')).toBeVisible();
@@ -147,7 +147,7 @@ test.describe('Core — Admin Dashboard & Organizations', () => {
     });
 
     await page.goto('/admin/organizations/new');
-    await page.waitForSelector('text=إضافة مؤسسة', { timeout: 15000 });
+    await page.waitForSelector('text=إضافة مؤسسة جديدة', { timeout: 15000 });
 
     // Fill the required fields (name + code are `required` on the form)
     await page.locator('label:has-text("الاسم") + input').fill('مؤسسة اختبار E2E');
