@@ -127,7 +127,7 @@ test.describe('Core — Admin Dashboard & Organizations', () => {
     await expect(page.locator('h1:has-text("المؤسسات")')).toBeVisible({ timeout: 15000 });
 
     // The search input is part of the list card
-    await expect(page.locator('input[placeholder*="البحث"]')).toBeVisible();
+    await expect(page.locator('input[placeholder*="ابحث"]')).toBeVisible();
   });
 
   test('organization form surfaces Arabic permission error on 403', async ({ page }) => {
@@ -150,8 +150,8 @@ test.describe('Core — Admin Dashboard & Organizations', () => {
     await page.waitForSelector('text=إضافة مؤسسة جديدة', { timeout: 15000 });
 
     // Fill the required fields (name + code are `required` on the form)
-    await page.locator('label:has-text("الاسم") + input').fill('مؤسسة اختبار E2E');
-    await page.locator('label:has-text("الرمز") + input').fill('E2E-ORG-001');
+    await page.locator('label:has-text("الاسم")').locator('..').locator('input').fill('مؤسسة اختبار E2E');
+    await page.locator('label:has-text("الكود")').locator('..').locator('input').fill('E2E-ORG-001');
 
     // Submit — the mocked POST will return 403 and the form renders the message
     await page.click('button:has-text("حفظ")');
