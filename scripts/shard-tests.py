@@ -147,6 +147,7 @@ BROKEN_MIGRATIONS = [
     "2026_06_17_100000_migrate_admin_to_department_scoped_permissions",
     "2026_06_17_110000_remove_deprecated_system_roles",
     "2026_06_17_120000_remove_admin_viewer_system_roles",
+    "2026_06_19_200721_add_meetings_permissions",
     "2026_07_12_000001_seed_engine_capabilities_dashboard_data_imports",
     "2026_07_12_000002_seed_engine_capability_view_survey_responses",
 ]
