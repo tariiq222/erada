@@ -7,13 +7,31 @@ import type { TaskStatus, TaskType, Priority, ProjectStatus, User } from '@share
 // ============ API Response Types ============
 
 // Auth
-export interface LoginResponse {
+//
+// Wire shape returned by POST /api/login. The backend is the source of
+// truth — see App\Modules\Core\Http\Controllers\AuthController::login.
+//
+//   - 2FA confirmed account (password-only step, no auth_token cookie):
+//       { two_factor_required: true, user_id, pending_token, message }
+//   - normal successful login (HttpOnly `auth_token` cookie set):
+//       { user }
+//
+// Callers (notably AuthProvider.login) centralize the snake_case ->
+// camelCase normalization so consuming pages use FE-native field names
+// (requiresTwoFactor, pendingToken, userId, userName).
+export interface LoginTwoFactorChallenge {
+  two_factor_required: true;
+  user_id: number;
+  pending_token: string;
+  message?: string;
+}
+
+export interface LoginSuccessPayload {
   user: User | { id: number; name: string };
   token?: string;
-  // 2FA fields (when 2FA is enabled)
-  requires_2fa?: boolean;
-  pending_token?: string;
 }
+
+export type LoginResponse = LoginSuccessPayload | LoginTwoFactorChallenge;
 
 export interface UserResponse {
   user: User;

@@ -50,7 +50,23 @@ const IconLogin: React.FC = () => {
     setLoading(true);
 
     try {
-      await login(loginEmail, loginPassword);
+      const result = await login(loginEmail, loginPassword);
+
+      // 2FA challenge: backend accepted the password but did NOT issue the
+      // `auth_token` cookie. Surface the pending token to /verify-2fa so the
+      // second factor can complete the session.
+      if (result.requiresTwoFactor && result.pendingToken && result.userId) {
+        navigate('/verify-2fa', {
+          replace: true,
+          state: {
+            pendingToken: result.pendingToken,
+            userId: result.userId,
+            userName: result.userName,
+          },
+        });
+        return;
+      }
+
       await refreshUser();
       navigate('/dashboard');
     } catch (err: any) {

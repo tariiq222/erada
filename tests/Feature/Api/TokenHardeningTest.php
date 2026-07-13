@@ -73,8 +73,9 @@ class TokenHardeningTest extends TestCase
 
         $response->assertOk()
             ->assertCookieMissing('auth_token')
-            ->assertJsonPath('requires_2fa', true)
-            ->assertJsonStructure(['pending_token', 'user' => ['id', 'name']])
+            ->assertJsonPath('two_factor_required', true)
+            ->assertJsonStructure(['two_factor_required', 'user_id', 'pending_token', 'message'])
+            ->assertJsonMissingPath('user')
             ->assertJsonMissingPath('token')
             ->assertJsonMissingPath('plainTextToken');
 
