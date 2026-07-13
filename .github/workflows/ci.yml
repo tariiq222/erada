@@ -151,7 +151,9 @@ jobs:
         # so it is absent in CI checkouts — fall back to the tracked .env.example.
         # Test-specific values come from phpunit.xml <env> and the step-level env
         # below, so .env.example is a sufficient base.
-        run: cp .env.testing .env 2>/dev/null || cp .env.example .env
+        run: |
+          cp .env.testing .env 2>/dev/null || cp .env.example .env
+          sed -i 's/^APP_ENV=.*/APP_ENV=testing/' .env
 
       - name: Generate app key
         run: php artisan key:generate
@@ -286,7 +288,9 @@ jobs:
       - name: Copy .env for E2E
         # .env.testing is gitignored (.env.* is excluded except .env.example),
         # so it is absent in CI checkouts — fall back to the tracked .env.example.
-        run: cp .env.testing .env 2>/dev/null || cp .env.example .env
+        run: |
+          cp .env.testing .env 2>/dev/null || cp .env.example .env
+          sed -i 's/^APP_ENV=.*/APP_ENV=testing/' .env
 
       - name: Generate app key for E2E
         run: php artisan key:generate
@@ -396,13 +400,13 @@ jobs:
       - name: Configure application
         run: |
           cp .env.example .env
+          sed -i 's/^APP_ENV=.*/APP_ENV=testing/' .env
           php artisan key:generate
           php artisan config:clear
       - name: Build canonical dataset
         run: |
           php artisan migrate --force
           php artisan db:seed --force
-          php artisan users:reset-demo-passwords
       - name: Run cutover preflight
         run: php artisan authz:cutover-preflight
       - name: Verify canonical auth contracts
