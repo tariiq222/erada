@@ -184,9 +184,12 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureRateLimiting(): void
     {
-        // حد تسجيل الدخول: 5 محاولات في الدقيقة
+        // حد تسجيل الدخول: 5 محاولات في الدقيقة. CI/E2E exercises several
+        // isolated browser contexts from one runner IP, so keep the production
+        // limit while giving the testing environment enough headroom to avoid
+        // masking the actual authentication contract with a 429.
         RateLimiter::for('login', function (Request $request) {
-            return Limit::perMinute(5)
+            return Limit::perMinute(app()->environment('testing') ? 100 : 5)
                 ->by($request->ip())
                 ->response(function (Request $request, array $headers) {
                     return response()->json([
