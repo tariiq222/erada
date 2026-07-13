@@ -27,7 +27,7 @@ class ProjectNewTypePayloadTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
     }
 
     public function test_create_pmbok_project_with_charter_textareas_as_arrays(): void

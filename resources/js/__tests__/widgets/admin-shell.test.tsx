@@ -12,9 +12,11 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('@shared/contexts/AuthContext', () => ({
   useAuth: () => ({
-    user: { id: 1, name: 'Super Admin', roles: ['super_admin'], permissions: [] },
+    user: { id: 1, name: 'Super Admin', capabilities: [] },
     isLoading: false,
     isAuthenticated: true,
+    can: vi.fn().mockReturnValue(true),
+    canAccess: vi.fn().mockReturnValue(true),
     logout: vi.fn(),
   }),
 }));
@@ -75,8 +77,8 @@ const renderShellAt = (path: string) =>
             element={<div data-testid="activity-logs-stub" />}
           />
           <Route
-            path="/admin/scoped-roles/audit-logs"
-            element={<div data-testid="scoped-roles-stub" />}
+            path="/admin/authorization/audit-logs"
+            element={<div data-testid="authorization-audit-stub" />}
           />
         </Route>
       </Routes>
@@ -124,7 +126,7 @@ describe('AdminLayout shell', () => {
       '/admin/roles',
       '/admin/users',
       '/admin/activity-logs',
-      '/admin/scoped-roles/audit-logs',
+      '/admin/authorization/audit-logs',
     ]) {
       expect(
         within(sidebar).getByTestId(`admin-shell-nav-${href}`),

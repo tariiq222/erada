@@ -47,7 +47,7 @@ class UploadValidationTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
 
         $this->project = Project::factory()->create([
             'organization_id' => $this->org->id,

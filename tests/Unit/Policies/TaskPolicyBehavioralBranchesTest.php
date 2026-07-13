@@ -43,9 +43,9 @@ class TaskPolicyBehavioralBranchesTest extends TestCase
     public function test_basic_abilities_and_super_admin_before(): void
     {
         $this->markTestIncomplete(
-            'TaskPolicy is engine-only. flat givePermissionTo() grants are ignored by AccessDecision::can(). '.
-            'viewAny() and create() require a scoped_role_definition with TASKS_VIEW/TASKS_CREATE capability. '.
-            'Rewrite to use assignRole(\'admin\') or project-scoped roles once engine supports them.'
+            'TaskPolicy is canonical-engine-only. viewAny() and create() require active canonical role assignments '.
+            'that grant TASKS_VIEW/TASKS_CREATE at the intended scope. Rewrite this branch with explicit canonical '.
+            'organization and project assignments.'
         );
     }
 
@@ -53,7 +53,10 @@ class TaskPolicyBehavioralBranchesTest extends TestCase
     {
         $owner = User::factory()->create();
         $otherDepartment = Department::factory()->create();
-        $other = User::factory()->create(['department_id' => $otherDepartment->id]);
+        $other = User::factory()->create([
+            'organization_id' => $otherDepartment->organization_id,
+            'department_id' => $otherDepartment->id,
+        ]);
         $task = Task::factory()->create([
             'type' => TaskType::PERSONAL->value,
             'project_id' => null,
@@ -99,30 +102,24 @@ class TaskPolicyBehavioralBranchesTest extends TestCase
     public function test_project_roles_distinguish_viewer_member_and_manager_permissions(): void
     {
         $this->markTestIncomplete(
-            'TaskPolicy is engine-only. AccessDecision::checkViaRoles() relies on scoped_role_definitions '.
-            'keyed by scope_type_id from the scope_types table. The \'project\' scope type is not in '.
-            'scope_types (only program/portfolio/organization exist), so project-scoped role assignments '.
-            'are never matched by the engine and all policy checks return false.'
+            'TaskPolicy is canonical-engine-only. Express viewer, member, and manager differences with distinct '.
+            'authorization roles and project-scoped authorization_role_assignments, then assert each capability branch.'
         );
     }
 
     public function test_system_permissions_are_organization_and_department_scoped_for_admins(): void
     {
         $this->markTestIncomplete(
-            'TaskPolicy is engine-only. The \'admin\' role has is_admin_role=true in the organization '.
-            'scoped_role_definition so AccessDecision::can() grants ALL capabilities org-wide, including '.
-            'tasks in other departments. Department-level isolation via flat givePermissionTo() is ignored '.
-            'by the engine. This test cannot be expressed with the current engine fixture.'
+            'TaskPolicy is canonical-engine-only. Model organization-admin and department-admin reach with explicit '.
+            'canonical assignments, then verify that each assignment is constrained to its configured scope.'
         );
     }
 
     public function test_created_by_and_edit_own_task_branches(): void
     {
         $this->markTestIncomplete(
-            'TaskPolicy is engine-only (AccessDecision::can). The created_by and '.
-            'edit_own_tasks flat-permission branches were removed in Phase هـ Task 4. '.
-            'Flat givePermissionTo(\'edit_own_tasks\') is ignored by the engine. '.
-            'Update this test to assert engine-based scoped-role behaviour instead.'
+            'TaskPolicy is canonical-engine-only. The former edit_own_tasks branch is retired; rewrite this test '.
+            'around canonical task capabilities plus the created_by record rule.'
         );
     }
 
@@ -158,7 +155,9 @@ class TaskPolicyBehavioralBranchesTest extends TestCase
         ]);
 
         if ($role) {
-            $user->assignRole($role);
+            $role === 'super_admin'
+                ? $this->grantCanonicalSuperAdmin($user)
+                : $this->assignCanonicalRole($user, $role);
         }
 
         return $user;

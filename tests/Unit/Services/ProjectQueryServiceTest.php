@@ -3,7 +3,6 @@
 namespace Tests\Unit\Services;
 
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -13,7 +12,6 @@ use App\Modules\Tasks\Models\Task;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class ProjectQueryServiceTest extends TestCase
@@ -40,7 +38,7 @@ class ProjectQueryServiceTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
 
         $this->regularUser = User::factory()->create([
             'department_id' => $this->department->id,
@@ -67,7 +65,7 @@ class ProjectQueryServiceTest extends TestCase
         $ownProject = Project::factory()->create([
             'department_id' => $this->department->id,
         ]);
-        $this->regularUser->assignProjectRole($ownProject, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($this->regularUser, 'project_manager', 'project', (int) $ownProject->id);
 
         // Projects with no relation to user
         Project::factory()->count(2)->create(['department_id' => $this->department->id]);
@@ -83,7 +81,7 @@ class ProjectQueryServiceTest extends TestCase
     public function test_regular_user_sees_projects_as_member(): void
     {
         $project = Project::factory()->create(['department_id' => $this->department->id]);
-        $this->regularUser->assignProjectRole($project, ScopedRole::PROJECT_MEMBER);
+        $this->assignCanonicalRole($this->regularUser, 'project_member', 'project', (int) $project->id);
 
         // Unrelated project
         Project::factory()->create(['department_id' => $this->department->id]);
@@ -178,7 +176,7 @@ class ProjectQueryServiceTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $admin->assignRole('admin');
+        $this->grantCanonicalAdmin($admin);
 
         Project::factory()->count(3)->create(['department_id' => $this->department->id]);
 
@@ -286,7 +284,7 @@ class ProjectQueryServiceTest extends TestCase
             'department_id' => $coherentDept->id,
         ]);
 
-        $this->regularUser->assignProjectRole($project, ScopedRole::PROJECT_VIEWER, $this->superAdmin->id);
+        $this->assignCanonicalRole($this->regularUser, 'project_viewer', 'project', (int) $project->id);
 
         $query = $this->service->baseQuery();
         $query = $this->service->applyPermissionFilter($query, $this->regularUser);
@@ -307,7 +305,7 @@ class ProjectQueryServiceTest extends TestCase
             'department_id' => $this->department->id,
         ]);
 
-        $this->regularUser->assignProjectRole($otherOrgProject, ScopedRole::PROJECT_VIEWER, $this->superAdmin->id);
+        $this->assignCanonicalRole($this->regularUser, 'project_viewer', 'project', (int) $otherOrgProject->id);
 
         $query = $this->service->baseQuery();
         $query = $this->service->applyPermissionFilter($query, $this->regularUser);
@@ -378,26 +376,8 @@ class ProjectQueryServiceTest extends TestCase
             'is_active' => true,
         ]);
 
-        // First scoped role pivot: project_manager
-        DB::table('model_has_scoped_roles')->insert([
-            'user_id' => $member->id,
-            'role' => ScopedRole::PROJECT_MANAGER,
-            'scope_type' => ScopedRole::SCOPE_PROJECT,
-            'scope_id' => $project->id,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        // Second scoped role pivot for the same user on the same project
-        // (e.g. role was upgraded, leaving both rows behind)
-        DB::table('model_has_scoped_roles')->insert([
-            'user_id' => $member->id,
-            'role' => ScopedRole::PROJECT_MEMBER,
-            'scope_type' => ScopedRole::SCOPE_PROJECT,
-            'scope_id' => $project->id,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        $this->assignCanonicalRole($member, 'project_manager', 'project', (int) $project->id);
+        $this->assignCanonicalRole($member, 'project_member', 'project', (int) $project->id);
 
         $result = $this->service->getProjectStats((string) $project->id, $this->superAdmin);
 

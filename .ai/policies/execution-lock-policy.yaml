@@ -1,0 +1,11 @@
+execution_lock:
+  required_before_source_edits: true
+  heartbeat_required: true
+  release_on:
+    - PAUSED
+    - BLOCKED
+    - UNMET
+    - CANCELLED
+    - COMPLETE
+  recovery: require_expiry_and_inactive_owner
+parallel_slices: require_disjoint_worktrees_files_interfaces_and_tests

@@ -49,7 +49,7 @@ class UserStateMiddlewareTest extends TestCase
             'failed_login_attempts' => 0,
             'locked_until' => null,
         ]);
-        $this->user->assignRole('member');
+        $this->assignCanonicalRole($this->user, 'member');
     }
 
     public function test_active_user_passes(): void

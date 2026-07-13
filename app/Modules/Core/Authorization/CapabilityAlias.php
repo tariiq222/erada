@@ -98,15 +98,30 @@ final class CapabilityAlias
             'edit_strategy' => Capability::STRATEGY_EDIT,
             'delete_strategy' => Capability::STRATEGY_DELETE,
 
+            // Historical database vocabulary kept only for reconciliation and
+            // canonical integrity reporting while stored aliases are normalized.
+            //
+            // CSD-CA23078-CORE-001 — department-scoped rationale: these flat
+            // strings encode department-reach semantics (`edit_<scope>_<module>`
+            // was the legacy ladder shape: <scope> in {own, department} and
+            // <module> in {projects, tasks}). Resolving them to the un-reach-capped
+            // canonical `PROJECTS_EDIT` / `TASKS_EDIT` masks the reach restriction:
+            // the canonical pivot would carry `reach=null` and the engine would
+            // grant all-reach. The correct narrowing is `reach={"projects":
+            // "department"}` on the pivot created by migration
+            // `2026_07_03_000010_backfill_authorization_role_permissions`, applied
+            // by the safety-net migration `2026_07_12_000016_narrow_legacy_department_aliases`
+            // for pivots whose audit marker carries the legacy permission name.
+            //
+            // Returning `null` here drops the alias resolution path entirely so
+            // any FUTURE occurrence of the legacy string (e.g. a stale Spatie row
+            // re-introduced by an operator) is treated as a transition alias and
+            // the engine consults the post-cutover reach map instead of falling
+            // through to the unrestricted canonical capability.
+            'edit_department_projects' => null,
+            'edit_department_tasks' => null,
+
             // ── Meetings ──
-            // Phase 9: legacy kebab strings (view-meetings,
-            // manage-meetings, record-decisions) and their alias
-            // entries are removed. Only the canonical dotted
-            // capability strings remain in this map and in the
-            // Permission enum. The canonical dotted strings must
-            // stay here as long as any Permission enum case uses
-            // them, so CapabilityAliasTest's "every flat permission
-            // enum case has an alias entry" assertion keeps passing.
             'meetings.view' => Capability::MEETINGS_VIEW,
             'meetings.create' => Capability::MEETINGS_CREATE,
             'meetings.edit' => Capability::MEETINGS_EDIT,

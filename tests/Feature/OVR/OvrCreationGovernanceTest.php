@@ -4,7 +4,6 @@ namespace Tests\Feature\OVR;
 
 use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\OVR\Enums\ReportStatus;
@@ -92,7 +91,14 @@ class OvrCreationGovernanceTest extends TestCase
 
     private function withDeptRole(User $user, string $roleKey, Department $dept): User
     {
-        $user->assignScopedRole($roleKey, ScopedRole::SCOPE_DEPARTMENT, $dept->id, null, true);
+        $this->grantEngineCapability(
+            $user,
+            [Capability::OVR_CREATE, Capability::OVR_VIEW],
+            'department',
+            $dept->id,
+            $roleKey,
+            ['inherit_to_children' => true],
+        );
         Cache::flush();
 
         return $user;

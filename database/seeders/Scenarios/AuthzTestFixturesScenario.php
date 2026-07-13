@@ -3,15 +3,14 @@
 namespace Database\Seeders\Scenarios;
 
 use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
-use Database\Seeders\ScopedDepartmentRolesSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Spatie\Permission\PermissionRegistrar;
 
 /**
  * AuthzTestFixturesScenario
@@ -62,8 +61,8 @@ class AuthzTestFixturesScenario
         $this->command->info('[Authz] Cleaning previous fixture data...');
         $this->cleanPreviousFixtureData();
 
-        $this->command->info('[Authz] Seeding role definitions...');
-        $this->ensureRoleDefinitions();
+        $this->command->info('[Authz] Verifying canonical roles...');
+        $this->ensureCanonicalRoles();
 
         $this->command->info('[Authz] Creating orgs...');
         $this->createOrganizations();
@@ -120,7 +119,6 @@ class AuthzTestFixturesScenario
             'portfolios', 'decisions', 'reviews', 'survey_responses',
             'survey_invitations', 'survey_sections', 'survey_fields',
             'surveys', 'data_imports', 'data_mappings', 'activity_logs',
-            'model_has_scoped_roles',
         ];
 
         foreach ($tablesToWipe as $table) {
@@ -149,34 +147,18 @@ class AuthzTestFixturesScenario
         }
 
         DB::statement('SET session_replication_role = origin');
-        app()[PermissionRegistrar::class]->forgetCachedPermissions();
         AccessDecision::flushCache();
     }
 
-    /**
-     * Ensure the authz role definitions exist (manager/member/pmo...). Other
-     * modules may rely on them; we do not assume an upstream seeder ran.
-     */
-    private function ensureRoleDefinitions(): void
+    private function ensureCanonicalRoles(): void
     {
-        $existingRoles = DB::table('roles')->pluck('name')->all();
+        $required = ['super_admin', 'admin', 'viewer', 'dept_manager'];
+        $existing = AuthorizationRole::query()->whereIn('name', $required)->pluck('name')->all();
+        $missing = array_values(array_diff($required, $existing));
 
-        $flatRoles = [
-            ['name' => 'super_admin', 'label_ar' => 'مدير عام أعلى', 'guard_name' => 'web'],
-            ['name' => 'admin', 'label_ar' => 'مدير المؤسسة', 'guard_name' => 'web'],
-            ['name' => 'viewer', 'label_ar' => 'مشاهد', 'guard_name' => 'web'],
-            ['name' => 'project_manager', 'label_ar' => 'مدير مشروع', 'guard_name' => 'web'],
-            ['name' => 'member', 'label_ar' => 'عضو', 'guard_name' => 'web'],
-        ];
-
-        foreach ($flatRoles as $role) {
-            if (! in_array($role['name'], $existingRoles, true)) {
-                DB::table('roles')->insert($role + ['created_at' => now(), 'updated_at' => now()]);
-            }
+        if ($missing !== []) {
+            throw new \RuntimeException('Missing canonical authorization roles: '.implode(', ', $missing));
         }
-
-        // Re-seed scoped role definitions (idempotent).
-        app(ScopedDepartmentRolesSeeder::class)->run();
     }
 
     private function createOrganizations(): void
@@ -474,11 +456,17 @@ class AuthzTestFixturesScenario
             ]);
         }
 
-        // ponytail: null role lets callers build scoped-only users (visibility
-        // comes purely from grantDeptManager / assignScopedRole). Asserting a
-        // flat role is the wrong default when we want to exercise engine scoping.
-        if ($flatRole !== null && ! $existing->hasRole($flatRole)) {
-            $existing->assignRole($flatRole);
+        if ($flatRole !== null) {
+            $canonicalRoleName = in_array($flatRole, ['project_manager', 'member'], true) ? 'viewer' : $flatRole;
+            $scopeType = $canonicalRoleName === 'super_admin' ? AuthorizationRoleAssignment::SCOPE_ALL : AuthorizationRoleAssignment::SCOPE_ORGANIZATION;
+            $this->assignCanonicalRole(
+                user: $existing,
+                roleName: $canonicalRoleName,
+                scopeType: $scopeType,
+                scopeId: $scopeType === AuthorizationRoleAssignment::SCOPE_ALL ? null : $orgId,
+                organizationId: $orgId,
+                inheritToChildren: true,
+            );
         }
 
         $this->users[] = $existing;
@@ -486,36 +474,18 @@ class AuthzTestFixturesScenario
         return $existing;
     }
 
-    /**
-     * Grant an explicit dept-scoped dept_manager role to the user.
-     *
-     * ponytail: earlier this used ScopedRole::updateOrCreate() directly and
-     * skipped `role_definition_id`. The engine reads the role's permissions
-     * off the definition row via that FK; without it, AccessDecision resolves
-     * dept_manager to "no permissions" and every engine-gated route returns
-     * 403. Route through User::assignScopedRole() so the definition lookup is
-     * wired correctly.
-     */
+    /** Grant an explicit canonical department-manager assignment. */
     private function grantDeptManager(User $user, Department $dept, string $source = 'manual'): void
     {
-        $user->assignScopedRole(
-            role: 'dept_manager',
-            scopeType: ScopedRole::SCOPE_DEPARTMENT,
+        $this->assignCanonicalRole(
+            user: $user,
+            roleName: 'dept_manager',
+            scopeType: AuthorizationRoleAssignment::SCOPE_DEPARTMENT,
             scopeId: $dept->id,
+            organizationId: $dept->organization_id,
+            inheritToChildren: true,
+            source: $source,
         );
-
-        // Mark the row as manually-granted and inheriting-to-children for the
-        // engine's vertical-visibility check (department.subtree membership).
-        ScopedRole::where('user_id', $user->id)
-            ->where('scope_type', ScopedRole::SCOPE_DEPARTMENT)
-            ->where('scope_id', $dept->id)
-            ->where('role', 'dept_manager')
-            ->update([
-                'source' => $source,
-                'inherit_to_children' => true,
-            ]);
-
-        AccessDecision::flushUserCache($user->id);
     }
 
     private function ensureSuperAdmin(): void
@@ -536,11 +506,46 @@ class AuthzTestFixturesScenario
             ]
         );
 
-        if (! $user->hasRole('super_admin')) {
-            $user->assignRole('super_admin');
-        }
+        $this->assignCanonicalRole(
+            user: $user,
+            roleName: 'super_admin',
+            scopeType: AuthorizationRoleAssignment::SCOPE_ALL,
+            scopeId: null,
+            organizationId: $orgId,
+            inheritToChildren: true,
+        );
 
         $this->users[] = $user;
+    }
+
+    private function assignCanonicalRole(
+        User $user,
+        string $roleName,
+        string $scopeType,
+        ?int $scopeId,
+        ?int $organizationId,
+        bool $inheritToChildren,
+        string $source = 'migration',
+    ): void {
+        $role = AuthorizationRole::query()->where('name', $roleName)->firstOrFail();
+
+        AuthorizationRoleAssignment::query()->updateOrCreate(
+            [
+                'authorization_role_id' => $role->id,
+                'user_id' => $user->id,
+                'scope_type' => $scopeType,
+                'scope_id' => $scopeId,
+            ],
+            [
+                'organization_id' => $organizationId,
+                'inherit_to_children' => $inheritToChildren,
+                'expires_at' => null,
+                'source' => $source,
+                'granted_by' => null,
+            ],
+        );
+
+        AccessDecision::flushUserCache($user->id);
     }
 
     private function deptCode(string $code): int

@@ -138,6 +138,39 @@ class RecommendationStateMachineAuthorizationTest extends TestCase
         $this->assertDatabaseHas('recommendations', ['decidable_type' => Project::class, 'decidable_id' => $project->id]);
     }
 
+    public function test_super_admin_cannot_attach_a_target_from_another_organization_to_a_foreign_meeting(): void
+    {
+        $superAdmin = $this->makeSuperAdmin();
+        $foreignDepartment = Department::factory()->create();
+        $foreignOrganizer = User::factory()->create([
+            'department_id' => $foreignDepartment->id,
+            'organization_id' => $foreignDepartment->organization_id,
+            'is_active' => true,
+        ]);
+        $foreignMeeting = Meeting::factory()->create([
+            'department_id' => $foreignDepartment->id,
+            'organization_id' => $foreignDepartment->organization_id,
+            'organizer_id' => $foreignOrganizer->id,
+            'status' => Meeting::STATUS_SCHEDULED,
+        ]);
+        $localProject = $this->makeSameOrganizationProject();
+
+        $this->actingAs($superAdmin, 'sanctum')->postJson('/api/recommendations', [
+            'kind' => Recommendation::KIND_RULING,
+            'meeting_id' => $foreignMeeting->id,
+            'title' => 'قرار عابر للمؤسسات',
+            'type' => 'approval',
+            'priority' => Recommendation::PRIORITY_MEDIUM,
+            'decidable_type' => 'project',
+            'decidable_id' => $localProject->id,
+        ])->assertStatus(422)->assertJsonValidationErrors(['decidable_id']);
+
+        $this->assertDatabaseMissing('recommendations', [
+            'meeting_id' => $foreignMeeting->id,
+            'decidable_id' => $localProject->id,
+        ]);
+    }
+
     public function test_update_rejects_invalid_missing_and_cross_organization_decidable_targets(): void
     {
         $recommendation = $this->makeActionItem(Recommendation::STATUS_PROPOSED);
@@ -309,7 +342,7 @@ class RecommendationStateMachineAuthorizationTest extends TestCase
             'organization_id' => $this->meeting->organization_id,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         return $superAdmin;
     }

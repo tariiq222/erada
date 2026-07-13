@@ -501,7 +501,7 @@ vi.mock('@entities/user', () => ({
       is_active: true,
       roles: ['pmo_member'],
     }),
-    create: vi.fn().mockResolvedValue({ id: 1 }),
+    create: vi.fn().mockResolvedValue({ user: { id: 1 } }),
     update: vi.fn().mockResolvedValue({ id: 1 }),
   },
 }));
@@ -509,10 +509,10 @@ vi.mock('@entities/role', () => ({
   rolesApi: {
     list: vi.fn().mockResolvedValue({
       data: [
-        { id: 1, name: 'admin', display_name: 'مدير إدارة' },
-        { id: 2, name: 'viewer', display_name: 'مشاهد' },
-        { id: 3, name: 'pmo_member', display_name: 'عضو مكتب المشاريع' },
-        { id: 4, name: 'super_admin', display_name: 'مدير النظام' },
+        { id: 1, name: 'admin', label: 'مدير إدارة', is_active: true },
+        { id: 2, name: 'viewer', label: 'مشاهد', is_active: true },
+        { id: 3, name: 'pmo_member', label: 'عضو مكتب المشاريع', is_active: true },
+        { id: 4, name: 'super_admin', label: 'مدير النظام', is_active: true },
       ],
       meta: { total: 4 },
     }),
@@ -522,8 +522,20 @@ vi.mock('@entities/role', () => ({
 // Mock Auth context
 vi.mock('@shared/contexts/AuthContext', () => ({
   useAuth: () => ({
-    canAccess: () => true,
-    isSuperAdmin: () => true,
+    user: { id: 99 },
+    can: () => true,
+    refreshUser: vi.fn(),
+  }),
+}));
+
+vi.mock('@shared/contexts/OrganizationContext', () => ({
+  useOrganization: () => ({
+    currentOrganization: {
+      id: 1,
+      name: 'المؤسسة الافتراضية',
+      code: 'DEFAULT',
+      is_active: true,
+    },
   }),
 }));
 
@@ -750,14 +762,14 @@ describe('UserForm Roles Selection', () => {
     });
   });
 
-  it('shows custom scoped role option', async () => {
+  it('shows custom authorization role option', async () => {
     render(<UserForm />);
     await waitFor(() => {
       expect(screen.getByText('عضو مكتب المشاريع')).toBeInTheDocument();
     });
   });
 
-  it('shows custom scoped role key description', async () => {
+  it('shows custom authorization role key description', async () => {
     render(<UserForm />);
     await waitFor(() => {
       expect(screen.getByText('pmo_member')).toBeInTheDocument();

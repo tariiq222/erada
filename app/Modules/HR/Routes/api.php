@@ -69,7 +69,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::prefix('admin/departments')
-        ->middleware(['role:super_admin', 'engine_capability:'.Capability::DEPARTMENTS_VIEW])
+        ->middleware(['engine_capability:'.Capability::DEPARTMENTS_VIEW])
         ->group(function () {
             Route::get('/list', [DepartmentController::class, 'list']);
             Route::get('/tree', [DepartmentController::class, 'tree']);

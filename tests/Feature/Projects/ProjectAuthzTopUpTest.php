@@ -69,7 +69,7 @@ class ProjectAuthzTopUpTest extends TestCase
             'is_active' => true,
         ]);
         if ($role) {
-            $user->assignRole($role);
+            $this->assignCanonicalRole($user, $role);
         }
 
         return $user;
@@ -179,7 +179,7 @@ class ProjectAuthzTopUpTest extends TestCase
             ])
             ->assertStatus(200);
 
-        $this->assertDatabaseHas('model_has_scoped_roles', [
+        $this->assertDatabaseHas('authorization_role_assignments', [
             'scope_type' => 'project',
             'scope_id' => $project->id,
             'user_id' => $newUser->id,
@@ -233,7 +233,7 @@ class ProjectAuthzTopUpTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         // Pointing orgA's improvement-type governing-department at an
         // orgB department must be rejected — the org-floor says no.

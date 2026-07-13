@@ -19,9 +19,8 @@ use Tests\TestCase;
  *   filter to descendant organizations when purpose='export'.
  *
  * IMPORTANT — test-helper gotcha (also documented in progress.txt):
- * `grantEngineCapability` has single-role-per-scope semantics via
- * `assignScopedRole`, so two separate calls would silently revoke the first
- * grant. Always pass multiple capabilities as an array.
+ * `grantEngineCapability` builds one canonical role per scope in this fixture.
+ * Always pass multiple capabilities as an array.
  *
  * Proves:
  *   1) cluster user with KPIS_EXPORT + CLUSTER_TREE_EXPORT sees descendant KPIs in the export scope.
@@ -66,8 +65,7 @@ class ClusterTreeKpiExportScopeTest extends TestCase
             'organization_id' => $cluster->id,
             'is_active' => true,
         ]);
-        // CFA-02 grant pattern: pass both capabilities as an array so they
-        // go into the same ScopedRoleDefinition (single-role-per-scope).
+        // Pass both capabilities as an array so they share one canonical role.
         $this->grantEngineCapability($user, [Capability::KPIS_EXPORT, Capability::CLUSTER_TREE_EXPORT]);
 
         $this->makeKpis($cluster, 2, 'CL-');
@@ -234,7 +232,7 @@ class ClusterTreeKpiExportScopeTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $this->makeKpis($cluster, 2, 'CL-');
         $this->makeKpis($hospital, 3, 'HO-');

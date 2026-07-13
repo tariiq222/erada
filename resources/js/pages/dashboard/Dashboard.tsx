@@ -109,7 +109,7 @@ interface Task {
 
 const Dashboard: React.FC = () => {
   const { t } = useTranslation();
-  const { user, isSuperAdmin } = useAuth();
+  const { user, can } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
   const [advancedStats, setAdvancedStats] = useState<AdvancedStats | null>(null);
   const [projectsByStatus, setProjectsByStatus] = useState<ProjectsByStatus | null>(null);
@@ -209,7 +209,7 @@ const Dashboard: React.FC = () => {
       value: formatNumber(stats?.tasks.overdue || 0),
       tone: 'danger',
     },
-    isSuperAdmin() && stats?.users
+    can('users.view') && stats?.users
       ? {
           label: t('dashboard.users_count'),
           value: formatNumber(stats.users),
@@ -220,7 +220,7 @@ const Dashboard: React.FC = () => {
           value: `${formatNumber(advancedStats?.avg_completion_time || 0)} ${t('common.day')}`,
           tone: 'neutral' as const,
         },
-  ], [t, stats, advancedStats, isSuperAdmin]);
+  ], [t, stats, advancedStats, can]);
 
   if (loading) {
     return <DashboardSkeleton />;

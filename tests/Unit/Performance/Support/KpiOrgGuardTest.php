@@ -122,7 +122,7 @@ class KpiOrgGuardTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $super->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($super);
 
         $this->assertTrue($this->guard->sameOrganization($super, $orgA->id));
         $this->assertTrue($this->guard->sameOrganization($super, $orgB->id));
@@ -162,7 +162,7 @@ class KpiOrgGuardTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $super->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($super);
 
         // No exception expected.
         $this->guard->abortUnlessSameOrganization($super, $org->id);

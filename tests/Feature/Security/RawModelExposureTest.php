@@ -3,8 +3,8 @@
 namespace Tests\Feature\Security;
 
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\HR\Models\EmployeeProfile;
@@ -33,7 +33,7 @@ class RawModelExposureTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $admin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($admin);
 
         $project = Project::factory()->create([
             'organization_id' => $org->id,
@@ -48,7 +48,12 @@ class RawModelExposureTest extends TestCase
             'last_login_ip' => '203.0.113.9',
             'failed_login_attempts' => 3,
         ]);
-        $member->assignProjectRole($project, ScopedRole::PROJECT_MEMBER, $admin->id);
+        $this->assignCanonicalRole(
+            $member,
+            'project_member',
+            AuthorizationRoleAssignment::SCOPE_PROJECT,
+            $project->id,
+        );
         Cache::flush();
 
         $res = $this->actingAs($admin, 'sanctum')

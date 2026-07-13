@@ -91,4 +91,33 @@ class CapabilityAliasTest extends TestCase
             );
         }
     }
+
+    /**
+     * CSD-CA23078-CORE-001 pin: the legacy `edit_department_*` aliases
+     * previously resolved to the un-reach-capped canonical capabilities
+     * (`PROJECTS_EDIT` / `TASKS_EDIT`). That mapping silently widened
+     * department-scoped grants onto peer-department reach. The corrective
+     * change is to drop the alias resolution path entirely so any FUTURE
+     * occurrence of the legacy string is treated as a transition alias
+     * and the engine consults the post-cutover reach map (narrowed by
+     * migration `2026_07_12_000016_narrow_legacy_department_aliases`)
+     * instead of falling through to the unrestricted canonical capability.
+     *
+     * Asserting the resolution is null keeps the cleanup durable.
+     */
+    public function test_legacy_department_aliases_resolve_to_null(): void
+    {
+        foreach (['edit_department_projects', 'edit_department_tasks'] as $legacy) {
+            $this->assertNull(
+                CapabilityAlias::toCapability($legacy),
+                "legacy department alias '{$legacy}' must resolve to null after CSD-CA23078-CORE-001"
+            );
+        }
+
+        // Cross-check: a capability lookup on the canonical names still
+        // resolves. The corrective change is alias-only — the canonical
+        // vocabulary must remain unchanged.
+        $this->assertSame(Capability::PROJECTS_EDIT, CapabilityAlias::toCapability('edit_projects'));
+        $this->assertSame(Capability::TASKS_EDIT, CapabilityAlias::toCapability('edit_tasks'));
+    }
 }

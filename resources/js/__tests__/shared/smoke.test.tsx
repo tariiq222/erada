@@ -520,8 +520,8 @@ vi.mock('@shared/api/auth', () => ({
         id: 1,
         name: 'Test User',
         email: 'test@test.com',
-        roles: ['admin'],
-        permissions: [],
+        capabilities: [],
+        access: {},
         organization: null,
         current_organization: null,
       },
@@ -560,15 +560,14 @@ vi.mock('@shared/contexts/LocaleContext', () => ({
 vi.mock('@shared/contexts/AuthContext', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useAuth: () => ({
+    can: () => true,
     canAccess: () => true,
-    user: { id: 1, name: 'Test', email: 'test@test.com', roles: ['admin'], permissions: [] },
+    user: { id: 1, name: 'Test', email: 'test@test.com', capabilities: [], access: {} },
     isLoading: false,
     isAuthenticated: true,
     login: vi.fn(),
     logout: vi.fn(),
     refreshUser: vi.fn(),
-    hasRole: vi.fn(() => true),
-    hasPermission: vi.fn(() => true),
     isSuperAdmin: vi.fn(() => true),
   }),
 }));

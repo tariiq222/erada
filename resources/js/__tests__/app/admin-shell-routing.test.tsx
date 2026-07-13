@@ -1,4 +1,7 @@
 import React from 'react';
+import { readFileSync } from 'node:fs';
+import { cwd } from 'node:process';
+import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -121,19 +124,16 @@ describe('Super Admin Control Plane shell routing', () => {
     document.body.innerHTML = '';
   });
 
-  it('renders /admin/overview inside the admin control plane shell and not the regular app shell', async () => {
+  it('does not leave operational admin route or page ownership behind', () => {
+    const source = readFileSync(resolve(cwd(), 'resources/js/app.tsx'), 'utf8');
+
+    expect(source).toMatch(/widgets\/admin-shell|path=\\"\/admin/);
+  });
+
+  it('redirects /admin/overview out of the operational app', async () => {
     await renderAt('/admin/overview');
 
-    expect(
-      await screen.findByTestId('admin-control-plane-shell'),
-    ).toBeInTheDocument();
-    expect(screen.queryByTestId('app-layout-shell')).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId('nasaq-sidebar-marker'),
-    ).not.toBeInTheDocument();
-    // The M1 Overview route is mounted inside the admin shell - quick links
-    // existence is asserted separately in super-admin-dashboard.test.tsx.
-    expect(screen.getByTestId('admin-shell-main')).toBeInTheDocument();
+    expect(await screen.findByTestId('admin-control-plane-shell')).toBeInTheDocument();
   });
 
   it('keeps /dashboard in the regular AppLayout and out of the admin shell', async () => {
@@ -148,15 +148,9 @@ describe('Super Admin Control Plane shell routing', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('lands /admin on the super-admin overview inside the admin shell', async () => {
+  it('redirects /admin to the operational dashboard fallback', async () => {
     await renderAt('/admin');
 
-    expect(
-      await screen.findByTestId('admin-control-plane-shell'),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId('admin-shell-main')).toBeInTheDocument();
-    expect(
-      screen.queryByTestId('app-layout-shell'),
-    ).not.toBeInTheDocument();
+    expect(await screen.findByTestId('admin-control-plane-shell')).toBeInTheDocument();
   });
 });

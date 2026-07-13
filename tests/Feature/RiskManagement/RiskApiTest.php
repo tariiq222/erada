@@ -44,13 +44,13 @@ class RiskApiTest extends TestCase
             'organization_id' => $this->org->id,
             'is_active' => true,
         ]);
-        $this->admin->assignRole('admin');
+        $this->grantCanonicalAdmin($this->admin);
 
         $this->viewer = User::factory()->create([
             'organization_id' => $this->org->id,
             'is_active' => true,
         ]);
-        $this->viewer->assignRole('viewer');
+        $this->grantCanonicalViewer($this->viewer);
 
         $this->token = $this->admin->createToken('test')->plainTextToken;
     }
@@ -117,7 +117,7 @@ class RiskApiTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $payload = [
             'title' => 'خطر عام على مستوى المنصة',
@@ -143,7 +143,7 @@ class RiskApiTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $risk = Risk::factory()->forOrganization($this->org)->create();
 
@@ -303,7 +303,7 @@ class RiskApiTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $this->getJson(
             "/api/risk-management/risks/{$foreignRisk->id}/assessments",

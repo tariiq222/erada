@@ -66,7 +66,7 @@ class StatusTransitionMatrixTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->actor->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->actor);
 
         $this->incidentType = IncidentType::create([
             'name' => 'Medical Error',

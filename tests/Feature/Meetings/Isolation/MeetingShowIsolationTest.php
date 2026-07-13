@@ -87,7 +87,7 @@ class MeetingShowIsolationTest extends TestCase
             'organization_id' => $orgA->id,
             'department_id' => $deptA->id,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $response = $this->actingAs($superAdmin, 'sanctum')
             ->getJson("/api/meetings/{$meetingB->id}");

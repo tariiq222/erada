@@ -3,6 +3,8 @@
 namespace App\Modules\Tasks\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -403,9 +405,10 @@ class TaskController extends Controller
 
             if ($task->project_id) {
                 // مهمة مرتبطة بمشروع: عضو المشروع أو عضو نفس مؤسسة المشروع (نفس المؤسسة يكفي — D-04 محسوم).
+                $project = $task->project;
                 abort_unless(
-                    $target->hasRoleInProject($task->project_id)
-                        || $target->organization_id === optional($task->project)->organization_id,
+                    ($project && AccessDecision::can($target, Capability::PROJECTS_VIEW, $project))
+                        || $target->organization_id === optional($project)->organization_id,
                     403,
                     'لا يمكن تعيين المهمة لمستخدم خارج المشروع/المؤسسة'
                 );

@@ -31,7 +31,7 @@ class PdcaCheckGateTest extends TestCase
         ], $overrides));
 
         $manager = User::factory()->create(['organization_id' => $project->organization_id]);
-        $manager->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($manager);
 
         foreach (range(1, 2) as $i) {
             $kpi = Kpi::factory()->create(['organization_id' => $project->organization_id]);

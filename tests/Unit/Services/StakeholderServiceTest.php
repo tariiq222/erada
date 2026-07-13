@@ -2,7 +2,6 @@
 
 namespace Tests\Unit\Services;
 
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -191,7 +190,7 @@ class StakeholderServiceTest extends TestCase
         // السياقية (scoped PROJECT_MANAGER) لا من أعمدة sponsor_id/manager_id (المحذوفة).
         $manager = $this->makeUser();
         $project = $this->makeProject();
-        $manager->assignProjectRole($project, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($manager, 'project_manager', 'project', (int) $project->id);
 
         $this->service->addProjectLeadersAsStakeholders($project);
 
@@ -204,7 +203,7 @@ class StakeholderServiceTest extends TestCase
         // المدير (scoped manager) موجود مسبقاً كصاحب مصلحة → لا يُضاف مرتين.
         $manager = $this->makeUser();
         $project = $this->makeProject();
-        $manager->assignProjectRole($project, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($manager, 'project_manager', 'project', (int) $project->id);
         $project->stakeholders()->create([
             'user_id' => $manager->id,
             'name' => $manager->name,

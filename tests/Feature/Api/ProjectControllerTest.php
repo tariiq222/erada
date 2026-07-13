@@ -34,7 +34,7 @@ class ProjectControllerTest extends TestCase
         ]);
 
         // إعطاء المستخدم صلاحيات super_admin للاختبار
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
     }
 
     /**

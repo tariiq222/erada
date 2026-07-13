@@ -4,7 +4,6 @@ namespace Tests\Feature\Core;
 
 use App\Modules\Core\Models\GovernanceRule;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\OVR\Models\OvrSetting;
@@ -14,7 +13,6 @@ use App\Modules\Projects\Services\ProjectAuthorizationService;
 use App\Modules\RiskManagement\Models\RiskSetting;
 use App\Modules\RiskManagement\Services\RiskAuthorizationService;
 use Database\Seeders\RolesAndPermissionsSeeder;
-use Database\Seeders\ScopedDepartmentRolesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
@@ -40,7 +38,6 @@ class GovernanceRulesTest extends TestCase
     {
         parent::setUp();
         $this->seed(RolesAndPermissionsSeeder::class);
-        $this->seed(ScopedDepartmentRolesSeeder::class);
         Cache::flush();
 
         $this->org = Organization::factory()->create();
@@ -66,7 +63,7 @@ class GovernanceRulesTest extends TestCase
             'department_id' => $this->governingDept->id,
             'is_active' => true,
         ]);
-        $user->assignScopedRole('dept_member', ScopedRole::SCOPE_DEPARTMENT, $this->governingDept->id, null, true);
+        $this->assignCanonicalRole($user, 'dept_member', 'department', $this->governingDept->id);
         Cache::flush();
 
         return $user;
@@ -137,7 +134,7 @@ class GovernanceRulesTest extends TestCase
             'department_id' => $improvementGov->id,
             'is_active' => true,
         ]);
-        $user->assignScopedRole('dept_member', ScopedRole::SCOPE_DEPARTMENT, $improvementGov->id, null, true);
+        $this->assignCanonicalRole($user, 'dept_member', 'department', $improvementGov->id);
         Cache::flush();
 
         $svc = app(ProjectAuthorizationService::class);

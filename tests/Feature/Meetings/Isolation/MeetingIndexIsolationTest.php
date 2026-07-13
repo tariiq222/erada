@@ -78,7 +78,7 @@ class MeetingIndexIsolationTest extends TestCase
             'organization_id' => $orgA->id,
             'department_id' => $deptA->id,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         Meeting::factory()->count(2)->create([
             'organization_id' => $orgA->id,

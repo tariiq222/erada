@@ -57,11 +57,8 @@ class RiskNullOrgDenialTest extends TestCase
         // view_risk_reports. Both capabilities are granted org-scope so the
         // org user would normally see every risk in the org — but the null-org
         // risk is filtered by orgFilter() regardless of grants.
-        // Both MUST be granted in a single call: assignScopedRole is single-role-
-        // per-scope, so two separate same-scope calls would silently revoke the
-        // first (Phase 3, ADR-UNIFIED-ROLE-ACCESS: the removed can_* flag path used
-        // to mask this by broadening view grants; permissions[] is now the only
-        // grant source).
+        // Grant both capabilities on one canonical role assignment so the fixture
+        // mirrors the production permission graph at organization scope.
         $this->grantEngineCapability($this->orgUser, [
             Capability::RISKS_VIEW,
             Capability::RISKS_VIEW_REPORTS,
@@ -72,7 +69,7 @@ class RiskNullOrgDenialTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
 
         $this->nullOrgRisk = new Risk;
         $this->nullOrgRisk->forceFill([

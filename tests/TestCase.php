@@ -8,10 +8,11 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Support\Facades\Schema;
 use Tests\Concerns\DisablesCsrfForTesting;
+use Tests\Support\CanonicalAuthorizationFixtures;
 
 abstract class TestCase extends BaseTestCase
 {
-    use DisablesCsrfForTesting;
+    use CanonicalAuthorizationFixtures, DisablesCsrfForTesting;
 
     public function call($method, $uri, $parameters = [], $cookies = [], $files = [], $server = [], $content = null)
     {
@@ -47,7 +48,7 @@ abstract class TestCase extends BaseTestCase
         $this->disableCsrfForTesting();
 
         $uses = array_flip(class_uses_recursive(static::class));
-        if (isset($uses[RefreshDatabase::class]) && Schema::hasTable('permissions')) {
+        if (isset($uses[RefreshDatabase::class]) && Schema::hasTable('authorization_roles')) {
             $this->seed(RolesAndPermissionsSeeder::class);
         }
     }

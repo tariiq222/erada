@@ -67,7 +67,9 @@ class OvrPiiAndIdorTest extends TestCase
             'is_active' => true,
         ]);
         if ($role) {
-            $user->assignRole($role);
+            $role === 'super_admin'
+                ? $this->grantCanonicalSuperAdmin($user)
+                : $this->assignCanonicalRole($user, $role);
         }
 
         return $user;
@@ -281,7 +283,7 @@ class OvrPiiAndIdorTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $this->actingAs($superAdmin, 'sanctum')
             ->putJson("/api/ovr/incidents/{$report->report_number}", [

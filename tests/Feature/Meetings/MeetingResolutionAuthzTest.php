@@ -55,7 +55,7 @@ class MeetingResolutionAuthzTest extends TestCase
             'organization_id' => $this->project->organization_id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
 
         $this->meeting = Meeting::factory()->create([
             'department_id' => $this->dept->id,
@@ -104,7 +104,7 @@ class MeetingResolutionAuthzTest extends TestCase
             'organization_id' => $this->project->organization_id,
             'is_active' => true,
         ]);
-        $noCapability->assignRole('viewer');
+        $this->grantCanonicalViewer($noCapability);
 
         $otherDept = Department::factory()->create();
         $otherProject = Project::factory()->create(['department_id' => $otherDept->id]);
@@ -200,7 +200,7 @@ class MeetingResolutionAuthzTest extends TestCase
             'organization_id' => $this->project->organization_id,
             'is_active' => true,
         ]);
-        $viewer->assignRole('viewer');
+        $this->grantCanonicalViewer($viewer);
 
         $resolution = MeetingResolution::create([
             'meeting_id' => $this->meeting->id,
@@ -243,7 +243,7 @@ class MeetingResolutionAuthzTest extends TestCase
             'organization_id' => $otherOrg->id,
             'is_active' => true,
         ]);
-        $crossOrgUser->assignRole('viewer');
+        $this->grantCanonicalViewer($crossOrgUser);
 
         $resolution = MeetingResolution::create([
             'meeting_id' => $this->meeting->id,

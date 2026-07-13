@@ -38,7 +38,7 @@ class ProjectExpenseController extends Controller
             return false;
         }
 
-        // Boundary preserved from legacy `hasPermissionTo('manage_organization')`:
+        // Organization-management boundary preserved by the canonical capability:
         // super_admin OR an explicit SETTINGS_MANAGE grant. The Spatie `admin`
         // role is intentionally excluded — it grants admin-tier through the engine's
         // is_admin_role short-circuit, but the legacy semantic required a DIRECT

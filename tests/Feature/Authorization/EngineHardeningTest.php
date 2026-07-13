@@ -3,48 +3,28 @@
 namespace Tests\Feature\Authorization;
 
 use App\Modules\Core\Authorization\AccessDecision;
-use App\Modules\Core\Authorization\AuthorizationRuntimeMode;
 use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Authorization\Contracts\ScopeAware;
 use App\Modules\Core\Authorization\Contracts\SensitivelyScoped;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
-use App\Modules\Core\Models\ScopeType;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\OVR\Enums\ReportStatus;
 use App\Modules\OVR\Enums\SeverityLevel;
 use App\Modules\OVR\Models\IncidentReport;
 use App\Modules\OVR\Models\IncidentType;
-use App\Modules\Projects\Models\Project;
-use Database\Seeders\ScopedDepartmentRolesSeeder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
 /**
- * EngineHardeningTest — engine DoS guards + sensitive structural floor (P1).
- *
- * Pinned audit fixes (2026-07-06):
- *  - F1: extractOrganizationId recurses without cycle detection. Mirror
- *        buildScopeChain's visited-key + a 32-depth cap as belt and braces.
- *  - F2: hasNewPermission runs AuthorizationRoleAssignment::get() per
- *        call without memoization. Share with loadAdminRoleAssignments.
- *  - SHADOW throw placement: computeNewPathDecision can throw inside
- *        can() if a shadow flips in prod. Gate on environment AND
- *        isShadow, plus a boot-time warning.
- *  - Sensitive structural floor: the model hook is fully authoritative
- *        today. Add a structural floor that requires an owned /
- *        confidential-cleared / org-admin reason to grant, and
- *        OR-fallback to the hook in case the floor mistakenly denies
- *        for a record the hook is correctly authoritative on
- *        (defense in depth, not bypass).
+ * Canonical engine DoS guards and sensitive-record security boundaries.
  */
 class EngineHardeningTest extends TestCase
 {
+    use GrantsEngineCapability;
     use RefreshDatabase;
 
     private IncidentType $incidentType;
@@ -52,10 +32,8 @@ class EngineHardeningTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(ScopedDepartmentRolesSeeder::class);
         Cache::flush();
         AccessDecision::flushCache();
-        AuthorizationRuntimeMode::reset();
 
         $this->incidentType = IncidentType::create([
             'name' => 'Medical Error',
@@ -66,7 +44,6 @@ class EngineHardeningTest extends TestCase
 
     protected function tearDown(): void
     {
-        AuthorizationRuntimeMode::reset();
         AccessDecision::flushCache();
 
         parent::tearDown();
@@ -171,157 +148,6 @@ class EngineHardeningTest extends TestCase
     }
 
     // ============================================================
-    // F2: memoize hasNewPermission assignments
-    // ============================================================
-
-    public function test_has_new_permission_assignments_are_memoized_per_user(): void
-    {
-        // The SHADOW-only branch in hasNewPermission runs a join per call.
-        // With many can() probes against the same (user, role set), the
-        // cache key ("<userId>|<sortedRoleIds>") collapses the work. We
-        // verify by watching DB query log + asserting the cache key is
-        // populated after a single call and reused for a second.
-        if (DB::getDriverName() !== 'pgsql') {
-            $this->markTestSkipped('Memoization probe is PostgreSQL-only.');
-        }
-
-        $org = Organization::factory()->create();
-        $user = User::factory()->create(['organization_id' => $org->id]);
-
-        // Enable shadow AND env gate (testing env) so the compare branch runs.
-        AuthorizationRuntimeMode::enableShadow();
-
-        $project = Project::factory()->create([
-            'organization_id' => $org->id,
-        ]);
-
-        // First call: populates cache.
-        AccessDecision::can($user, Capability::PROJECTS_VIEW, $project);
-
-        $cacheKeyPatterns = array_filter(
-            array_keys((function () {
-                $reflection = new \ReflectionClass(AccessDecision::class);
-                $prop = $reflection->getProperty('newPermissionAssignmentsCache');
-                $prop->setAccessible(true);
-
-                return $prop->getValue();
-            })() ?? []),
-            fn ($k) => str_starts_with((string) $k, $user->id.'|'),
-        );
-
-        // Either the cache has at least one entry for this user, or the
-        // (resource, action) tuple was empty and no assignment query ran.
-        // Both are acceptable "no extra query" outcomes.
-        $this->assertIsArray($cacheKeyPatterns);
-    }
-
-    // ============================================================
-    // SHADOW: env gate + boot-time warning
-    // ============================================================
-
-    public function test_shadow_compare_disabled_when_is_shadow_off(): void
-    {
-        // Default state: shadow off. The env gate check returns false on
-        // the very first conditional, never reading the environment.
-        $this->assertFalse(AccessDecision::shadowComparisonEnabled());
-    }
-
-    public function test_shadow_compare_disabled_in_production_env(): void
-    {
-        // When the SHADOW flag is on but the app env is not testing/staging,
-        // the compare branch MUST be suppressed. We simulate by faking the
-        // environment through the container's `App::environment()` answer.
-        AuthorizationRuntimeMode::enableShadow();
-
-        $this->app->detectEnvironment(fn () => 'production');
-
-        // Force a re-read so the env is current.
-        $this->assertFalse(AccessDecision::shadowComparisonEnabled());
-    }
-
-    public function test_shadow_compare_enabled_in_testing_env(): void
-    {
-        AuthorizationRuntimeMode::enableShadow();
-
-        $this->app->detectEnvironment(fn () => 'testing');
-
-        // The env gate passes; isShadow is on; comparison is enabled.
-        // Reset the one-shot warn guard to a known state.
-        AccessDecision::flushCache();
-
-        $this->assertTrue(AccessDecision::shadowComparisonEnabled());
-    }
-
-    public function test_shadow_compare_enabled_in_staging_env(): void
-    {
-        AuthorizationRuntimeMode::enableShadow();
-        $this->app->detectEnvironment(fn () => 'staging');
-        AccessDecision::flushCache();
-
-        $this->assertTrue(AccessDecision::shadowComparisonEnabled());
-    }
-
-    public function test_production_shadow_warns_once_per_process(): void
-    {
-        AuthorizationRuntimeMode::enableShadow();
-        $this->app->detectEnvironment(fn () => 'production');
-
-        Log::shouldReceive('warning')
-            ->once()
-            ->withArgs(function ($message, $context = []) {
-                return $message === 'authz.shadow.outside_dev_test'
-                    && ($context['environment'] ?? null) === 'production';
-            });
-
-        // First call warns. Second call is silenced by the one-shot guard.
-        AccessDecision::shadowComparisonEnabled();
-        AccessDecision::shadowComparisonEnabled();
-
-        AuthorizationRuntimeMode::disableShadow();
-    }
-
-    public function test_flush_cache_resets_shadow_warning_guard(): void
-    {
-        AuthorizationRuntimeMode::enableShadow();
-        $this->app->detectEnvironment(fn () => 'production');
-
-        Log::shouldReceive('warning')
-            ->twice()
-            ->withArgs(function ($message) {
-                return $message === 'authz.shadow.outside_dev_test';
-            });
-
-        // First worker iteration warns.
-        AccessDecision::shadowComparisonEnabled();
-
-        // Worker flush (simulating a role mutation path).
-        AccessDecision::flushCache();
-
-        // Second iteration warns again because flushCache() resets the guard.
-        AccessDecision::shadowComparisonEnabled();
-
-        AuthorizationRuntimeMode::disableShadow();
-    }
-
-    public function test_can_does_not_throw_when_shadow_on_in_production(): void
-    {
-        // The single most important guarantee: a flip of the flag in
-        // production MUST NOT cause a 500. The compare branch is gated,
-        // so can() returns the legacy decision cleanly.
-        AuthorizationRuntimeMode::enableShadow();
-        $this->app->detectEnvironment(fn () => 'production');
-
-        $org = Organization::factory()->create();
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $project = Project::factory()->create([
-            'organization_id' => $org->id,
-        ]);
-
-        $result = AccessDecision::can($user, Capability::PROJECTS_VIEW, $project);
-        $this->assertIsBool($result);
-    }
-
-    // ============================================================
     // Sensitive structural floor
     // ============================================================
 
@@ -366,17 +192,21 @@ class EngineHardeningTest extends TestCase
         $this->assertTrue(AccessDecision::can($creator->fresh(), Capability::OVR_VIEW, $target));
     }
 
-    public function test_sensitive_floor_admits_confidential_scoped_role(): void
+    public function test_sensitive_floor_admits_canonical_confidential_assignment(): void
     {
         // (b) scoped role whose definition lists OVR_CONFIDENTIAL in
         // permissions[] satisfies both the floor AND the OVR hook.
         $org = Organization::factory()->create();
         $dept = Department::factory()->create(['organization_id' => $org->id]);
 
-        $this->seedConfidentialDefinition();
-
         $cleared = User::factory()->create(['organization_id' => $org->id]);
-        $cleared->assignScopedRole('confidential_viewer', ScopedRole::SCOPE_ORGANIZATION, $org->id, $cleared->id);
+        $this->grantEngineCapability(
+            $cleared,
+            [Capability::OVR_VIEW, Capability::OVR_CONFIDENTIAL],
+            'organization',
+            $org->id,
+            'confidential_viewer',
+        );
 
         $report = $this->makeReport($org, $dept);
 
@@ -394,10 +224,15 @@ class EngineHardeningTest extends TestCase
         $org = Organization::factory()->create();
         $dept = Department::factory()->create(['organization_id' => $org->id]);
 
-        $this->seedOrgAdminDefinition();
-
         $admin = User::factory()->create(['organization_id' => $org->id]);
-        $admin->assignScopedRole('org_admin', ScopedRole::SCOPE_ORGANIZATION, $org->id, $admin->id);
+        $this->grantEngineCapability(
+            $admin,
+            [Capability::OVR_VIEW, Capability::OVR_CONFIDENTIAL],
+            'organization',
+            $org->id,
+            'org_admin',
+            ['is_admin_role' => true],
+        );
 
         $report = $this->makeReport($org, $dept);
 
@@ -416,8 +251,6 @@ class EngineHardeningTest extends TestCase
         $org = Organization::factory()->create();
         $dept = Department::factory()->create(['organization_id' => $org->id]);
 
-        $this->seedDeptAdminDefinition();
-
         $stranger = User::factory()->create(['organization_id' => $org->id]);
         // stranger has no role assignment on the report's org/dept.
 
@@ -426,19 +259,19 @@ class EngineHardeningTest extends TestCase
         $this->assertFalse(AccessDecision::can($stranger->fresh(), Capability::OVR_VIEW, $report));
     }
 
-    public function test_sensitive_floor_helper_returns_true_for_owner(): void
+    public function test_sensitive_owner_is_admitted_through_public_canonical_decision(): void
     {
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
 
         $target = $this->makeSyntheticSensitiveTarget($org, [
-            'created_by' => $user->id,
+            'owner_id' => $user->id,
         ]);
 
-        $this->assertTrue(AccessDecision::sensitiveStructuralFloor($user->fresh(), $target));
+        $this->assertTrue(AccessDecision::can($user->fresh(), Capability::OVR_VIEW, $target));
     }
 
-    public function test_sensitive_floor_helper_denies_stranger(): void
+    public function test_sensitive_stranger_is_denied_through_public_canonical_decision(): void
     {
         $org = Organization::factory()->create();
         $dept = Department::factory()->create(['organization_id' => $org->id]);
@@ -446,137 +279,12 @@ class EngineHardeningTest extends TestCase
 
         $report = $this->makeReport($org, $dept);
 
-        $this->assertFalse(AccessDecision::sensitiveStructuralFloor($stranger->fresh(), $report));
+        $this->assertFalse(AccessDecision::can($stranger->fresh(), Capability::OVR_VIEW, $report));
     }
 
     // ============================================================
     // Shared helpers
     // ============================================================
-
-    private function seedConfidentialDefinition(): void
-    {
-        $orgScopeType = ScopeType::firstOrCreate(
-            ['key' => ScopedRole::SCOPE_ORGANIZATION],
-            [
-                'label_ar' => 'المؤسسة',
-                'label_en' => 'Organization',
-                'model_class' => Organization::class,
-                'supports_hierarchy' => false,
-                'supports_expiry' => false,
-                'is_active' => true,
-                'sort_order' => 1,
-            ]
-        );
-
-        $exists = DB::table('scoped_role_definitions')
-            ->where('scope_type_id', $orgScopeType->id)
-            ->where('role_key', 'confidential_viewer')
-            ->exists();
-
-        if ($exists) {
-            return;
-        }
-
-        DB::table('scoped_role_definitions')->insert([
-            'name' => 'organization.confidential_viewer',
-            'display_name' => 'Confidential Viewer',
-            'scope_type' => ScopedRole::SCOPE_ORGANIZATION,
-            'scope_type_id' => $orgScopeType->id,
-            'role_key' => 'confidential_viewer',
-            'label_ar' => 'مشاهد سري',
-            'label_en' => 'Confidential Viewer',
-            'is_admin_role' => false,
-            'permissions' => json_encode([Capability::OVR_VIEW, Capability::OVR_CONFIDENTIAL]),
-            'is_active' => true,
-            'sort_order' => 99,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        Cache::flush();
-    }
-
-    private function seedOrgAdminDefinition(): void
-    {
-        $orgScopeType = ScopeType::firstOrCreate(
-            ['key' => ScopedRole::SCOPE_ORGANIZATION],
-            [
-                'label_ar' => 'المؤسسة',
-                'label_en' => 'Organization',
-                'model_class' => Organization::class,
-                'supports_hierarchy' => false,
-                'supports_expiry' => false,
-                'is_active' => true,
-                'sort_order' => 1,
-            ]
-        );
-
-        if (DB::table('scoped_role_definitions')
-            ->where('scope_type_id', $orgScopeType->id)
-            ->where('role_key', 'org_admin')
-            ->exists()) {
-            return;
-        }
-
-        DB::table('scoped_role_definitions')->insert([
-            'name' => 'organization.org_admin',
-            'display_name' => 'Org Admin',
-            'scope_type' => ScopedRole::SCOPE_ORGANIZATION,
-            'scope_type_id' => $orgScopeType->id,
-            'role_key' => 'org_admin',
-            'label_ar' => 'مدير المؤسسة',
-            'label_en' => 'Org Admin',
-            'is_admin_role' => true,
-            'permissions' => json_encode([Capability::OVR_VIEW, Capability::OVR_CONFIDENTIAL]),
-            'is_active' => true,
-            'sort_order' => 50,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        Cache::flush();
-    }
-
-    private function seedDeptAdminDefinition(): void
-    {
-        $deptScopeType = ScopeType::firstOrCreate(
-            ['key' => ScopedRole::SCOPE_DEPARTMENT],
-            [
-                'label_ar' => 'القسم',
-                'label_en' => 'Department',
-                'model_class' => Department::class,
-                'supports_hierarchy' => true,
-                'supports_expiry' => false,
-                'is_active' => true,
-                'sort_order' => 5,
-            ]
-        );
-
-        if (DB::table('scoped_role_definitions')
-            ->where('scope_type_id', $deptScopeType->id)
-            ->where('role_key', 'dept_admin')
-            ->exists()) {
-            return;
-        }
-
-        DB::table('scoped_role_definitions')->insert([
-            'name' => 'department.dept_admin',
-            'display_name' => 'Dept Admin',
-            'scope_type' => ScopedRole::SCOPE_DEPARTMENT,
-            'scope_type_id' => $deptScopeType->id,
-            'role_key' => 'dept_admin',
-            'label_ar' => 'مدير قسم متقدم',
-            'label_en' => 'Department Admin (Floor Test)',
-            'is_admin_role' => true,
-            'permissions' => json_encode([Capability::OVR_VIEW]),
-            'is_active' => true,
-            'sort_order' => 40,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        Cache::flush();
-    }
 
     /**
      * Build a synthetic SensitivelyScoped target that exposes the

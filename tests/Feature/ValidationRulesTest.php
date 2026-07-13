@@ -26,7 +26,7 @@ class ValidationRulesTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
     }
 
     /**

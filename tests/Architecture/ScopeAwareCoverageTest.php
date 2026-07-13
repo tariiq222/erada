@@ -7,9 +7,6 @@ use App\Modules\Core\Models\EmailOtp;
 use App\Modules\Core\Models\GovernanceRule;
 use App\Modules\Core\Models\LoginAttempt;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
-use App\Modules\Core\Models\ScopedRoleDefinition;
-use App\Modules\Core\Models\ScopeType;
 use App\Modules\Core\Models\SystemSettings;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\DepartmentCapacityRole;
@@ -84,9 +81,6 @@ class ScopeAwareCoverageTest extends TestCase
         LoginAttempt::class,          // reason: auth security log
 
         // ---- Scope/role system internals and configuration ----
-        ScopeType::class,             // reason: scope-system lookup
-        ScopedRole::class,            // reason: the role-assignment pivot itself
-        ScopedRoleDefinition::class,  // reason: role definition (config)
         GovernanceRule::class,        // reason: governance policy config (governing unit per resource type)
         SystemSettings::class,        // reason: system configuration
         DepartmentCapacityRole::class,  // reason: capacity-policy config row

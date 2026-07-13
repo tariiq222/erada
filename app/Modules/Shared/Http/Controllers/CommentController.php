@@ -412,8 +412,8 @@ class CommentController extends Controller
             abort(403, 'ليس لديك صلاحية الوصول');
         }
 
-        // مدير المشروع (scoped manager)
-        if ($user->isProjectAdmin($project)) {
+        // Project administration is capability-based and scoped to this record.
+        if (AccessDecision::can($user, Capability::PROJECTS_ASSIGN_ROLES, $project)) {
             return;
         }
 

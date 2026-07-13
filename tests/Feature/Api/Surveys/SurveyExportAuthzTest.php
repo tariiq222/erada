@@ -60,7 +60,7 @@ class SurveyExportAuthzTest extends TestCase
             'is_active' => true,
         ]);
         if ($role) {
-            $user->assignRole($role);
+            $this->assignCanonicalRole($user, $role);
         }
 
         return $user;
@@ -197,7 +197,7 @@ class SurveyExportAuthzTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $this->actingAs($superAdmin, 'sanctum')
             ->getJson("/api/surveys/{$surveyB->id}/export")

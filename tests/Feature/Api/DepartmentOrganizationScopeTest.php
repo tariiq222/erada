@@ -3,14 +3,10 @@
 namespace Tests\Feature\Api;
 
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
-use App\Modules\Core\Models\ScopedRoleDefinition;
-use App\Modules\Core\Models\ScopeType;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class DepartmentOrganizationScopeTest extends TestCase
@@ -50,16 +46,7 @@ class DepartmentOrganizationScopeTest extends TestCase
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $this->adminA->assignRole('admin');
-
-        // Grant adminA an org-level scoped role with full department admin rights.
-        // The engine (flag ON) requires a contextual role — Spatie 'admin' alone is not enough.
-        $roleDefinition = $this->createOrgDeptAdminRoleDefinition('org_dept_admin');
-        $this->adminA->assignScopedRole(
-            role: $roleDefinition->role_key,
-            scopeType: ScopedRole::SCOPE_ORGANIZATION,
-            scopeId: $this->orgA->id
-        );
+        $this->assignCanonicalRole($this->adminA, 'admin');
 
         // Admin in orgB
         $this->deptB = Department::factory()->create([
@@ -71,28 +58,20 @@ class DepartmentOrganizationScopeTest extends TestCase
             'department_id' => $this->deptB->id,
             'is_active' => true,
         ]);
-        $this->adminB->assignRole('admin');
-
-        // Grant adminB same role scoped to orgB
-        $this->adminB->assignScopedRole(
-            role: $roleDefinition->role_key,
-            scopeType: ScopedRole::SCOPE_ORGANIZATION,
-            scopeId: $this->orgB->id
-        );
+        $this->assignCanonicalRole($this->adminB, 'admin');
 
         // super_admin without org
         $this->superAdmin = User::factory()->create([
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
 
-        // Null-org user with Spatie admin role (but no org → engine denies)
+        // Null-org non-super user has no canonical assignment and is denied.
         $this->nullOrgUser = User::factory()->create([
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $this->nullOrgUser->assignRole('admin');
 
         Cache::flush();
     }
@@ -583,53 +562,5 @@ class DepartmentOrganizationScopeTest extends TestCase
         foreach ($data as $dept) {
             $this->assertNotNull($dept['organization_id'] ?? null);
         }
-    }
-
-    // ========================================================
-    // Helpers
-    // ========================================================
-
-    /**
-     * Create a ScopeType ('organization') + ScopedRoleDefinition for org-level dept admin role.
-     * is_admin_role=true grants all capabilities (CREATE, EDIT, DELETE, VIEW).
-     */
-    private function createOrgDeptAdminRoleDefinition(string $roleKey): ScopedRoleDefinition
-    {
-        $scopeType = ScopeType::firstOrCreate(
-            ['key' => ScopedRole::SCOPE_ORGANIZATION],
-            [
-                'label_ar' => 'المؤسسة',
-                'label_en' => 'Organization',
-                'model_class' => Organization::class,
-                'supports_hierarchy' => false,
-                'is_active' => true,
-                'sort_order' => 0,
-            ]
-        );
-
-        $existingId = DB::table('scoped_role_definitions')
-            ->where('scope_type_id', $scopeType->id)
-            ->where('role_key', $roleKey)
-            ->value('id');
-
-        if (! $existingId) {
-            $existingId = DB::table('scoped_role_definitions')->insertGetId([
-                'scope_type_id' => $scopeType->id,
-                'role_key' => $roleKey,
-                'name' => $roleKey,
-                'display_name' => $roleKey,
-                'scope_type' => ScopedRole::SCOPE_ORGANIZATION,
-                'label_ar' => 'مسؤول الأقسام',
-                'label_en' => 'Department Admin',
-                'is_admin_role' => true,
-                'permissions' => null,
-                'is_active' => true,
-                'sort_order' => 0,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        }
-
-        return ScopedRoleDefinition::find($existingId);
     }
 }

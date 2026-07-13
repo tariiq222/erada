@@ -44,7 +44,7 @@ class OVRPrivacySerializationTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
     }
 
     public function test_incident_list_omits_patient_and_reporter_pii(): void

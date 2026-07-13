@@ -3,7 +3,6 @@
 namespace Tests\Unit\Shared\Policies;
 
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -48,28 +47,28 @@ class CommentPolicyTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
 
         $this->admin = User::factory()->create([
             'organization_id' => $this->org->id,
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->admin->assignRole('admin');
+        $this->grantCanonicalAdmin($this->admin);
 
         $this->member = User::factory()->create([
             'organization_id' => $this->org->id,
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->member->assignRole('member');
+        $this->assignCanonicalRole($this->member, 'member');
 
         $this->otherMember = User::factory()->create([
             'organization_id' => $this->org->id,
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->otherMember->assignRole('member');
+        $this->assignCanonicalRole($this->otherMember, 'member');
 
         $this->project = Project::factory()->create([
             'organization_id' => $this->org->id,
@@ -104,7 +103,7 @@ class CommentPolicyTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $userWithoutPerm->assignRole('member');
+        $this->assignCanonicalRole($userWithoutPerm, 'member');
         // 'member' role has 'create_comments' permission per seeder, so create a user with no role
         $plainUser = User::factory()->create([
             'organization_id' => $this->org->id,
@@ -194,7 +193,7 @@ class CommentPolicyTest extends TestCase
             'is_active' => true,
         ]);
 
-        $projectManager->assignProjectRole($this->project, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($projectManager, 'project_manager', 'project', (int) $this->project->id);
 
         $comment = Comment::factory()->create([
             'commentable_type' => Project::class,
@@ -205,6 +204,25 @@ class CommentPolicyTest extends TestCase
         $this->assertTrue($this->policy->delete($projectManager, $comment));
     }
 
+    public function test_delete_project_member_without_team_admin_capability_is_denied(): void
+    {
+        $projectMember = User::factory()->create([
+            'organization_id' => $this->org->id,
+            'department_id' => $this->dept->id,
+            'is_active' => true,
+        ]);
+
+        $this->assignCanonicalRole($projectMember, 'project_member', 'project', (int) $this->project->id);
+
+        $comment = Comment::factory()->create([
+            'commentable_type' => Project::class,
+            'commentable_id' => $this->project->id,
+            'user_id' => $this->member->id,
+        ]);
+
+        $this->assertFalse($this->policy->delete($projectMember, $comment));
+    }
+
     public function test_view_returns_true_for_project_creator(): void
     {
         $creator = User::factory()->create([
@@ -213,7 +231,7 @@ class CommentPolicyTest extends TestCase
             'is_active' => true,
         ]);
         // Admin can view projects in their department.
-        $creator->assignRole('admin');
+        $this->grantCanonicalAdmin($creator);
 
         $project = Project::factory()->create([
             'organization_id' => $this->org->id,
@@ -255,7 +273,7 @@ class CommentPolicyTest extends TestCase
             'is_active' => true,
         ]);
         // plain user (no role) - cannot view project
-        $unrelated->assignRole('member');
+        $this->assignCanonicalRole($unrelated, 'member');
         // Force a different org / no project access
         $otherOrg = Organization::factory()->create();
         $unrelated->update(['organization_id' => $otherOrg->id]);

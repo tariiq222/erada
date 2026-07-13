@@ -1,0 +1,42 @@
+goal_ledger:
+  required:
+    - goal_id
+    - version
+    - original_objective
+    - status
+    - current_phase
+    - approved_contract
+    - delivery_target
+    - verification
+  statuses:
+    - RECEIVED
+    - DRAFT
+    - SCOUTING
+    - GRILLING
+    - CONTRACTED
+    - SPEC_READY
+    - PLANNED
+    - APPROVED
+    - PREPARING
+    - EXECUTING
+    - REVIEWING
+    - VERIFYING
+    - DELIVERING
+    - MERGED
+    - CLEANING
+    - COMPLETE
+    - PAUSED
+    - BLOCKED
+    - UNMET
+    - CANCELLED
+  execution_lock:
+    required:
+      - goal_id
+      - session_id
+      - agent
+      - branch
+      - worktree
+      - acquired_at
+      - heartbeat_at
+      - expires_at
+      - status

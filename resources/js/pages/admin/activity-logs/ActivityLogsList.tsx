@@ -182,10 +182,10 @@ export const ActivityLogsList: React.FC = () => {
                     </td>
                     <td className="py-3 px-2">
                       <div className="font-medium">{log.user?.name || '–'}</div>
-                      {/* Phase 4B — ActivityLogResource on the BE emits
+                      {/* Phase 4B: ActivityLogResource on the BE emits
                           actor as { id, name } only. The shape is
                           intentionally email-free (PII / cross-org
-                          boundary) — the FE MUST NOT rely on email.
+                          boundary); the FE MUST NOT rely on email.
                           The status row keeps the secondary line
                           empty rather than reading a field the BE
                           doesn't surface. */}

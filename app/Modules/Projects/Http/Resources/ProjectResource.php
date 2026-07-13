@@ -5,7 +5,6 @@ namespace App\Modules\Projects\Http\Resources;
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Http\Resources\UserResource;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Shared\Support\ElementAbilities;
 use App\Modules\Tasks\Http\Resources\TaskResource;
 use Illuminate\Http\Request;
@@ -115,8 +114,8 @@ class ProjectResource extends JsonResource
                 'code' => $this->program->code,
                 'name' => $this->program->name,
             ] : null),
-            // مدير المشروع يُشتق من دور scoped (accessor) — null إن لم يُعيَّن مدير
-            // Prefer the eager-loaded scopedRoles collection (list endpoint) to avoid
+            // مدير المشروع يُشتق من التفويض المعياري (accessor) — null إن لم يُعيَّن مدير
+            // Prefer the eager-loaded roleAssignments collection (list endpoint) to avoid
             // the per-row N+1 query that getManagerAttribute() triggers.
             'manager' => $isClusterRead ? null : $this->resolveManagerPayload(),
             'manager_id' => $isClusterRead ? null : $this->resolveManagerId(),
@@ -218,10 +217,10 @@ class ProjectResource extends JsonResource
     }
 
     /**
-     * Resolve the manager payload. Uses the eager-loaded scopedRoles relation
+     * Resolve the manager payload. Uses the eager-loaded roleAssignments relation
      * when present (list endpoint), otherwise falls back to the accessor which
      * runs a fresh query — acceptable for single-project endpoints that don't
-     * pre-load scopedRoles.
+     * pre-load roleAssignments.
      */
     private function resolveManagerPayload(): ?array
     {
@@ -242,13 +241,15 @@ class ProjectResource extends JsonResource
     }
 
     /**
-     * Shared lookup: find the first ScopedRole with role=manager on this
+     * Shared lookup: find the first canonical project-manager assignment on this
      * project and return its user model.
      */
     private function resolveManagerUser()
     {
-        if ($this->resource->relationLoaded('scopedRoles')) {
-            $managerRole = $this->scopedRoles->firstWhere('role', ScopedRole::PROJECT_MANAGER);
+        if ($this->resource->relationLoaded('roleAssignments')) {
+            $managerRole = $this->roleAssignments->first(
+                fn ($assignment) => $assignment->role?->name === 'project_manager'
+            );
 
             return $managerRole?->user;
         }

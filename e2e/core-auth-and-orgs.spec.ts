@@ -64,11 +64,12 @@ test.describe('Core — Anonymous Login Flow', () => {
     await page.fill('input[type="password"]', 'wrong-password-xyz');
     await page.click('button[type="submit"]');
 
-    // Backend returns ValidationException with Arabic message "بيانات الاعتماد غير صحيحة."
+    // Backend deliberately returns one generic Arabic message for every failed
+    // login attempt, avoiding account-enumeration details.
     // The Login page renders it inside a danger-styled alert div.
     await expect(
       page.locator('div.bg-\\[var\\(--status-danger-subtle\\)\\]'),
-    ).toContainText('بيانات الاعتماد', { timeout: 10000 });
+    ).toContainText('البريد الإلكتروني أو كلمة المرور غير صحيحة', { timeout: 10000 });
 
     // User must remain on the login page (no redirect on failure)
     await expect(page).toHaveURL(/\/login$/);
@@ -94,12 +95,17 @@ test.describe('Core — Anonymous Login Flow', () => {
 
 test.describe('Core — Admin Dashboard & Organizations', () => {
   test.beforeEach(async ({ page }) => {
-    // Login as super_admin (admin@admin.com has full org/role permissions)
-    await page.goto('/login');
-    await page.waitForSelector('input[type="email"]', { timeout: 10000 });
-    await page.fill('input[type="email"]', 'admin@admin.com');
-    await page.fill('input[type="password"]', 'password');
-    await page.click('button[type="submit"]');
+    // Bootstrap each isolated browser context through the same Sanctum API the
+    // form uses. The anonymous block above covers the rendered login contract;
+    // using the API here avoids burning the shared five-per-minute login
+    // throttle across three independent admin tests and their CI retries.
+    await page.request.get('/sanctum/csrf-cookie');
+    const response = await page.request.post('/api/login', {
+      data: { email: 'admin@admin.com', password: 'password' },
+      headers: { Accept: 'application/json', 'X-Skip-Csrf': '1' },
+    });
+    expect(response.ok(), `admin API login failed (${response.status()}): ${await response.text()}`).toBeTruthy();
+    await page.goto('/dashboard');
     await page.waitForURL('/dashboard', { timeout: 10000 });
   });
 
@@ -117,11 +123,11 @@ test.describe('Core — Admin Dashboard & Organizations', () => {
   test('admin can list organizations', async ({ page }) => {
     await page.goto('/admin/organizations');
 
-    // OrganizationsList renders the Arabic title "إدارة المؤسسات" via t('admin.organizations.title')
-    await expect(page.locator('h1:has-text("إدارة المؤسسات")')).toBeVisible({ timeout: 15000 });
+    // OrganizationsList renders the Arabic title "المؤسسات" via t('admin.organizations.title')
+    await expect(page.locator('h1:has-text("المؤسسات")')).toBeVisible({ timeout: 15000 });
 
     // The search input is part of the list card
-    await expect(page.locator('input[placeholder*="البحث"]')).toBeVisible();
+    await expect(page.locator('input[placeholder*="ابحث"]')).toBeVisible();
   });
 
   test('organization form surfaces Arabic permission error on 403', async ({ page }) => {
@@ -141,11 +147,11 @@ test.describe('Core — Admin Dashboard & Organizations', () => {
     });
 
     await page.goto('/admin/organizations/new');
-    await page.waitForSelector('text=إضافة مؤسسة', { timeout: 15000 });
+    await page.waitForSelector('text=إضافة مؤسسة جديدة', { timeout: 15000 });
 
     // Fill the required fields (name + code are `required` on the form)
-    await page.locator('label:has-text("الاسم") + input').fill('مؤسسة اختبار E2E');
-    await page.locator('label:has-text("الرمز") + input').fill('E2E-ORG-001');
+    await page.locator('label:has-text("الاسم")').locator('..').locator('input').fill('مؤسسة اختبار E2E');
+    await page.locator('label:has-text("الكود")').locator('..').locator('input').fill('E2E-ORG-001');
 
     // Submit — the mocked POST will return 403 and the form renders the message
     await page.click('button:has-text("حفظ")');

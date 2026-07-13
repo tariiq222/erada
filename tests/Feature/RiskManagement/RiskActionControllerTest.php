@@ -38,11 +38,8 @@ class RiskActionControllerTest extends TestCase
             'organization_id' => $this->organization->id,
             'department_id' => $this->department->id,
         ]);
-        // Engine-only path (Wave 3 task 8): the 'admin' Spatie role maps to
-        // a ScopedRoleDefinition with is_admin_role=true (created by the
-        // backfill migration), which grants every capability via the engine.
-        // The legacy Spatie delete_risks fallback has been removed.
-        $this->riskEditor->assignRole('admin');
+        // Canonical admin role grants the organization-scoped engine capabilities.
+        $this->grantCanonicalAdmin($this->riskEditor);
 
         $this->actionOwner = User::factory()->create([
             'organization_id' => $this->organization->id,

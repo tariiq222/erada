@@ -45,7 +45,7 @@ class StrategyPermissionEnforcementTest extends TestCase
         ]);
 
         if ($role) {
-            $user->assignRole($role);
+            $this->assignCanonicalRole($user, $role);
         }
 
         return $user;

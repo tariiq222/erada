@@ -29,7 +29,7 @@ use Tests\TestCase;
  *      proves CFA-07 did NOT silently widen view().
  *
  * Uses GrantsEngineCapability::grantEngineCapability() to grant engine
- * capabilities via ScopedRole on user.organization_id (not Spatie givePermissionTo).
+ * capabilities via canonical assignments on user.organization_id.
  */
 class ClusterTreeUserPolicyDirectoryTest extends TestCase
 {
@@ -185,7 +185,7 @@ class ClusterTreeUserPolicyDirectoryTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $super->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($super);
 
         $target = User::factory()->create([
             'organization_id' => $hospital->id,

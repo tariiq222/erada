@@ -133,7 +133,7 @@ class SurveyOrgGuardTest extends TestCase
     public function test_same_organization_super_admin_always_allowed(): void
     {
         $superAdmin = User::factory()->create(['organization_id' => null]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $org = Organization::factory()->create();
         $this->assertTrue($this->guard->sameOrganization($superAdmin, $org->id));
@@ -235,7 +235,7 @@ class SurveyOrgGuardTest extends TestCase
     public function test_abort_unless_same_organization_passes_for_super_admin(): void
     {
         $superAdmin = User::factory()->create(['organization_id' => null]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $this->guard->abortUnlessSameOrganization($superAdmin, 99999);
         $this->assertTrue(true);

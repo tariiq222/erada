@@ -23,7 +23,7 @@ class MeetingScheduledNotificationTest extends TestCase
 
         $org = Organization::factory()->create();
         $organizer = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
-        $organizer->assignRole('admin');
+        $this->assignCanonicalRole($organizer, 'admin');
         $attendee1 = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
         $attendee2 = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
 

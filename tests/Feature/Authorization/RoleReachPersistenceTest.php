@@ -2,8 +2,7 @@
 
 namespace Tests\Feature\Authorization;
 
-use App\Modules\Core\Models\ScopedRoleDefinition;
-use App\Modules\Core\Models\ScopeType;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -12,7 +11,7 @@ use Tests\TestCase;
 
 /**
  * Phase 6 (ADR-UNIFIED-ROLE-ACCESS): the role editor persists the per-module reach
- * cap onto the scoped_role_definition, and returns it back for editing.
+ * cap onto canonical authorization role permissions and returns it for editing.
  */
 class RoleReachPersistenceTest extends TestCase
 {
@@ -29,7 +28,7 @@ class RoleReachPersistenceTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
     }
 
     public function test_store_persists_reach_map_on_definition(): void
@@ -39,20 +38,20 @@ class RoleReachPersistenceTest extends TestCase
                 'name' => 'dept_lead_'.time(),
                 'scope_type' => 'organization',
                 'label_ar' => 'قائد إدارة',
-                'permissions_capabilities' => ['projects.view', 'users.view'],
+                'capabilities' => ['projects.view', 'users.view'],
                 'reach' => ['projects' => 'department', 'users' => 'own'],
             ])->assertCreated();
 
-        $orgScopeId = ScopeType::findByKey('organization')->id;
-        $def = ScopedRoleDefinition::where('scope_type_id', $orgScopeId)
+        $role = AuthorizationRole::query()->with('permissions')
             ->where('label_ar', 'قائد إدارة')
-            ->first();
+            ->firstOrFail();
 
-        $this->assertNotNull($def);
-        $this->assertSame('department', $def->reachForModule('projects'));
-        $this->assertSame('own', $def->reachForModule('users'));
-        // A module without a reach entry defaults to 'all'.
-        $this->assertSame('all', $def->reachForModule('tasks'));
+        $reach = $role->permissions->pluck('reach')->filter()
+            ->reduce(fn (array $carry, array $item): array => array_replace($carry, $item), []);
+
+        $this->assertSame('department', $reach['projects']);
+        $this->assertSame('own', $reach['users']);
+        $this->assertArrayNotHasKey('tasks', $reach);
     }
 
     public function test_invalid_reach_value_is_rejected(): void
@@ -61,7 +60,7 @@ class RoleReachPersistenceTest extends TestCase
             ->postJson('/api/roles', [
                 'name' => 'bad_reach_'.time(),
                 'scope_type' => 'organization',
-                'permissions_capabilities' => ['projects.view'],
+                'capabilities' => ['projects.view'],
                 'reach' => ['projects' => 'galaxy'],
             ])->assertStatus(422);
     }

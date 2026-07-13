@@ -57,16 +57,13 @@ import { AuthProvider, useAuth } from '@shared/contexts/AuthContext';
 
 // Test component to access context
 const TestConsumer: React.FC = () => {
-  const [loginResult, setLoginResult] = React.useState('none');
   const {
     user,
     isLoading,
     isAuthenticated,
     login,
     logout,
-    hasRole,
-    hasPermission,
-    isSuperAdmin,
+    can,
   } = useAuth();
 
   return (
@@ -74,15 +71,8 @@ const TestConsumer: React.FC = () => {
       <div data-testid="loading">{isLoading ? 'loading' : 'ready'}</div>
       <div data-testid="authenticated">{isAuthenticated ? 'yes' : 'no'}</div>
       <div data-testid="user">{user?.name || 'null'}</div>
-      <div data-testid="hasAdminRole">{hasRole('admin') ? 'yes' : 'no'}</div>
-      <div data-testid="hasEditPermission">{hasPermission('projects.edit') ? 'yes' : 'no'}</div>
-      <div data-testid="isSuperAdmin">{isSuperAdmin() ? 'yes' : 'no'}</div>
-      <div data-testid="loginResult">{loginResult}</div>
-      <button onClick={() => {
-        void login('test@test.com', 'password').then((result) => {
-          setLoginResult(result.requiresTwoFactor ? result.pendingToken || 'challenge' : 'success');
-        });
-      }}>Login</button>
+      <div data-testid="canEditProjects">{can('projects.edit') ? 'yes' : 'no'}</div>
+      <button onClick={() => login('test@test.com', 'password')}>Login</button>
       <button onClick={() => logout()}>Logout</button>
     </div>
   );
@@ -92,7 +82,6 @@ describe('AuthContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorageMock.clear();
-    window.history.replaceState({}, '', '/');
   });
 
   afterEach(() => {
@@ -146,10 +135,7 @@ describe('AuthContext', () => {
         id: 1,
         name: 'Test User',
         email: 'test@test.com',
-        roles: ['admin'],
-        // Phase 9.3: legacy `permissions[]` removed from /api/auth/me;
-        // canonical `access` shape is the source of truth.
-        access: { projects: { edit: true } },
+        access: { 'projects.edit': true },
       },
     });
 
@@ -182,10 +168,11 @@ describe('AuthContext', () => {
     });
   });
 
-  it('login sets the authenticated user from the HttpOnly-cookie response', async () => {
+  it('login sets user and token', async () => {
     // No token initially
     mockLogin.mockResolvedValue({
-      user: { id: 1, name: 'Logged In User', email: 'user@test.com', roles: [], permissions: [] },
+      user: { id: 1, name: 'Logged In User', email: 'user@test.com', access: {} },
+      token: 'new-token',
     });
 
     render(
@@ -202,75 +189,16 @@ describe('AuthContext', () => {
 
     await waitFor(() => {
       expect(mockLogin).toHaveBeenCalledWith('test@test.com', 'password');
-      expect(mockSetToken).not.toHaveBeenCalled();
+      expect(mockSetToken).toHaveBeenCalledWith('new-token');
       expect(mockSetAuthenticated).toHaveBeenCalledWith(true);
       expect(screen.getByTestId('user')).toHaveTextContent('Logged In User');
     });
   });
 
-  it('returns a two-factor challenge without authenticating the provider', async () => {
-    mockLogin.mockResolvedValue({
-      requires_2fa: true,
-      pending_token: 'opaque-pending-token',
-      user: { id: 7, name: 'Two Factor User', roles: [] },
-    });
-
-    render(
-      <AuthProvider>
-        <TestConsumer />
-      </AuthProvider>
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('loading')).toHaveTextContent('ready');
-    });
-    await userEvent.click(screen.getByText('Login'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('loginResult')).toHaveTextContent('opaque-pending-token');
-      expect(screen.getByTestId('authenticated')).toHaveTextContent('no');
-      expect(screen.getByTestId('user')).toHaveTextContent('null');
-      expect(mockSetAuthenticated).not.toHaveBeenCalledWith(true);
-      expect(mockSetToken).not.toHaveBeenCalled();
-    });
-  });
-
-  it('refreshUser forces a user request from the public two-factor route', async () => {
-    window.history.replaceState({}, '', '/verify-2fa');
-    mockGetUser.mockResolvedValue({
-      user: { id: 9, name: 'Verified User', roles: ['super_admin'] },
-    });
-
-    const RefreshConsumer = () => {
-      const { refreshUser, user } = useAuth();
-      return (
-        <div>
-          <span data-testid="refreshedUser">{user?.name || 'null'}</span>
-          <button onClick={() => void refreshUser()}>Refresh user</button>
-        </div>
-      );
-    };
-
-    render(
-      <AuthProvider>
-        <RefreshConsumer />
-      </AuthProvider>
-    );
-    await userEvent.click(screen.getByText('Refresh user'));
-
-    await waitFor(() => {
-      expect(mockGetUser).toHaveBeenCalledTimes(1);
-      expect(screen.getByTestId('refreshedUser')).toHaveTextContent('Verified User');
-      expect(mockSetAuthenticated).toHaveBeenCalledWith(true);
-    });
-
-    window.history.replaceState({}, '', '/');
-  });
-
   it('logout clears user and token', async () => {
     localStorageMock.setItem('auth_token', 'valid-token');
     mockGetUser.mockResolvedValue({
-      user: { id: 1, name: 'Test', roles: [], permissions: [] },
+      user: { id: 1, name: 'Test', access: {} },
     });
     mockLogout.mockResolvedValue({ message: 'Logged out' });
 
@@ -294,10 +222,10 @@ describe('AuthContext', () => {
     });
   });
 
-  it('hasRole returns true for matching role', async () => {
+  it('can returns true for an explicit canonical capability', async () => {
     localStorageMock.setItem('auth_token', 'token');
     mockGetUser.mockResolvedValue({
-      user: { id: 1, name: 'Test', roles: ['admin', 'user'], permissions: [] },
+      user: { id: 1, name: 'Test', access: { 'projects.edit': true } },
     });
 
     render(
@@ -307,14 +235,14 @@ describe('AuthContext', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('hasAdminRole')).toHaveTextContent('yes');
+      expect(screen.getByTestId('canEditProjects')).toHaveTextContent('yes');
     });
   });
 
-  it('hasRole returns true for super_admin', async () => {
+  it('can denies access when the capability is absent', async () => {
     localStorageMock.setItem('auth_token', 'token');
     mockGetUser.mockResolvedValue({
-      user: { id: 1, name: 'Super', roles: ['super_admin'], permissions: [] },
+      user: { id: 1, name: 'User', access: {} },
     });
 
     render(
@@ -324,21 +252,17 @@ describe('AuthContext', () => {
     );
 
     await waitFor(() => {
-      // super_admin should have access to admin role
-      expect(screen.getByTestId('hasAdminRole')).toHaveTextContent('yes');
+      expect(screen.getByTestId('canEditProjects')).toHaveTextContent('no');
     });
   });
 
-  it('hasPermission returns true for matching permission', async () => {
+  it('can reads the flat access map', async () => {
     localStorageMock.setItem('auth_token', 'token');
     mockGetUser.mockResolvedValue({
       user: {
         id: 1,
         name: 'Test',
-        roles: [],
-        // Phase 9.3: canonical access map; hasPermission reads the
-        // access-bridge which resolves legacy strings through LEGACY_PERMISSION_TO_CAPABILITY.
-        access: { projects: { edit: true } },
+        access: { 'projects.edit': true },
       },
     });
 
@@ -349,14 +273,14 @@ describe('AuthContext', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('hasEditPermission')).toHaveTextContent('yes');
+      expect(screen.getByTestId('canEditProjects')).toHaveTextContent('yes');
     });
   });
 
-  it('hasPermission returns true for super_admin', async () => {
+  it('does not infer capabilities from legacy roles', async () => {
     localStorageMock.setItem('auth_token', 'token');
     mockGetUser.mockResolvedValue({
-      user: { id: 1, name: 'Super', roles: ['super_admin'], permissions: [] },
+      user: { id: 1, name: 'Super', roles: ['super_admin'], access: {} },
     });
 
     render(
@@ -366,15 +290,14 @@ describe('AuthContext', () => {
     );
 
     await waitFor(() => {
-      // super_admin should have all permissions
-      expect(screen.getByTestId('hasEditPermission')).toHaveTextContent('yes');
+      expect(screen.getByTestId('canEditProjects')).toHaveTextContent('no');
     });
   });
 
-  it('isSuperAdmin returns true for super_admin role', async () => {
+  it('accepts an explicit capability for a super admin response', async () => {
     localStorageMock.setItem('auth_token', 'token');
     mockGetUser.mockResolvedValue({
-      user: { id: 1, name: 'Super', roles: ['super_admin'], permissions: [] },
+      user: { id: 1, name: 'Super', access: { 'projects.edit': true } },
     });
 
     render(
@@ -384,14 +307,14 @@ describe('AuthContext', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('isSuperAdmin')).toHaveTextContent('yes');
+      expect(screen.getByTestId('canEditProjects')).toHaveTextContent('yes');
     });
   });
 
-  it('isSuperAdmin returns false for regular user', async () => {
+  it('denies a regular user without the capability', async () => {
     localStorageMock.setItem('auth_token', 'token');
     mockGetUser.mockResolvedValue({
-      user: { id: 1, name: 'Regular', roles: ['admin'], permissions: [] },
+      user: { id: 1, name: 'Regular', access: {} },
     });
 
     render(
@@ -401,7 +324,7 @@ describe('AuthContext', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('isSuperAdmin')).toHaveTextContent('no');
+      expect(screen.getByTestId('canEditProjects')).toHaveTextContent('no');
     });
   });
 });

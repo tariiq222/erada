@@ -3,6 +3,7 @@
 namespace App\Modules\Meetings\Http\Requests\Concerns;
 
 use App\Modules\Core\Authorization\Contracts\ScopeAware;
+use App\Modules\Meetings\Models\Meeting;
 use App\Modules\Meetings\Models\Recommendation;
 use App\Modules\Meetings\Support\DecidableType;
 use Illuminate\Validation\Validator;
@@ -29,6 +30,14 @@ trait ValidatesRecommendationTarget
 
     private function recommendationOrganizationId(): ?int
     {
+        $meetingId = $this->input('meeting_id');
+        if (is_numeric($meetingId)) {
+            $meeting = Meeting::query()->withoutGlobalScopes()->find((int) $meetingId);
+            if ($meeting instanceof Meeting && $meeting->organization_id !== null) {
+                return (int) $meeting->organization_id;
+            }
+        }
+
         $recommendation = $this->route('recommendation');
         if ($recommendation instanceof Recommendation && $recommendation->organization_id !== null) {
             return (int) $recommendation->organization_id;

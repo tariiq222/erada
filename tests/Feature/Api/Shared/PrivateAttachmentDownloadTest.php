@@ -143,7 +143,7 @@ class PrivateAttachmentDownloadTest extends TestCase
         $organization = Organization::factory()->create();
         $department = Department::factory()->create(['organization_id' => $organization->id]);
         $user = $this->makeUserInOrganization($organization, $department->id);
-        $user->assignRole('admin');
+        $this->assignCanonicalRole($user, 'admin');
 
         $project = Project::factory()->create([
             'organization_id' => $organization->id,
@@ -163,7 +163,7 @@ class PrivateAttachmentDownloadTest extends TestCase
             'department_id' => $departmentId,
             'is_active' => true,
         ]);
-        $user->assignRole('member');
+        $this->assignCanonicalRole($user, 'member');
 
         return $user;
     }

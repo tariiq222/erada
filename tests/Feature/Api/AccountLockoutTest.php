@@ -45,7 +45,7 @@ class AccountLockoutTest extends TestCase
             'email' => 'lockout@example.com',
             'password' => Hash::make($this->password),
         ]);
-        $this->user->assignRole('member');
+        $this->assignCanonicalRole($this->user, 'member');
     }
 
     // ========== قفل الحساب عبر Login API ==========
@@ -270,7 +270,7 @@ class AccountLockoutTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         // Unlock via API: must succeed (200) and log the activity
         $unlockResponse = $this->actingAs($superAdmin, 'sanctum')

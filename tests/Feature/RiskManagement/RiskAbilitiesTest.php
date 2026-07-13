@@ -6,12 +6,11 @@ use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
-use App\Modules\HR\Models\DepartmentCapacityRole;
-use App\Modules\HR\Services\ScopedDepartmentRoleSyncService;
 use App\Modules\RiskManagement\Models\Risk;
 use App\Modules\Shared\Support\ElementAbilities;
 use Database\Seeders\ScopedDepartmentRolesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
 /**
@@ -20,7 +19,7 @@ use Tests\TestCase;
  */
 class RiskAbilitiesTest extends TestCase
 {
-    use RefreshDatabase;
+    use GrantsEngineCapability, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -33,21 +32,14 @@ class RiskAbilitiesTest extends TestCase
     {
         $org = Organization::factory()->create();
         $dept = Department::factory()->create(['organization_id' => $org->id]);
-        DepartmentCapacityRole::create([
-            'department_id' => $dept->id,
-            'capacity' => 'manager',
-            'role_key' => 'dept_manager',
-        ]);
-
-        $mgr = User::factory()->create(['organization_id' => $org->id]);
-        // Engine-only path (Wave 3 task 8): ScopedDepartmentRoleSyncService
-        // assigns the dept_manager scoped role which grants Capability::RISKS_VIEW
-        // (+ RISKS_CREATE / RISKS_EDIT via permissions array, and DELETE/REASSESS/
-        // CHANGE_STATUS via the can_delete/can_view_all flag mapping on the
-        // ScopedRoleDefinition). The legacy Spatie view_risks fallback has been
-        // removed; the engine is the only authz source.
-        $dept->update(['manager_id' => $mgr->id]);
-        app(ScopedDepartmentRoleSyncService::class)->syncUser($mgr->fresh());
+        $mgr = User::factory()->create(['organization_id' => $org->id, 'department_id' => $dept->id]);
+        $this->grantEngineCapability($mgr, [
+            Capability::RISKS_VIEW,
+            Capability::RISKS_EDIT,
+            Capability::RISKS_DELETE,
+            Capability::RISKS_REASSESS,
+            Capability::RISKS_CHANGE_STATUS,
+        ], 'department', $dept->id, 'risk_test_manager');
 
         $risk = Risk::factory()->create([
             'organization_id' => $org->id,

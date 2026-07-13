@@ -31,7 +31,7 @@ class DepartmentControllerTest extends TestCase
             'organization_id' => $organization->id,
             'is_active' => true,
         ]);
-        $this->admin->assignRole('admin');
+        $this->assignCanonicalRole($this->admin, 'admin');
     }
 
     /**
@@ -156,7 +156,7 @@ class DepartmentControllerTest extends TestCase
             'organization_id' => $otherOrg->id,
             'is_active' => true,
         ]);
-        $foreignAdmin->assignRole('admin');
+        $this->assignCanonicalRole($foreignAdmin, 'admin');
 
         $other = Department::factory()->create([
             'level' => 4,
@@ -296,7 +296,7 @@ class DepartmentControllerTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $response = $this->actingAs($superAdmin, 'sanctum')
             ->deleteJson("/api/hr/departments/{$department->id}");

@@ -32,7 +32,7 @@ class MeetingControllerTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
         $this->project = Project::factory()->create(['department_id' => $this->department->id]);
     }
 
@@ -253,7 +253,7 @@ class MeetingControllerTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $orgAActor->assignRole('admin');
+        $this->assignCanonicalRole($orgAActor, 'admin');
         $this->grantEngineCapability($orgAActor, Capability::MEETINGS_VIEW, 'organization', $orgA);
 
         $response = $this->actingAs($orgAActor, 'sanctum')
@@ -309,7 +309,7 @@ class MeetingControllerTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $orgAActor->assignRole('admin');
+        $this->assignCanonicalRole($orgAActor, 'admin');
         $this->grantEngineCapability($orgAActor, Capability::MEETINGS_VIEW, 'organization', $this->department->organization_id);
 
         $status = $this->actingAs($orgAActor, 'sanctum')

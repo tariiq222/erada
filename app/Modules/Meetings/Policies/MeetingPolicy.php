@@ -17,7 +17,7 @@ use App\Modules\Meetings\Support\MeetingOrgGuard;
  *   - meeting من منظمة أخرى ⇒ deny.
  *   - meeting بلا organization_id ⇒ deny (orphan).
  *
- * لا تعتمد على Spatie direct. الـ Capability constants تمر عبر AccessDecision
+ * تمر ثوابت Capability عبر AccessDecision
  * ليتحقّق المحرك من الأدوار السياقية.
  */
 class MeetingPolicy

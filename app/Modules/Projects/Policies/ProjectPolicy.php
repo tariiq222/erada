@@ -208,7 +208,7 @@ class ProjectPolicy
      *
      * Single source of truth for the project-team management capability —
      * unified across the Projects `/projects/{id}/members/*` route family
-     * and the Core `ScopedRoleController` `/projects/{id}/roles/*` alias.
+     * and the Core `AuthorizationRoleAssignmentController` `/projects/{id}/roles/*` alias.
      * Replaces the prior `PROJECTS_MANAGE_MEMBERS` capability (deleted
      * 2026-07-06) which was registered and seeded but never enforced.
      *

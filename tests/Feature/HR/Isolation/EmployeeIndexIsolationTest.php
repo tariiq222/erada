@@ -59,7 +59,7 @@ class EmployeeIndexIsolationTest extends TestCase
             'organization_id' => $orgA->id,
             'department_id' => $deptA->id,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         User::factory()->count(2)->create(['organization_id' => $orgA->id]);
         User::factory()->count(3)->create(['organization_id' => $orgB->id]);

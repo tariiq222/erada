@@ -3,7 +3,6 @@
 namespace Tests\Unit\Scopes;
 
 use App\Modules\Core\Authorization\Capability;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -45,7 +44,7 @@ class UserProjectScopeTest extends TestCase
     public function test_super_admin_sees_all_projects(): void
     {
         $superAdmin = User::factory()->create(['department_id' => $this->department1->id]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         Project::factory()->count(3)->create(['department_id' => $this->department1->id]);
         Project::factory()->count(2)->create(['department_id' => $this->department2->id]);
@@ -97,7 +96,7 @@ class UserProjectScopeTest extends TestCase
         ]);
         // مشروع عضو فيه (دور سياقي member)
         $memberProject = Project::factory()->create(['department_id' => $this->department2->id]);
-        $user->assignProjectRole($memberProject, ScopedRole::PROJECT_MEMBER);
+        $this->assignCanonicalRole($user, 'project_member', 'project', (int) $memberProject->id);
 
         // مشاريع لا علاقة له بها
         Project::factory()->count(3)->create(['department_id' => $this->department1->id]);

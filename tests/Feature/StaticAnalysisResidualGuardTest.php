@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
@@ -14,11 +15,12 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SplFileInfo;
+use Tests\Support\GrantsEngineCapability;
 use Tests\TestCase;
 
 class StaticAnalysisResidualGuardTest extends TestCase
 {
-    use RefreshDatabase;
+    use GrantsEngineCapability, RefreshDatabase;
 
     /**
      * Explicit guard allowlist:
@@ -202,7 +204,14 @@ class StaticAnalysisResidualGuardTest extends TestCase
             'department_id' => $department->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantEngineCapability(
+            $user,
+            Capability::OVR_VIEW,
+            'all',
+            null,
+            'super_admin',
+            ['is_admin_role' => true, 'is_system' => true],
+        );
 
         $report = IncidentReport::create([
             'organization_id' => $organization->id,

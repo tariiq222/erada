@@ -4,6 +4,9 @@ namespace App\Modules\Projects\Scopes;
 
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Models\AuthorizationResource;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
+use App\Modules\Core\Authorization\Support\CapabilityToAuthorizationRolePermission;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\Projects\Services\ProjectAuthorizationService;
@@ -73,11 +76,11 @@ class UserProjectScope
         // ponytail: السلّم المسطّح القديم يترجم إلى منح المحرّك — own=project scopes،
         // department=dept scopes، all=org-level grant. منح المحرّك أوسع من السلّم
         // القديم لأن grant على القسم يشمل الشجرة الهابطة؛ السلوك الجديد متعمَّد.
-        // grantsAtOrganization يقرأ Spatie roles فقط؛ grantingScopes['organization']
-        // يقرأ ScopedRoles — كلاهما يفعّل hasFlatAll (يدعم grant عبر assignScopedRole
-        // في الاختبارات ودور admin في الإنتاج).
-        $engineGrantsOrg = AccessDecision::grantsAtOrganization($user, Capability::PROJECTS_VIEW);
-        $engineScopes = AccessDecision::grantingScopes($user, Capability::PROJECTS_VIEW);
+        // Canonical organization and all-scope assignments establish the
+        // engine-wide visibility ceiling.
+        $engineScopes = $this->canonicalGrantingScopes($user, Capability::PROJECTS_VIEW);
+        $engineGrantsOrg = ! empty($engineScopes['organization'] ?? [])
+            || ! empty($engineScopes['all'] ?? []);
         $hasFlatAll = $engineGrantsOrg || ! empty($engineScopes['organization'] ?? []);
         $hasFlatDept = ! empty($engineScopes['department'] ?? []);
         $hasFlatOwn = ! empty($engineScopes['project'] ?? []);
@@ -138,9 +141,86 @@ class UserProjectScope
     {
         $q->where('created_by', $user->id)
             ->orWhereHas('members', fn (Builder $m) => $m->where('user_id', $user->id))
-            ->orWhereHas('scopedRoles', fn (Builder $r) => $r->where('user_id', $user->id))
             ->orWhereHas('stakeholders', fn (Builder $s) => $s->where('user_id', $user->id))
             ->orWhereHas('tasks', fn (Builder $t) => $t->where('assigned_to', $user->id));
+    }
+
+    /** @return array<string, list<int>> */
+    private function canonicalGrantingScopes(User $user, string $capability): array
+    {
+        $mapping = CapabilityToAuthorizationRolePermission::map($capability);
+        if ($mapping === null) {
+            return [];
+        }
+
+        $resourceId = AuthorizationResource::query()->where('key', $mapping['resource'])->value('id');
+        if ($resourceId === null) {
+            return [];
+        }
+
+        $assignments = AuthorizationRoleAssignment::query()
+            ->join('authorization_roles', 'authorization_roles.id', '=', 'authorization_role_assignments.authorization_role_id')
+            ->join('authorization_role_permissions', function ($join) use ($resourceId, $mapping) {
+                $join->on('authorization_role_permissions.authorization_role_id', '=', 'authorization_role_assignments.authorization_role_id')
+                    ->where('authorization_role_permissions.authorization_resource_id', '=', $resourceId)
+                    ->where('authorization_role_permissions.action', '=', $mapping['action']);
+            })
+            ->where('authorization_role_assignments.user_id', $user->id)
+            ->where('authorization_roles.is_active', true)
+            ->where(function ($query) {
+                $query->whereNull('authorization_role_assignments.expires_at')
+                    ->orWhere('authorization_role_assignments.expires_at', '>', now());
+            })
+            // CSD-CA23078-PROJECTS-001 / CSD-CA23078-CORE-002 — stale-org filter.
+            // Mirrors AccessDecision::canonicalListAssignmentMatchesUserOrganization:
+            // drop rows whose organization_id is non-null and NOT equal to the
+            // user's current organization_id. Without this filter, a user moved
+            // from Org A to Org B keeps seeing A-org projects via the flat-all
+            // ladder widened by a stale A-scoped assignment.
+            //
+            // Exception (matches the canonical rule's scope_type='all' branch):
+            // when the actor (the user being evaluated) is a canonical super_admin,
+            // scope_type='all' rows pass even if their organization_id is stale.
+            // super_admin already short-circuits in apply() so the exception
+            // rarely fires in practice, but mirroring the engine keeps the read
+            // path and the canonical grant evaluation consistent.
+            ->where(function ($query) use ($user) {
+                $query->whereNull('authorization_role_assignments.organization_id')
+                    ->orWhere('authorization_role_assignments.organization_id', $user->organization_id);
+                if ($user->isSuperAdmin()) {
+                    $query->orWhere('authorization_role_assignments.scope_type', 'all');
+                }
+            })
+            ->select([
+                'authorization_role_assignments.scope_type',
+                'authorization_role_assignments.scope_id',
+                'authorization_role_assignments.organization_id',
+                'authorization_role_permissions.reach',
+            ])
+            ->get();
+
+        $out = [];
+        foreach ($assignments as $assignment) {
+            $reachMap = is_array($assignment->reach)
+                ? $assignment->reach
+                : (json_decode((string) $assignment->reach, true) ?: []);
+            $reach = $reachMap['projects'] ?? 'all';
+            if ($reach === 'own') {
+                continue;
+            }
+
+            $scopeType = (string) $assignment->scope_type;
+            $scopeId = $assignment->scope_id === null ? null : (int) $assignment->scope_id;
+            if ($scopeType === 'all') {
+                $out['all'][] = 0;
+            } elseif ($scopeType === 'organization' && $reach === 'department' && $user->department_id !== null) {
+                $out['department'][] = (int) $user->department_id;
+            } elseif ($scopeId !== null) {
+                $out[$scopeType][] = $scopeId;
+            }
+        }
+
+        return array_map(fn (array $ids) => array_values(array_unique($ids)), $out);
     }
 
     /**

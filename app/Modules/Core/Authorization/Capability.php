@@ -387,9 +387,9 @@ final class Capability
 
     // Core — administration of the platform's top-level org/role/audit layer.
     // Used by OrganizationController, ScopeTypeController, RoleController, and
-    // ScopedRoleController — replaces the legacy Spatie `view_organizations` /
+    // AuthorizationRoleAssignmentController — replaces the legacy Spatie `view_organizations` /
     // `assign_roles` / `view_audit_logs` flat-string paths that fell through
-    // to Spatie's User::hasPermissionTo() (engine-cutover consistency fix,
+    // to the canonical assignment engine (cutover consistency fix,
     // 2026-06-29 security re-audit).
     const CORE_VIEW_ORGANIZATIONS = 'core.view_organizations';
 
@@ -404,8 +404,8 @@ final class Capability
      *      (no widening to users.view / projects.view / etc.),
      *   2. the user's organization is an ancestor of the target's organization
      *      via the `parent_id` walk (depth cap 32, fail-closed on cycle),
-     *   3. the user holds a ScopedRole on `user.organization_id` whose
-     *      `ScopedRoleDefinition.permissions[]` contains this capability
+     *   3. the user holds an active canonical organization assignment whose
+     *      role permissions contain this capability
      *      (no is_admin_role shortcut, no inherit_to_children shortcut),
      *   4. the target is NOT a `SensitivelyScoped` record with `isSensitive() = true`
      *      (no bypassing the OVR confidential floor),

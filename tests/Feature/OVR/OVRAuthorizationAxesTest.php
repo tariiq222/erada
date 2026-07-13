@@ -52,7 +52,7 @@ class OVRAuthorizationAxesTest extends TestCase
         ]);
     }
 
-    private function makeUser(Organization $organization, Department $department, ?string $role = null, array $permissions = []): User
+    private function makeUser(Organization $organization, Department $department, ?string $role = null): User
     {
         $user = User::factory()->create([
             'organization_id' => $organization->id,
@@ -61,11 +61,9 @@ class OVRAuthorizationAxesTest extends TestCase
         ]);
 
         if ($role) {
-            $user->assignRole($role);
-        }
-
-        if ($permissions !== []) {
-            $user->givePermissionTo($permissions);
+            $role === 'super_admin'
+                ? $this->grantCanonicalSuperAdmin($user)
+                : $this->assignCanonicalRole($user, $role);
         }
 
         return $user;
@@ -108,8 +106,7 @@ class OVRAuthorizationAxesTest extends TestCase
     {
         $this->markTestIncomplete(
             'Engine-only AuthZ: department-level OVR change_status isolation cannot be tested '.
-            'with the current engine fixture — scoped_role_definitions at department scope '.
-            'are not seeded, and the engine ignores flat givePermissionTo() grants. '.
+            'with the current fixture because no department-scoped change-status grant is configured. '.
             'Cross-org isolation is covered in test_update_status_rejects_cross_organization_assignee.'
         );
     }

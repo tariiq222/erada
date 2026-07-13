@@ -8,35 +8,32 @@ use App\Modules\Core\Contracts\CapabilityProvider;
 use App\Modules\Core\Models\User;
 
 /**
- * HR module's contribution to auth/me.capabilities.
+ * HR module's legacy/advisory CapabilityProvider.
  *
- * Mirrors ProjectCapabilityProvider / RiskCapabilityProvider: the unified
- * AccessDecision engine exposes record-scoped HR capabilities
- * (Capability::HR_VIEW / Capability::HR_MANAGE), and after Phase 9.3
- * (2026-07-05) the SPA gates routes, menus, and buttons on the canonical
- * dotted capabilities (`hr.view`, `hr.manage`).
+ * Verified residual (2026-07-12): this provider is NOT the /api/user
+ * authority. The canonical /api/user projection derives capabilities via
+ * `User::canonicalCapabilityNames()`, which returns canonical dotted
+ * capabilities (`hr.view`, `hr.manage`) for HR grants. AuthController no
+ * longer iterates the `engined_capability_providers` tag.
  *
- * The HR module has no dedicated authorization service (no
- * HRAuthorizationService like Risks/Projects do) because HR decisions are
- * flat role-grant checks, not department/governing-dept compositions.
- * The engine resolves Capability::HR_VIEW / Capability::HR_MANAGE directly
- * via AccessDecision::can(), which already short-circuits for super_admin.
+ * The provider remains in place as a non-canonical helper. Each flag is
+ * still resolved through AccessDecision, so changes there still flow —
+ * but consumers must treat the output as advisory, not as the
+ * wire-format source of truth. The keys it returns (`view_hr`,
+ * `manage_hr`) are intentionally flat strings to preserve historical
+ * consumers; the canonical dotted names belong to
+ * `User::canonicalCapabilityNames()`.
  *
- * Wire keys (canonical after Phase 9.3):
- *   - hr.view    <-> Capability::HR_VIEW
- *   - hr.manage  <-> Capability::HR_MANAGE
+ * Decision source for each flag:
+ *   - view_hr   <-> AccessDecision::can(user, Capability::HR_VIEW)
+ *   - manage_hr <-> AccessDecision::can(user, Capability::HR_MANAGE)
  */
 class HRCapabilityProvider implements CapabilityProvider
 {
     public function userCapabilities(User $user): array
     {
-        // Wire-format flags for the SPA: the unified engine exposes the
-        // canonical dotted capabilities (hr.view, hr.manage) but the
-        // frontend route guards, menus, and buttons still match the flat
-        // legacy strings (`view_hr`, `manage_hr`). Map each canonical
-        // capability to its legacy key here so auth/me.permissions still
-        // lights up the legacy gate before the SPA migrates to the
-        // dotted keys. The Capability:: constants are not the wire keys.
+        // Each flag is computed via AccessDecision; the provider is
+        // advisory only — see class docblock.
         return [
             'view_hr' => AccessDecision::can($user, Capability::HR_VIEW),
             'manage_hr' => AccessDecision::can($user, Capability::HR_MANAGE),

@@ -3,7 +3,6 @@
 namespace Tests\Feature\Api\Surveys;
 
 use App\Modules\Core\Authorization\Capability;
-use App\Modules\Core\Enums\Permission;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
@@ -48,7 +47,7 @@ class SurveyResponseControllerTest extends TestCase
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
         $this->survey = Survey::factory()->published()->create([
             'organization_id' => $this->orgA->id,
             'created_by' => $this->user->id,
@@ -74,7 +73,7 @@ class SurveyResponseControllerTest extends TestCase
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $actor->assignRole('admin');
+        $this->assignCanonicalRole($actor, 'admin');
         $this->grantEngineCapability($actor, [
             Capability::SURVEYS_VIEW,
             Capability::SURVEYS_REVIEW_RESPONSES,
@@ -302,10 +301,10 @@ class SurveyResponseControllerTest extends TestCase
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $actor->assignRole('viewer');
+        $this->assignCanonicalRole($actor, 'viewer');
         // Give viewer the flat view_survey_responses permission so they clear the
         // route middleware, then give them only SURVEYS_VIEW (not SURVEYS_REVIEW_RESPONSES).
-        $actor->givePermissionTo(Permission::VIEW_SURVEY_RESPONSES->value);
+        $this->grantEngineCapability($actor, Capability::SURVEYS_REVIEW_RESPONSES);
         $this->grantEngineCapability($actor, Capability::SURVEYS_VIEW);
 
         $response = $this->makeResponse();

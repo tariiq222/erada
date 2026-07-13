@@ -7,15 +7,16 @@ vi.mock('@shared/contexts/AuthContext', () => ({
     user: {
       id: 7,
       name: 'أحمد',
-      permissions: ['meetings.view', 'meetings.create', 'meetings.edit', 'meetings.delete'],
       access: {
-        meetings: { view: true, create: true, edit: true, delete: true, record_decisions: true },
+        'meetings.view': true,
+        'meetings.create': true,
+        'meetings.edit': true,
+        'meetings.delete': true,
+        'meetings.record_decisions': true,
       },
     },
-    hasPermission: (p: string) =>
+    can: (p: string) =>
       ['meetings.view', 'meetings.create', 'meetings.edit', 'meetings.delete'].includes(p),
-    canAccess: () => true,
-    isAdmin: () => false,
   }),
 }));
 

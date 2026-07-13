@@ -63,7 +63,12 @@ class UserOrganizationScopeTest extends TestCase
         ]);
 
         if ($role !== 'norole') {
-            $user->assignRole($role);
+            if ($role === 'super_admin') {
+                $assignment = $this->grantCanonicalSuperAdmin($user);
+                $assignment->role->update(['is_system' => true]);
+            } else {
+                $this->assignCanonicalRole($user, $role);
+            }
         }
 
         return $user;
@@ -166,7 +171,7 @@ class UserOrganizationScopeTest extends TestCase
             'department_id' => $this->deptA1->id,
             'is_active' => true,
         ]);
-        $nullOrgViewer->assignRole('viewer');
+        $this->grantCanonicalViewer($nullOrgViewer);
 
         $query = User::query();
         $filtered = $this->scope->applyToUsers($query, $nullOrgViewer);
@@ -176,10 +181,10 @@ class UserOrganizationScopeTest extends TestCase
 
     public function test_managed_departments_included_in_subtree(): void
     {
-        // getManagedDepartmentIds() resolves via ScopedRole (DEPARTMENT_MANAGER/SUPERVISOR),
-        // not via Department::manager_id — same call site as UserController::applyUserVisibility.
+        // Managed departments resolve from canonical department-scoped assignments,
+        // not Department::manager_id — the same seam used by UserController.
         $manager = $this->makeUser('viewer', $this->orgA, $this->deptA1);
-        $manager->assignDepartmentRole($this->deptA2, 'department_manager', $manager->id);
+        $this->assignCanonicalRole($manager, 'dept_manager', 'department', (int) $this->deptA2->id);
 
         $userInA1 = $this->makeUser('viewer', $this->orgA, $this->deptA1);
         $userInA2 = $this->makeUser('viewer', $this->orgA, $this->deptA2);

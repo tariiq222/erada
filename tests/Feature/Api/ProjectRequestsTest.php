@@ -38,7 +38,7 @@ class ProjectRequestsTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
     }
 
     /**
@@ -218,7 +218,7 @@ class ProjectRequestsTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $normalUser->assignRole('viewer'); // بدون صلاحية create_projects
+        $this->assignCanonicalRole($normalUser, 'viewer'); // بدون صلاحية create_projects
 
         $response = $this->actingAs($normalUser, 'sanctum')
             ->postJson('/api/projects', [

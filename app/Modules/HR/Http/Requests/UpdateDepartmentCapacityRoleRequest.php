@@ -2,8 +2,10 @@
 
 namespace App\Modules\HR\Http\Requests;
 
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\HR\Models\Department;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateDepartmentCapacityRoleRequest extends FormRequest
 {
@@ -32,9 +34,11 @@ class UpdateDepartmentCapacityRoleRequest extends FormRequest
     {
         return [
             'member_role_keys' => ['array'],
-            'member_role_keys.*' => ['string', 'exists:scoped_role_definitions,role_key'],
+            'member_role_keys.*' => ['string', Rule::exists(AuthorizationRole::class, 'name')
+                ->where(fn ($query) => $query->where('is_active', true)->where('scope_type', 'department'))],
             'manager_role_keys' => ['array'],
-            'manager_role_keys.*' => ['string', 'exists:scoped_role_definitions,role_key'],
+            'manager_role_keys.*' => ['string', Rule::exists(AuthorizationRole::class, 'name')
+                ->where(fn ($query) => $query->where('is_active', true)->where('scope_type', 'department'))],
         ];
     }
 }

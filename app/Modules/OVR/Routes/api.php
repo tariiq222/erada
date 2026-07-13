@@ -86,10 +86,8 @@ Route::middleware('auth:sanctum')->prefix('ovr')->group(function () {
         ->name('ovr.incidents.comments.destroy');
 
     // Incident Types (Categories)
-    // Route gates now delegate to the AuthZ engine (Capability::OVR_VIEW / OVR_MANAGE_TYPES).
-    // The legacy permission:view_ovr_categories / permission:manage_ovr_categories Spatie
-    // middleware is removed in favor of AccessDecision via engine_capability. The
-    // controller re-checks the same Capability with a target when applicable.
+    // Route gates delegate OVR_VIEW / OVR_MANAGE_TYPES to AccessDecision. The
+    // controller re-checks the same capability with a target when applicable.
     Route::get('/categories', [IncidentTypeController::class, 'index'])
         ->middleware(['throttle:60,1', 'engine_capability:ovr.view'])
         ->name('ovr.categories.index');
@@ -110,7 +108,7 @@ Route::middleware('auth:sanctum')->prefix('ovr')->group(function () {
         ->name('ovr.categories.reportable-types.store');
 });
 
-Route::middleware(['auth:sanctum', 'role:super_admin'])->prefix('admin/incident-types')->group(function () {
+Route::middleware('auth:sanctum')->prefix('admin/incident-types')->group(function () {
     Route::get('/', [IncidentTypeController::class, 'index'])
         ->middleware(['throttle:60,1', 'engine_capability:ovr.view']);
     Route::get('/list', [IncidentTypeController::class, 'list'])

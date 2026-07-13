@@ -508,11 +508,13 @@ vi.mock('@shared/contexts/AuthContext', () => ({
       // `user.access`; populate the canonical dotted form so the mocked
       // auth context mirrors the live /api/auth/me payload.
       access: {
-        departments: { view: true, create: true, edit: true, delete: true },
+        'departments.view': true,
+        'departments.create': true,
+        'departments.edit': true,
+        'departments.delete': true,
       },
     },
-    hasPermission: vi.fn(() => true),
-    canAccess: vi.fn(() => true),
+    can: vi.fn(() => true),
   }),
 }));
 

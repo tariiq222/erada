@@ -160,7 +160,7 @@ class ClusterTreeUserStrategyScopeTest extends TestCase
         [$cluster, $hospital, $sibling] = $this->makeClusterTree();
 
         $superAdmin = User::factory()->create(['organization_id' => null, 'is_active' => true]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         Portfolio::factory()->count(2)->create(['organization_id' => $cluster->id]);
         Portfolio::factory()->count(3)->create(['organization_id' => $hospital->id]);

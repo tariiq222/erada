@@ -62,7 +62,7 @@ class UserRoleEscalationTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $user->assignRole($role);
+        $this->assignCanonicalRole($user, $role);
 
         return $user;
     }
@@ -128,7 +128,7 @@ class UserRoleEscalationTest extends TestCase
         ]);
 
         $user = User::where('email', 'newadmin@example.com')->first();
-        $this->assertTrue($user->hasRole('admin'));
+        $this->assertContains('admin', $user->canonicalRoleNames());
     }
 
     public function test_project_manager_cannot_assign_admin_role(): void
@@ -219,7 +219,7 @@ class UserRoleEscalationTest extends TestCase
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $nullOrgAdmin->assignRole('admin');
+        $this->assignCanonicalRole($nullOrgAdmin, 'admin');
 
         $response = $this->actingAs($nullOrgAdmin, 'sanctum')
             ->postJson('/api/users', [
@@ -239,7 +239,7 @@ class UserRoleEscalationTest extends TestCase
             'department_id' => $this->deptA->id,
             'is_active' => true,
         ]);
-        $nullOrgAdmin->assignRole('admin');
+        $this->assignCanonicalRole($nullOrgAdmin, 'admin');
 
         $response = $this->actingAs($nullOrgAdmin, 'sanctum')
             ->getJson("/api/users/{$this->orgAMember->id}");
@@ -280,7 +280,7 @@ class UserRoleEscalationTest extends TestCase
 
         $response->assertStatus(201);
         $user = User::where('email', 'superuser@example.com')->first();
-        $this->assertTrue($user->hasRole('admin'));
+        $this->assertContains('admin', $user->canonicalRoleNames());
     }
 
     // ========== SC6: canAccessDepartment enforcement ==========

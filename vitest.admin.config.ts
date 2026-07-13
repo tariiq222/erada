@@ -19,6 +19,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./resources/admin/test/setup.ts'],
     include: ['resources/admin/**/*.{test,spec}.{ts,tsx}'],
+    fileParallelism: false,
     passWithNoTests: true,
   },
 });

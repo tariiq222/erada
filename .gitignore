@@ -91,6 +91,10 @@ e2e/.fixtures.json
 /.playwright-mcp
 # Local planning/spec drafts (never commit)
 /docs/superpowers/
+# Graphify local discovery and cache state; committed diagrams live below
+# graphify-out/<topic>/diagrams/.
+/graphify-out/.graphify_*
+/graphify-out/cache/
 
 # -------------------- Tariq / per-machine local memory --------------------
 .tariq/

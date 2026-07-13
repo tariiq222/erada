@@ -40,7 +40,7 @@ class ProjectCompletionLogicTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
     }
 
     protected function makeProject(string $status, string $type = 'development', array $extra = []): Project
@@ -185,7 +185,7 @@ class ProjectCompletionLogicTest extends TestCase
             'department_id' => $otherDept->id,
             'is_active' => true,
         ]);
-        $outsider->assignRole('admin');
+        $this->grantCanonicalAdmin($outsider);
 
         $response = $this->actingAs($outsider, 'sanctum')
             ->putJson("/api/projects/{$project->id}", [

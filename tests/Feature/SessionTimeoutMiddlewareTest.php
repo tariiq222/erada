@@ -36,7 +36,7 @@ class SessionTimeoutMiddlewareTest extends TestCase
             'department_id' => $department->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('member');
+        $this->assignCanonicalRole($this->user, 'member');
 
         $this->plainToken = $this->user->createToken('session-timeout-test')->plainTextToken;
 

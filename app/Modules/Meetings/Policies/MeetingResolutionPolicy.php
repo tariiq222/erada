@@ -11,7 +11,7 @@ use App\Modules\Meetings\Support\MeetingOrgGuard;
 /**
  * MeetingResolutionPolicy — Phase 1 / Direction R.
  *
- * Engine-only authorization (no Spatie fallback). The capability consulted
+ * Canonical authorization. The capability consulted
  * depends on the transition / action:
  *
  *   view / viewAny   -> Capability::MEETING_RESOLUTIONS_VIEW

@@ -3,7 +3,6 @@
 namespace Tests\Feature\Tasks;
 
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -44,7 +43,7 @@ class TaskCompletionAuthAndGuardTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
 
         $this->project = Project::factory()->create([
             'organization_id' => $this->org->id,
@@ -103,7 +102,7 @@ class TaskCompletionAuthAndGuardTest extends TestCase
             'department_id' => $otherDept->id,
             'is_active' => true,
         ]);
-        $outsider->assignRole('admin');
+        $this->grantCanonicalAdmin($outsider);
 
         $response = $this->actingAs($outsider, 'sanctum')
             ->patchJson("/api/unified-tasks/{$task->id}/status", ['status' => 'completed']);
@@ -138,7 +137,7 @@ class TaskCompletionAuthAndGuardTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $member->assignProjectRole($this->project, ScopedRole::PROJECT_MEMBER);
+        $this->assignCanonicalRole($member, 'project_member', 'project', $this->project->id);
 
         $task = $this->makeTask('in_progress');
 
@@ -162,7 +161,7 @@ class TaskCompletionAuthAndGuardTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $assignee->assignProjectRole($this->project, ScopedRole::PROJECT_MEMBER);
+        $this->assignCanonicalRole($assignee, 'project_member', 'project', $this->project->id);
 
         $task = Task::factory()->create([
             'project_id' => $this->project->id,
@@ -186,7 +185,7 @@ class TaskCompletionAuthAndGuardTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $manager->assignProjectRole($this->project, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($manager, 'project_manager', 'project', $this->project->id);
 
         $task = $this->makeTask('in_review');
 

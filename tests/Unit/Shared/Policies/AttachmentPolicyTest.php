@@ -48,28 +48,28 @@ class AttachmentPolicyTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
 
         $this->admin = User::factory()->create([
             'organization_id' => $this->org->id,
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->admin->assignRole('admin');
+        $this->grantCanonicalAdmin($this->admin);
 
         $this->member = User::factory()->create([
             'organization_id' => $this->org->id,
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->member->assignRole('member');
+        $this->assignCanonicalRole($this->member, 'member');
 
         $this->otherMember = User::factory()->create([
             'organization_id' => $this->org->id,
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->otherMember->assignRole('member');
+        $this->assignCanonicalRole($this->otherMember, 'member');
 
         $this->project = Project::factory()->create([
             'organization_id' => $this->org->id,
@@ -150,6 +150,50 @@ class AttachmentPolicyTest extends TestCase
         ]);
 
         $this->assertFalse($this->policy->update($plainUser, $attachment));
+    }
+
+    public function test_project_manager_can_update_attachment_on_managed_project(): void
+    {
+        $projectManager = User::factory()->create([
+            'organization_id' => $this->org->id,
+            'department_id' => $this->dept->id,
+            'is_active' => true,
+        ]);
+        $this->assignCanonicalRole($projectManager, 'project_manager', 'project', (int) $this->project->id);
+
+        $attachment = Attachment::create([
+            'user_id' => $this->member->id,
+            'name' => 'project.pdf',
+            'file_path' => 'projects/'.$this->project->id.'/project.pdf',
+            'file_type' => 'application/pdf',
+            'file_size' => 1024,
+            'attachable_type' => Project::class,
+            'attachable_id' => $this->project->id,
+        ]);
+
+        $this->assertTrue($this->policy->update($projectManager, $attachment));
+    }
+
+    public function test_project_member_cannot_update_another_users_attachment(): void
+    {
+        $projectMember = User::factory()->create([
+            'organization_id' => $this->org->id,
+            'department_id' => $this->dept->id,
+            'is_active' => true,
+        ]);
+        $this->assignCanonicalRole($projectMember, 'project_member', 'project', (int) $this->project->id);
+
+        $attachment = Attachment::create([
+            'user_id' => $this->member->id,
+            'name' => 'project.pdf',
+            'file_path' => 'projects/'.$this->project->id.'/project.pdf',
+            'file_type' => 'application/pdf',
+            'file_size' => 1024,
+            'attachable_type' => Project::class,
+            'attachable_id' => $this->project->id,
+        ]);
+
+        $this->assertFalse($this->policy->update($projectMember, $attachment));
     }
 
     public function test_owner_can_delete_own_attachment(): void

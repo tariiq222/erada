@@ -13,7 +13,7 @@ use Illuminate\Auth\Access\HandlesAuthorization;
  * RiskPolicy — سياسة الوصول للمخاطر
  *
  * يعتمد كلياً على محرّك AuthZ الموحّد (AccessDecision::can).
- * المنطق القديم (Spatie flat permissions) أُزيل في Phase هـ Task 4.
+ * جميع القرارات تمر عبر محرك التفويض الموحّد.
  *
  * Phase CFA-05 — Cluster Full Authority widening:
  *   - view() widens via RISKS_VIEW + CLUSTER_TREE_VIEW on actor.org; the

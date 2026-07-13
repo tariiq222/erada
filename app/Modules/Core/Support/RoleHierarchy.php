@@ -35,7 +35,7 @@ class RoleHierarchy
     public static function highestLevel(User $user): int
     {
         $max = 0;
-        foreach ($user->getRoleNames()->toArray() as $role) {
+        foreach ($user->canonicalRoleNames() as $role) {
             $max = max($max, self::level($role));
         }
 
@@ -44,13 +44,13 @@ class RoleHierarchy
 
     public static function isSuperAdmin(User $user): bool
     {
-        return $user->hasAnyRole([self::SUPER_ADMIN]);
+        return $user->isSuperAdmin();
     }
 
     public static function isAdmin(User $user): bool
     {
         // تير الإدارة مقاد بالصلاحية لا باسم الدور (بعد حذف دور admin).
-        return AccessDecision::can($user, Capability::SETTINGS_MANAGE);
+        return AccessDecision::canonicalTrace($user, Capability::SETTINGS_MANAGE)['granted'];
     }
 
     /**

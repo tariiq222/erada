@@ -2,7 +2,7 @@ import React from "react";
 import { Tooltip, Kbd, CommandPalette } from "@shared/ui";
 import { Icon, Avatar } from "./ui";
 
-export type NasaqNavGroupId = "main" | "planning" | "meetings" | "ops" | "quality" | "crisis" | "admin";
+export type NasaqNavGroupId = "main" | "planning" | "meetings" | "ops" | "quality" | "crisis";
 
 export const NASAQ_NAV: Array<{
   group: NasaqNavGroupId;
@@ -22,10 +22,6 @@ export const NASAQ_NAV: Array<{
   { group: "ops", key: "surveys", path: "/surveys", icon: "inbox" },
   { group: "crisis", key: "risks", path: "/risk-management/risks", icon: "shield" },
   { group: "ops", key: "departments", path: "/hr/departments", icon: "users" },
-  { group: "admin", key: "users", path: "/admin/users", icon: "users", requireAdmin: true },
-  { group: "admin", key: "organizations", path: "/admin/organizations", icon: "building", requireAdmin: true },
-  { group: "admin", key: "roles", path: "/admin/access", icon: "badge", requireAdmin: true },
-  { group: "admin", key: "activity", path: "/admin/activity-logs", icon: "list", requireAdmin: true },
 ];
 
 // ── Accordion navigation tree ───────────────────────────────────────────────
@@ -33,11 +29,7 @@ export const NASAQ_NAV: Array<{
 // module-specific pages. Labels and access filtering are resolved by the host
 // (AppLayout) via buildNasaqGroups so this module stays presentational.
 
-export type NavAccess = {
-  permission?: string;
-  permissions?: string[];
-  allPermissions?: string[];
-};
+export type NavAccess = import('@shared/api/access').AccessRequirement;
 
 export type NasaqNavAccent = "primary" | "indigo" | "teal" | "amber" | "violet" | "crisis";
 
@@ -99,9 +91,9 @@ export const NASAQ_NAV_TREE: RawNavModule[] = [
     labelKey: "nav.tasks",
     icon: "check",
     path: "/tasks",
-    access: { permissions: ["tasks.view", "view_own_tasks"] },
+    access: { anyCapabilities: ["tasks.view", "tasks.view"] },
     children: [
-      CREATE("tasks-create", "/tasks/create", { permission: "tasks.create" }),
+      CREATE("tasks-create", "/tasks/create", { capability: "tasks.create" }),
       { key: "tasks-all", labelKey: "nav.view_all", icon: "list", path: "/tasks" },
       { key: "tasks-mine", labelKey: "nav.my_tasks", icon: "check", path: "/my-tasks" },
     ],
@@ -112,9 +104,9 @@ export const NASAQ_NAV_TREE: RawNavModule[] = [
     labelKey: "nav.portfolios",
     icon: "target",
     path: "/strategy/portfolios",
-    access: { permission: "strategy.view" },
+    access: { capability: "strategy.view" },
     children: [
-      CREATE("portfolios-create", "/strategy/portfolios/new", { permission: "strategy.create" }),
+      CREATE("portfolios-create", "/strategy/portfolios/new", { capability: "strategy.create" }),
       { key: "portfolios-all", labelKey: "nav.view_all", icon: "list", path: "/strategy/portfolios" },
       STATS("portfolios-stats", "/strategy/portfolios/statistics"),
     ],
@@ -125,9 +117,9 @@ export const NASAQ_NAV_TREE: RawNavModule[] = [
     labelKey: "nav.programs",
     icon: "flag",
     path: "/strategy/programs",
-    access: { permission: "strategy.view" },
+    access: { capability: "strategy.view" },
     children: [
-      CREATE("programs-create", "/strategy/programs/new", { permission: "strategy.create" }),
+      CREATE("programs-create", "/strategy/programs/new", { capability: "strategy.create" }),
       { key: "programs-all", labelKey: "nav.view_all", icon: "list", path: "/strategy/programs" },
       STATS("programs-stats", "/strategy/programs/statistics"),
     ],
@@ -138,12 +130,12 @@ export const NASAQ_NAV_TREE: RawNavModule[] = [
     labelKey: "nav.projects",
     icon: "folder",
     path: "/projects",
-    access: { permissions: ["projects.view", "view_own_projects"] },
+    access: { anyCapabilities: ["projects.view", "projects.view"] },
     children: [
-      CREATE("projects-create", "/projects?intake=1", { permission: "projects.create" }),
+      CREATE("projects-create", "/projects?intake=1", { capability: "projects.create" }),
       { key: "projects-all", labelKey: "nav.projects_list", icon: "folder", path: "/projects" },
       STATS("projects-stats", "/projects/statistics"),
-      { key: "projects-settings", labelKey: "nav.projects_settings", icon: "settings", path: "/projects/settings", access: { permission: "manage_organization" } },
+      { key: "projects-settings", labelKey: "nav.projects_settings", icon: "settings", path: "/projects/settings", access: { capability: "settings.manage" } },
     ],
   },
   {
@@ -153,9 +145,9 @@ export const NASAQ_NAV_TREE: RawNavModule[] = [
     icon: "trend",
     path: "/performance/kpis",
     accent: "teal",
-    access: { permissions: ["strategy.view", "view_reports"] },
+    access: { anyCapabilities: ["strategy.view", "strategy.view"] },
     children: [
-      CREATE("performance-kpis-create", "/performance/kpis/new", { permission: "strategy.create" }),
+      CREATE("performance-kpis-create", "/performance/kpis/new", { capability: "strategy.create" }),
       { key: "performance-kpis-all", labelKey: "nav.view_all", icon: "list", path: "/performance/kpis" },
     ],
   },
@@ -165,11 +157,11 @@ export const NASAQ_NAV_TREE: RawNavModule[] = [
     labelKey: "meetings.meeting.list.header",
     icon: "calendar",
     path: "/strategy/meetings",
-    access: { permission: "meetings.view" },
+    access: { capability: "meetings.view" },
     children: [
-      CREATE("meetings-create", "/strategy/meetings/new", { permission: "meetings.edit" }),
+      CREATE("meetings-create", "/strategy/meetings/new", { capability: "meetings.edit" }),
       { key: "meetings-all", labelKey: "nav.view_all", icon: "list", path: "/strategy/meetings" },
-      { key: "meetings-settings", labelKey: "meetings.categories.nav", icon: "settings", path: "/strategy/meetings/settings", access: { permission: "meetings.edit" } },
+      { key: "meetings-settings", labelKey: "meetings.categories.nav", icon: "settings", path: "/strategy/meetings/settings", access: { capability: "meetings.edit" } },
     ],
   },
   {
@@ -178,7 +170,7 @@ export const NASAQ_NAV_TREE: RawNavModule[] = [
     labelKey: "meetings.recommendation.list.header",
     icon: "flag",
     path: "/strategy/meetings/recommendations",
-    access: { permission: "meetings.view" },
+    access: { capability: "meetings.view" },
     children: [
       { key: "recommendations-all", labelKey: "nav.view_all", icon: "list", path: "/strategy/meetings/recommendations" },
     ],
@@ -189,7 +181,7 @@ export const NASAQ_NAV_TREE: RawNavModule[] = [
     labelKey: "meetings.resolution.list.header",
     icon: "check",
     path: "/strategy/meetings/resolutions",
-    access: { permission: "meeting_resolutions.view" },
+    access: { capability: "meeting_resolutions.view" },
     children: [
       { key: "resolutions-all", labelKey: "nav.view_all", icon: "list", path: "/strategy/meetings/resolutions" },
     ],
@@ -200,12 +192,12 @@ export const NASAQ_NAV_TREE: RawNavModule[] = [
     labelKey: "nav.ovr",
     icon: "alert",
     path: "/ovr",
-    access: { permissions: ["ovr.view_own", "ovr.view_department", "ovr.view_all"] },
+    access: { anyCapabilities: ["ovr.view_all", "ovr.view_all", "ovr.view_all"] },
     children: [
-      { key: "ovr-incidents", labelKey: "nav.incidents", icon: "alert", path: "/ovr/incidents", access: { permissions: ["ovr.view_own", "ovr.view_department", "ovr.view_all"] } },
-      { key: "ovr-new", labelKey: "ovr.report_incident", icon: "alert", path: "/ovr/incidents/new", access: { permission: "ovr.create" } },
-      { key: "ovr-stats", labelKey: "nav.statistics", icon: "gauge", path: "/ovr/statistics", access: { allPermissions: ["ovr.view_statistics"], permissions: ["ovr.view_own", "ovr.view_department", "ovr.view_all"] } },
-      { key: "ovr-settings", labelKey: "nav.ovr_settings", icon: "settings", path: "/ovr/settings", access: { permission: "ovr.manage_types" } },
+      { key: "ovr-incidents", labelKey: "nav.incidents", icon: "alert", path: "/ovr/incidents", access: { anyCapabilities: ["ovr.view_all", "ovr.view_all", "ovr.view_all"] } },
+      { key: "ovr-new", labelKey: "ovr.report_incident", icon: "alert", path: "/ovr/incidents/new", access: { capability: "ovr.create" } },
+      { key: "ovr-stats", labelKey: "nav.statistics", icon: "gauge", path: "/ovr/statistics", access: { allCapabilities: ["ovr.view_statistics"], anyCapabilities: ["ovr.view_all", "ovr.view_all", "ovr.view_all"] } },
+      { key: "ovr-settings", labelKey: "nav.ovr_settings", icon: "settings", path: "/ovr/settings", access: { capability: "ovr.manage_types" } },
     ],
   },
   {
@@ -214,9 +206,9 @@ export const NASAQ_NAV_TREE: RawNavModule[] = [
     labelKey: "nav.surveys",
     icon: "inbox",
     path: "/surveys",
-    access: { permission: "surveys.view" },
+    access: { capability: "surveys.view" },
     children: [
-      CREATE("surveys-create", "/surveys/create", { permission: "surveys.create" }),
+      CREATE("surveys-create", "/surveys/create", { capability: "surveys.create" }),
       { key: "surveys-all", labelKey: "nav.view_all", icon: "list", path: "/surveys" },
       STATS("surveys-stats", "/surveys/statistics"),
     ],
@@ -227,12 +219,12 @@ export const NASAQ_NAV_TREE: RawNavModule[] = [
     labelKey: "nav.risks",
     icon: "shield",
     path: "/risk-management",
-    access: { permission: "risks.view" },
+    access: { capability: "risks.view" },
     children: [
-      CREATE("risks-create", "/risk-management/create", { permission: "risks.create" }),
+      CREATE("risks-create", "/risk-management/create", { capability: "risks.create" }),
       { key: "risks-all", labelKey: "nav.risks_list", icon: "list", path: "/risk-management/risks" },
       STATS("risks-stats", "/risk-management/statistics"),
-      { key: "risks-settings", labelKey: "nav.risks_settings", icon: "settings", path: "/risk-management/settings", access: { permission: "manage_organization" } },
+      { key: "risks-settings", labelKey: "nav.risks_settings", icon: "settings", path: "/risk-management/settings", access: { capability: "settings.manage" } },
     ],
   },
 
@@ -242,54 +234,13 @@ export const NASAQ_NAV_TREE: RawNavModule[] = [
     labelKey: "nav.hr",
     icon: "users",
     path: "/hr",
-    access: { permissions: ["hr.view", "departments.view"] },
+    access: { anyCapabilities: ["hr.view", "departments.view"] },
     children: [
-      { key: "hr-employees", labelKey: "nav.employees", icon: "badge", path: "/hr/employees", access: { permission: "hr.view" } },
-      { key: "hr-departments", labelKey: "nav.departments", icon: "building", path: "/hr/departments", access: { permission: "departments.view" } },
-      { key: "hr-stats", labelKey: "nav.statistics", icon: "gauge", path: "/hr/departments/statistics", access: { permission: "departments.view" } },
+      { key: "hr-employees", labelKey: "nav.employees", icon: "badge", path: "/hr/employees", access: { capability: "hr.view" } },
+      { key: "hr-departments", labelKey: "nav.departments", icon: "building", path: "/hr/departments", access: { capability: "departments.view" } },
+      { key: "hr-stats", labelKey: "nav.statistics", icon: "gauge", path: "/hr/departments/statistics", access: { capability: "departments.view" } },
     ],
   },
-  {
-    group: "admin",
-    key: "users",
-    labelKey: "nav.users",
-    icon: "users",
-    path: "/admin/users",
-    requireAdmin: true,
-    children: [
-      CREATE("users-create", "/admin/users/create"),
-      { key: "users-all", labelKey: "nav.view_all", icon: "list", path: "/admin/users" },
-      STATS("users-stats", "/users/statistics"),
-    ],
-  },
-  {
-    group: "admin",
-    key: "organizations",
-    labelKey: "nav.organizations",
-    icon: "building",
-    path: "/admin/organizations",
-    requireAdmin: true,
-    children: [
-      { key: "organizations-create", labelKey: "nav.create_new", icon: "plus", path: "/admin/organizations/new" },
-      { key: "organizations-all", labelKey: "nav.view_all", icon: "list", path: "/admin/organizations" },
-    ],
-  },
-  {
-    group: "admin",
-    key: "roles",
-    labelKey: "nav.roles",
-    icon: "badge",
-    path: "/admin/access",
-    requireAdmin: true,
-    children: [
-      { key: "access-roles", labelKey: "nav.access.tabs.roles", icon: "badge", path: "/admin/access?tab=roles" },
-      { key: "access-members", labelKey: "nav.access.tabs.members", icon: "users", path: "/admin/access?tab=members" },
-      { key: "access-governance", labelKey: "nav.access.tabs.governance", icon: "building", path: "/admin/access?tab=governance" },
-      { key: "access-audit", labelKey: "nav.access.tabs.audit", icon: "log", path: "/admin/access?tab=audit" },
-      { key: "roles-create", labelKey: "nav.create_new", icon: "plus", path: "/admin/roles/new" },
-    ],
-  },
-  { group: "admin", key: "activity", labelKey: "nav.activity_logs", icon: "log", path: "/admin/activity-logs", requireAdmin: true },
 ];
 
 export type NavItem = { key: string; label: string; icon: string; path: string; accent?: NasaqNavAccent; children?: NavItem[] };
@@ -297,10 +248,16 @@ export type NavGroup = { id: string; label?: string; items: NavItem[] };
 
 export function buildNasaqGroups(
   t: (key: string) => string,
-  canAccess: (access: NavAccess) => boolean,
+  can: (capability: string) => boolean,
   isAdmin: boolean,
 ): NavGroup[] {
-  const allowed = (access?: NavAccess) => !access || canAccess(access);
+  const allowed = (access?: NavAccess) => !access || (
+    !access.allCapabilities?.some((capability) => !can(capability)) &&
+    ([
+      ...(access.capability ? [access.capability] : []),
+      ...(access.anyCapabilities ?? []),
+    ].some((capability) => can(capability)) || Boolean(access.allCapabilities?.length))
+  );
 
   const mapItem = (item: RawNavItem, inheritedAccent?: NasaqNavAccent): NavItem | null => {
     if (!allowed(item.access)) return null;

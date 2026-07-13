@@ -2,6 +2,8 @@
 
 namespace App\Modules\Surveys\Http\Resources;
 
+use App\Modules\Core\Authorization\Capability;
+use App\Modules\Shared\Support\ElementAbilities;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -67,6 +69,16 @@ class SurveyResource extends JsonResource
             'can_edit' => $this->canEdit(),
             'can_publish' => $this->canPublish(),
             'can_close' => $this->canClose(),
+
+            'abilities' => ElementAbilities::resolve(
+                $request?->user() ?? request()->user(),
+                $this->resource,
+                [
+                    'view' => Capability::SURVEYS_VIEW,
+                    'edit' => Capability::SURVEYS_EDIT,
+                    'delete' => Capability::SURVEYS_DELETE,
+                ]
+            ),
 
             'public_url' => $this->getPublicUrl(),
 

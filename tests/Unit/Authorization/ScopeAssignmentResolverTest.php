@@ -13,6 +13,7 @@ use App\Modules\Projects\Models\Project;
 use App\Modules\Strategy\Models\Portfolio;
 use App\Modules\Strategy\Models\Program;
 use App\Modules\Surveys\Models\Survey;
+use App\Modules\Tasks\Models\Task;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -22,7 +23,7 @@ use Tests\TestCase;
  * support classes that the new-path `assignmentScopeApplies` is being wired
  * through. Lives in tests/Unit/Authorization because both classes are pure
  * PHP value objects; they do not perform DB I/O. The DB-touching branch is
- * covered by tests/Feature/Core/Authorization/BackfillScopedRolesFullSemanticsTest.
+ * covered by the canonical assignment reconciliation feature tests.
  *
  * Coverage:
  *  1. ScopeTypeToTargetColumn maps every supported scope_type to the column
@@ -430,6 +431,33 @@ class ScopeAssignmentResolverTest extends TestCase
             ),
             'Resolver is target-bound; a null target must NOT match.'
         );
+    }
+
+    public function test_department_scope_resolves_through_a_tasks_project(): void
+    {
+        $parent = Department::factory()->create([
+            'organization_id' => $this->org->id,
+            'parent_id' => null,
+        ]);
+        $child = Department::factory()->create([
+            'organization_id' => $this->org->id,
+            'parent_id' => $parent->id,
+        ]);
+        $project = $this->makeProjectInOrg($this->org, $child);
+        $task = Task::factory()->create([
+            'organization_id' => $this->org->id,
+            'project_id' => $project->id,
+            'department_id' => null,
+        ]);
+
+        $this->assertTrue(ScopeAssignmentResolver::applies(
+            $this->makeAssignment('department', $parent->id, inheritToChildren: true),
+            $task,
+        ));
+        $this->assertFalse(ScopeAssignmentResolver::applies(
+            $this->makeAssignment('department', $parent->id, inheritToChildren: false),
+            $task,
+        ));
     }
 
     // =====================================================================

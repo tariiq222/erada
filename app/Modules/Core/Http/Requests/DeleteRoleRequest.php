@@ -2,25 +2,38 @@
 
 namespace App\Modules\Core\Http\Requests;
 
+use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Capability;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
- * DeleteRoleRequest - engine-only authz for deleting a Spatie role.
+ * DeleteRoleRequest - canonical authorization for deleting a role.
  *
- * The route group is gated by `role:super_admin` middleware; authorize()
- * mirrors that gate so the structural rule "authorize() belongs in
- * FormRequest" holds. Per-role business rules (isSystemRole, users-exist
+ * authorize() keeps the access decision at the FormRequest seam. Per-role
+ * business rules (isSystemRole, users-exist
  * check) stay in the controller — they are state checks, not AuthZ.
  */
 class DeleteRoleRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->isSuperAdmin() ?? false;
+        $user = $this->user();
+
+        return $user !== null && AccessDecision::can($user, Capability::ROLES_DELETE);
     }
 
     public function rules(): array
     {
-        return [];
+        $roleId = $this->route('roleDefinition')?->getKey();
+
+        return [
+            'reassign_to_role_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('authorization_roles', 'id')->where('is_active', true),
+                Rule::notIn(array_filter([$roleId])),
+            ],
+        ];
     }
 }

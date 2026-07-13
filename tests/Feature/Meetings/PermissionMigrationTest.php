@@ -20,7 +20,7 @@ class PermissionMigrationTest extends TestCase
     use GrantsEngineCapability;
     use RefreshDatabase;
 
-    public function test_user_with_old_view_strategy_cannot_create_meeting_resolution_decision(): void
+    public function test_user_with_unrelated_strategy_view_cannot_create_meeting_resolution_decision(): void
     {
         $this->seed(RolesAndPermissionsSeeder::class);
         $this->seed(MeetingsPermissionsSeeder::class);
@@ -31,7 +31,12 @@ class PermissionMigrationTest extends TestCase
             'organization_id' => $organization->id,
             'is_active' => true,
         ]);
-        $user->givePermissionTo('view_strategy'); // legacy permission only.
+        $this->grantEngineCapability(
+            $user,
+            Capability::STRATEGY_VIEW,
+            scopeId: $organization->id,
+            roleKey: 'strategy_viewer_without_meeting_resolution_create',
+        );
         $meeting = Meeting::factory()->create([
             'department_id' => $department->id,
             'organization_id' => $organization->id,

@@ -22,7 +22,7 @@ class ImprovementTransitionDocsTest extends TestCase
     private function managerFor(Project $project): User
     {
         $user = User::factory()->create(['organization_id' => $project->organization_id]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         return $user;
     }

@@ -2,6 +2,8 @@
 
 namespace App\Modules\Core\Http\Requests;
 
+use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Capability;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -17,26 +19,25 @@ class StoreRoleRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->isSuperAdmin() ?? false;
+        $user = $this->user();
+
+        return $user !== null && AccessDecision::can($user, Capability::ROLES_CREATE);
     }
 
     public function rules(): array
     {
-        $scopeKey = $this->input('scope_type', 'organization');
-
         return [
             'name' => [
                 'required', 'string', 'max:50',
-                Rule::unique('scoped_role_definitions', 'role_key')
-                    ->where(fn ($q) => $q->where('scope_type', $scopeKey)->where('is_active', true)),
+                Rule::unique('authorization_roles', 'name'),
             ],
-            'scope_type' => ['sometimes', 'string', 'exists:scope_types,key'],
-            'permissions' => ['array'],
-            'permissions.*' => ['string', 'exists:permissions,name'],
+            'label' => ['nullable', 'string', 'max:100'],
+            'scope_type' => ['sometimes', 'string', Rule::in(['all', 'organization', 'department', 'project', 'program', 'portfolio', 'kpi', 'meeting', 'survey'])],
             'label_ar' => ['nullable', 'string', 'max:100'],
             'label_en' => ['nullable', 'string', 'max:100'],
-            'permissions_capabilities' => ['nullable', 'array'],
-            'permissions_capabilities.*' => ['string', 'max:100'],
+            'capabilities' => ['nullable', 'array'],
+            'capabilities.*' => ['string', Rule::in(Capability::all())],
+            'is_active' => ['sometimes', 'boolean', 'accepted'],
             // Per-module reach cap: { module: own|department|all } (Phase 6).
             'reach' => ['nullable', 'array'],
             'reach.*' => ['string', 'in:own,department,all'],

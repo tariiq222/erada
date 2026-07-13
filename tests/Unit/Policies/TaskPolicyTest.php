@@ -3,8 +3,6 @@
 namespace Tests\Unit\Policies;
 
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
-use App\Modules\Core\Models\ScopeType;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -15,7 +13,6 @@ use App\Modules\Tasks\Policies\TaskPolicy;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Tests\TestCase;
 
@@ -53,96 +50,6 @@ class TaskPolicyTest extends TestCase
         $this->seed(RolesAndPermissionsSeeder::class);
         $this->department = Department::factory()->create();
         Cache::flush();
-        $this->seedTaskScopeDefinitions();
-    }
-
-    /**
-     * ينشئ ScopeType=project وتعريفات الأدوار manager/member/viewer
-     * اللازمة لكي يعمل AccessDecision::can() مع Task → Project → Department → Organization.
-     */
-    private function seedTaskScopeDefinitions(): void
-    {
-        $scopeType = ScopeType::firstOrCreate(
-            ['key' => ScopedRole::SCOPE_PROJECT],
-            [
-                'label_ar' => 'مشروع',
-                'label_en' => 'Project',
-                'model_class' => Project::class,
-                'supports_hierarchy' => true,
-                'supports_expiry' => false,
-                'is_active' => true,
-                'sort_order' => 10,
-            ]
-        );
-
-        $now = now()->toDateTimeString();
-
-        $roles = [
-            [
-                'name' => 'project_manager',
-                'display_name' => 'Project Manager',
-                'scope_type' => ScopedRole::SCOPE_PROJECT,
-                'role_key' => ScopedRole::PROJECT_MANAGER,
-                'scope_type_id' => $scopeType->id,
-                'label_ar' => 'مدير المشروع',
-                'label_en' => 'Project Manager',
-                'is_admin_role' => false,
-                'is_active' => true,
-                'sort_order' => 1,
-                'level' => 0,
-                'permissions' => json_encode([
-                    'projects.view', 'projects.edit', 'projects.manage_members', 'projects.assign_roles',
-                    'tasks.view', 'tasks.create', 'tasks.edit', 'tasks.delete', 'tasks.complete',
-                ]),
-                'created_at' => $now,
-                'updated_at' => $now,
-            ],
-            [
-                'name' => 'project_member',
-                'display_name' => 'Project Member',
-                'scope_type' => ScopedRole::SCOPE_PROJECT,
-                'role_key' => ScopedRole::PROJECT_MEMBER,
-                'scope_type_id' => $scopeType->id,
-                'label_ar' => 'عضو',
-                'label_en' => 'Member',
-                'is_admin_role' => false,
-                'is_active' => true,
-                'sort_order' => 2,
-                'level' => 0,
-                'permissions' => json_encode(['projects.view', 'tasks.view']),
-                'created_at' => $now,
-                'updated_at' => $now,
-            ],
-            [
-                'name' => 'project_viewer',
-                'display_name' => 'Project Viewer',
-                'scope_type' => ScopedRole::SCOPE_PROJECT,
-                'role_key' => ScopedRole::PROJECT_VIEWER,
-                'scope_type_id' => $scopeType->id,
-                'label_ar' => 'مشاهد',
-                'label_en' => 'Viewer',
-                'is_admin_role' => false,
-                'is_active' => true,
-                'sort_order' => 3,
-                'level' => 0,
-                'permissions' => json_encode(['projects.view', 'tasks.view']),
-                'created_at' => $now,
-                'updated_at' => $now,
-            ],
-        ];
-
-        foreach ($roles as $role) {
-            $exists = DB::table('scoped_role_definitions')
-                ->where('scope_type_id', $scopeType->id)
-                ->where('role_key', $role['role_key'])
-                ->exists();
-
-            if (! $exists) {
-                DB::table('scoped_role_definitions')->insert($role);
-            }
-        }
-
-        Cache::flush();
     }
 
     /**
@@ -156,7 +63,9 @@ class TaskPolicyTest extends TestCase
             'department_id' => $deptId ?? $this->department->id,
             'is_active' => true,
         ]);
-        $user->assignRole($role);
+        $role === 'super_admin'
+                ? $this->grantCanonicalSuperAdmin($user)
+                : $this->assignCanonicalRole($user, $role);
 
         return $user;
     }
@@ -266,7 +175,7 @@ class TaskPolicyTest extends TestCase
         $otherDept = $this->makeOtherDepartment();
         $user = $this->makeUser('viewer', null, $otherDept->id);
         $project = $this->makeProjectInOrg();
-        $user->assignProjectRole($project, ScopedRole::PROJECT_MEMBER);
+        $this->assignCanonicalRole($user, 'project_member', 'project', (int) $project->id);
         $task = $this->makeProjectTask($project);
 
         $this->assertFalse(
@@ -287,7 +196,7 @@ class TaskPolicyTest extends TestCase
         $otherDept = $this->makeOtherDepartment();
         $user = $this->makeUser('viewer', null, $otherDept->id);
         $project = $this->makeProjectInOrg();
-        $user->assignProjectRole($project, ScopedRole::PROJECT_MEMBER);
+        $this->assignCanonicalRole($user, 'project_member', 'project', (int) $project->id);
         $task = $this->makeProjectTask($project);
 
         $this->assertFalse(
@@ -308,7 +217,7 @@ class TaskPolicyTest extends TestCase
         $otherDept = $this->makeOtherDepartment();
         $user = $this->makeUser('viewer', null, $otherDept->id);
         $project = $this->makeProjectInOrg();
-        $user->assignProjectRole($project, ScopedRole::PROJECT_MEMBER);
+        $this->assignCanonicalRole($user, 'project_member', 'project', (int) $project->id);
         $task = $this->makeProjectTask($project);
 
         $this->assertFalse(
@@ -330,7 +239,7 @@ class TaskPolicyTest extends TestCase
         $otherDept = $this->makeOtherDepartment();
         $user = $this->makeUser('viewer', null, $otherDept->id);
         $project = $this->makeProjectInOrg();
-        $user->assignProjectRole($project, ScopedRole::PROJECT_MEMBER);
+        $this->assignCanonicalRole($user, 'project_member', 'project', (int) $project->id);
         $task = $this->makeProjectTask($project);
 
         $this->assertFalse(
@@ -352,7 +261,7 @@ class TaskPolicyTest extends TestCase
         $otherDept = $this->makeOtherDepartment();
         $user = $this->makeUser('viewer', null, $otherDept->id);
         $project = $this->makeProjectInOrg();
-        $user->assignProjectRole($project, ScopedRole::PROJECT_MEMBER);
+        $this->assignCanonicalRole($user, 'project_member', 'project', (int) $project->id);
         $task = $this->makeProjectTask($project);
 
         $this->assertFalse(
@@ -377,7 +286,7 @@ class TaskPolicyTest extends TestCase
         $otherDept = $this->makeOtherDepartment();
         $user = $this->makeUser('viewer', null, $otherDept->id);
         $project = $this->makeProjectInOrg();
-        $user->assignProjectRole($project, ScopedRole::PROJECT_VIEWER);
+        $this->assignCanonicalRole($user, 'project_viewer', 'project', (int) $project->id);
         $task = $this->makeProjectTask($project);
 
         $this->assertFalse(
@@ -398,7 +307,7 @@ class TaskPolicyTest extends TestCase
         $otherDept = $this->makeOtherDepartment();
         $user = $this->makeUser('viewer', null, $otherDept->id);
         $project = $this->makeProjectInOrg();
-        $user->assignProjectRole($project, ScopedRole::PROJECT_VIEWER);
+        $this->assignCanonicalRole($user, 'project_viewer', 'project', (int) $project->id);
         $task = $this->makeProjectTask($project);
 
         $this->assertFalse(
@@ -568,7 +477,7 @@ class TaskPolicyTest extends TestCase
     {
         $user = $this->makeUser('viewer');
         $project = $this->makeProjectInOrg();
-        $user->assignProjectRole($project, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($user, 'project_manager', 'project', (int) $project->id);
         $task = $this->makeProjectTask($project);
 
         $this->assertTrue(
@@ -584,7 +493,7 @@ class TaskPolicyTest extends TestCase
     {
         $user = $this->makeUser('viewer');
         $project = $this->makeProjectInOrg();
-        $user->assignProjectRole($project, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($user, 'project_manager', 'project', (int) $project->id);
         $task = $this->makeProjectTask($project);
 
         $this->assertTrue(
@@ -600,7 +509,7 @@ class TaskPolicyTest extends TestCase
     {
         $user = $this->makeUser('viewer');
         $project = $this->makeProjectInOrg();
-        $user->assignProjectRole($project, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($user, 'project_manager', 'project', (int) $project->id);
         $task = $this->makeProjectTask($project);
 
         $this->assertTrue(
@@ -616,7 +525,7 @@ class TaskPolicyTest extends TestCase
     {
         $user = $this->makeUser('viewer');
         $project = $this->makeProjectInOrg();
-        $user->assignProjectRole($project, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($user, 'project_manager', 'project', (int) $project->id);
         $task = $this->makeProjectTask($project);
 
         $this->assertTrue(
@@ -682,7 +591,7 @@ class TaskPolicyTest extends TestCase
         // (أ) عضو — كلاهما يجب أن يعود false
         $otherDept = $this->makeOtherDepartment();
         $member = $this->makeUser('viewer', null, $otherDept->id);
-        $member->assignProjectRole($project, ScopedRole::PROJECT_MEMBER);
+        $this->assignCanonicalRole($member, 'project_member', 'project', (int) $project->id);
         $taskForMember = $this->makeProjectTask($project);
 
         $this->assertSame(
@@ -697,7 +606,7 @@ class TaskPolicyTest extends TestCase
 
         // (ب) مدير — كلاهما يجب أن يعود true
         $manager = $this->makeUser('viewer');
-        $manager->assignProjectRole($project, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($manager, 'project_manager', 'project', (int) $project->id);
         $taskForManager = $this->makeProjectTask($project);
 
         $this->assertSame(

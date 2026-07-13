@@ -57,7 +57,7 @@ class UserResourceEmailVisibilityTest extends TestCase
             'email' => 'viewerperm@example.com',
             'is_active' => true,
         ]);
-        $this->viewerUser->givePermissionTo('view_users');
+        $this->grantEngineCapability($this->viewerUser, Capability::USERS_VIEW);
 
         $this->regularUser = User::factory()->create([
             'email' => 'regular@example.com',

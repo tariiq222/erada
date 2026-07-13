@@ -27,7 +27,7 @@ class RecommendationPermissionTest extends TestCase
             'organization_id' => $dept->organization_id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('viewer');
+        $this->assignCanonicalRole($this->user, 'viewer');
     }
 
     public function test_viewer_can_list_recommendations_with_view_meetings_perm(): void

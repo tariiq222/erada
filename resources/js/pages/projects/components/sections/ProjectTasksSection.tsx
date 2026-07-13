@@ -38,7 +38,7 @@ const ProjectTasksSection: React.FC<ProjectTasksSectionProps> = ({
   onTaskCreated,
 }) => {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const { showToast } = useToast();
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -95,13 +95,13 @@ const ProjectTasksSection: React.FC<ProjectTasksSectionProps> = ({
   // from `user.access` rather than the role-string membership check.
   const getUserRole = useCallback(
     (task?: TaskType): 'super_admin' | 'project_manager' | 'member' => {
-      if (task?.abilities?.edit && user?.roles?.includes('super_admin')) {
+      if (task?.abilities?.edit && can('core.view_organizations')) {
         return 'super_admin';
       }
       if (user?.id === projectManagerId) return 'project_manager';
       return 'member';
     },
-    [user, projectManagerId],
+    [user, projectManagerId, can],
   );
 
   // Sync tasks with props

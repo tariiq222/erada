@@ -23,7 +23,7 @@ class MeetingPermissionTest extends TestCase
             'department_id' => $dept->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('viewer');
+        $this->assignCanonicalRole($this->user, 'viewer');
     }
 
     public function test_viewer_cannot_list_meetings(): void

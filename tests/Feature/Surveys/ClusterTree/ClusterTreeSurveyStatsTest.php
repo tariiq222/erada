@@ -320,7 +320,7 @@ class ClusterTreeSurveyStatsTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $this->actingAs($superAdmin, 'sanctum')
             ->getJson("/api/surveys/{$this->clusterSurvey->id}/cluster-stats")

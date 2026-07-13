@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1520" font-family="ui-monospace, Menlo, monospace" font-size="14">
+  <defs>
+    <style>
+      .title { font-size: 22px; font-weight: 700; }
+      .group-label { font-size: 16px; font-weight: 700; }
+      .layer { fill: #ffffff; stroke: #0f172a; stroke-width: 1.5; }
+      .l1 { fill: #fde68a; }
+      .l2 { fill: #bae6fd; }
+      .l3 { fill: #fecaca; }
+      .l4 { fill: #fde68a; }
+      .l5 { fill: #fecaca; }
+      .l6, .l7, .l8 { fill: #bbf7d0; }
+      .l9 { fill: #e5e7eb; }
+      .ge { fill: #f8fafc; stroke: #0f172a; stroke-width: 2; }
+      .gi { fill: #eef2ff; stroke: #6366f1; stroke-width: 2; }
+      .gg { fill: #ecfdf5; stroke: #059669; stroke-width: 2; }
+      .gd { fill: #ffffff; stroke: #059669; stroke-width: 1.5; }
+      .arrow { stroke: #475569; stroke-width: 1.5; fill: none; }
+      .ab { stroke: #0f172a; stroke-width: 2; fill: none; }
+      .h { fill: #0f172a; }
+      .m { fill: #475569; font-size: 12px; }
+      .lt { fill: #b45309; font-size: 11px; }
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+    <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#0f172a"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="1520" fill="#ffffff"/>
+  <text class="title h" x="640" y="40" text-anchor="middle">cluster_tree authorization — engine + CFA guards</text>
+  <text class="m" x="640" y="64" text-anchor="middle">Layers in AccessDecision::whyCan + invariants enforced by tests (537 passed, 2614 assertions)</text>
+
+  <!-- Inputs -->
+  <g>
+    <rect class="gi" x="40" y="100" width="320" height="280" rx="10"/>
+    <text class="group-label" x="60" y="128">Inputs</text>
+    <rect class="layer" x="60" y="150" width="280" height="60" rx="6"/>
+    <text x="200" y="178" text-anchor="middle">Actor (user)</text>
+    <text x="200" y="196" text-anchor="middle" class="m">+ organization_id, role assignments</text>
+    <rect class="layer" x="60" y="220" width="280" height="60" rx="6"/>
+    <text x="200" y="248" text-anchor="middle">Capability</text>
+    <text x="200" y="266" text-anchor="middle" class="m">e.g. KPIS_VIEW, TASKS_EDIT</text>
+    <rect class="layer" x="60" y="290" width="280" height="60" rx="6"/>
+    <text x="200" y="318" text-anchor="middle">Target Model</text>
+    <text x="200" y="336" text-anchor="middle" class="m">Survey, Task, KPI, Risk, ...</text>
+  </g>
+
+  <!-- Engine -->
+  <g>
+    <rect class="ge" x="430" y="100" width="380" height="780" rx="10"/>
+    <text class="group-label" x="620" y="128" text-anchor="middle">AccessDecision::whyCan(user, capability, target)</text>
+
+    <rect class="layer l1" x="460" y="150" width="320" height="60" rx="6"/>
+    <text x="620" y="185" text-anchor="middle">1. super_admin short-circuit</text>
+
+    <rect class="layer l2" x="460" y="220" width="320" height="60" rx="6"/>
+    <text x="620" y="248" text-anchor="middle">2. cluster_tree_rescue</text>
+    <text x="620" y="266" text-anchor="middle" class="m">(primitive + module cap)</text>
+
+    <rect class="layer l3" x="460" y="290" width="320" height="60" rx="6"/>
+    <text x="620" y="318" text-anchor="middle">3. org_isolation_denied</text>
+    <text x="620" y="336" text-anchor="middle" class="m">(strict same-org)</text>
+
+    <rect class="layer l4" x="460" y="360" width="320" height="60" rx="6"/>
+    <text x="620" y="388" text-anchor="middle">4. owner_floor</text>
+    <text x="620" y="406" text-anchor="middle" class="m">(OwnerEditable contract)</text>
+
+    <rect class="layer l5" x="460" y="430" width="320" height="60" rx="6"/>
+    <text x="620" y="458" text-anchor="middle">5. sensitive_allowed/denied</text>
+    <text x="620" y="476" text-anchor="middle" class="m">(SensitivelyScoped)</text>
+
+    <rect class="layer l6" x="460" y="500" width="320" height="60" rx="6"/>
+    <text x="620" y="528" text-anchor="middle">6. org_functional_role</text>
+    <text x="620" y="546" text-anchor="middle" class="m">(scoped role grants)</text>
+
+    <rect class="layer l7" x="460" y="570" width="320" height="60" rx="6"/>
+    <text x="620" y="598" text-anchor="middle">7. scope_chain</text>
+    <text x="620" y="616" text-anchor="middle" class="m">(ScopeAssignmentResolver)</text>
+
+    <rect class="layer l8" x="460" y="640" width="320" height="60" rx="6"/>
+    <text x="620" y="668" text-anchor="middle">8. inline_role</text>
+    <text x="620" y="686" text-anchor="middle" class="m">(target-scoped assignment)</text>
+
+    <rect class="layer l9" x="460" y="710" width="320" height="60" rx="6"/>
+    <text x="620" y="745" text-anchor="middle">9. deny (default)</text>
+
+    <!-- vertical chain -->
+    <line class="ab" x1="620" y1="210" x2="620" y2="220" marker-end="url(#ab)"/>
+    <line class="ab" x1="620" y1="280" x2="620" y2="290" marker-end="url(#ab)"/>
+    <line class="ab" x1="620" y1="350" x2="620" y2="360" marker-end="url(#ab)"/>
+    <line class="ab" x1="620" y1="420" x2="620" y2="430" marker-end="url(#ab)"/>
+    <line class="ab" x1="620" y1="490" x2="620" y2="500" marker-end="url(#ab)"/>
+    <line class="ab" x1="620" y1="560" x2="620" y2="570" marker-end="url(#ab)"/>
+    <line class="ab" x1="620" y1="630" x2="620" y2="640" marker-end="url(#ab)"/>
+    <line class="ab" x1="620" y1="700" x2="620" y2="710" marker-end="url(#ab)"/>
+  </g>
+
+  <!-- Guards -->
+  <g>
+    <rect class="gg" x="870" y="100" width="370" height="900" rx="10"/>
+    <text class="group-label" x="890" y="128">Invariants (test-enforced)</text>
+
+    <polygon class="gd" points="890,160 1080,160 1230,210 1080,260 890,260 940,210"/>
+    <text x="1060" y="200" text-anchor="middle">One-directional</text>
+    <text x="1060" y="220" text-anchor="middle">ancestor -&gt; descendants</text>
+    <text x="1060" y="238" text-anchor="middle" class="m">(no upward widening)</text>
+
+    <polygon class="gd" points="890,290 1080,290 1230,340 1080,390 890,390 940,340"/>
+    <text x="1060" y="345" text-anchor="middle">Sibling cluster</text>
+    <text x="1060" y="365" text-anchor="middle">isolated</text>
+
+    <polygon class="gd" points="890,420 1080,420 1230,470 1080,520 890,520 940,470"/>
+    <text x="1060" y="475" text-anchor="middle">Null-org actor</text>
+    <text x="1060" y="495" text-anchor="middle">fail-closed</text>
+
+    <polygon class="gd" points="890,550 1080,550 1230,600 1080,650 890,650 940,600"/>
+    <text x="1060" y="595" text-anchor="middle">Confidential floor:</text>
+    <text x="1060" y="613" text-anchor="middle">OVR / Private Task /</text>
+    <text x="1060" y="631" text-anchor="middle">SensitivelyScoped</text>
+
+    <polygon class="gd" points="890,680 1080,680 1230,730 1080,780 890,780 940,730"/>
+    <text x="1060" y="725" text-anchor="middle">Primitives split:</text>
+    <text x="1060" y="745" text-anchor="middle">CLUSTER_TREE_VIEW /</text>
+    <text x="1060" y="763" text-anchor="middle">MANAGE / EXPORT</text>
+    <text x="1060" y="775" text-anchor="middle" class="m">(no cross-promotion)</text>
+
+    <polygon class="gd" points="890,810 1080,810 1230,860 1080,910 890,910 940,860"/>
+    <text x="1060" y="855" text-anchor="middle">cluster_auditor</text>
+    <text x="1060" y="875" text-anchor="middle">isolated from cluster_pmo</text>
+
+    <polygon class="gd" points="890,940 1080,940 1230,990 1080,1040 890,1040 940,990"/>
+    <text x="1060" y="980" text-anchor="middle">Write widens only for</text>
+    <text x="1060" y="1000" text-anchor="middle">status/transition;</text>
+    <text x="1060" y="1018" text-anchor="middle">create/update/delete</text>
+    <text x="1060" y="1034" text-anchor="middle" class="m">stay strict same-org</text>
+  </g>
+
+  <!-- arrows from inputs to engine -->
+  <path class="arrow" d="M 360 180 C 410 180, 410 180, 460 180" marker-end="url(#a)"/>
+  <path class="arrow" d="M 360 250 C 410 250, 410 250, 460 250" marker-end="url(#a)"/>
+  <path class="arrow" d="M 360 320 C 410 320, 410 320, 460 320" marker-end="url(#a)"/>
+
+  <!-- engine -> guards wiring (label, layer-2 to primitives; layer-5 to confidential; layer-3 to directional/sibling/null) -->
+  <path class="arrow" d="M 780 250 C 830 250, 830 730, 890 730" marker-end="url(#a)"/>
+  <text class="lt" x="800" y="500" transform="rotate(90 800 500)">layer 2 &#8594; primitives split</text>
+
+  <path class="arrow" d="M 780 460 C 830 460, 830 600, 890 600" marker-end="url(#a)"/>
+  <text class="lt" x="800" y="535">layer 5 &#8594; confidential floor</text>
+
+  <path class="arrow" d="M 780 320 C 830 320, 830 210, 890 210" marker-end="url(#a)"/>
+  <text class="lt" x="800" y="270">layer 3 &#8594; directional</text>
+
+  <path class="arrow" d="M 780 320 C 830 320, 830 340, 890 340" marker-end="url(#a)"/>
+  <text class="lt" x="800" y="345">layer 3 &#8594; sibling</text>
+
+  <path class="arrow" d="M 780 320 C 830 320, 830 470, 890 470" marker-end="url(#a)"/>
+  <text class="lt" x="800" y="410">layer 3 &#8594; null-org</text>
+
+  <path class="arrow" d="M 780 250 C 830 250, 830 860, 890 860" marker-end="url(#a)"/>
+  <text class="lt" x="800" y="600" transform="rotate(90 800 600)">layer 2 &#8594; cluster_auditor isolation</text>
+
+  <path class="arrow" d="M 780 320 C 830 320, 830 990, 890 990" marker-end="url(#a)"/>
+  <text class="lt" x="800" y="700" transform="rotate(90 800 700)">layer 3 &#8594; write-strict</text>
+
+  <!-- legend / footer -->
+  <g transform="translate(40,1240)">
+    <rect class="ge" x="0" y="0" width="1200" height="240" rx="10"/>
+    <text class="group-label" x="20" y="28">Legend</text>
+    <rect class="layer l1" x="20" y="50" width="40" height="24"/><text x="70" y="68">super_admin</text>
+    <rect class="layer l2" x="20" y="84" width="40" height="24"/><text x="70" y="102">cluster_tree_rescue</text>
+    <rect class="layer l3" x="20" y="118" width="40" height="24"/><text x="70" y="136">org_isolation_denied / sensitive_floor</text>
+    <rect class="layer l4" x="20" y="152" width="40" height="24"/><text x="70" y="170">owner_floor</text>
+    <rect class="layer l6" x="20" y="186" width="40" height="24"/><text x="70" y="204">role / scope / inline layers</text>
+
+    <rect class="layer l9" x="280" y="50" width="40" height="24"/><text x="330" y="68">default deny</text>
+    <polygon class="gd" points="280,84 320,84 340,98 320,112 280,112 300,98"/>
+    <text x="360" y="102">guard / invariant (test-enforced)</text>
+
+    <text class="m" x="600" y="68">Pair requirement: every cluster widening needs (module-cap + cluster_tree primitive).</text>
+    <text class="m" x="600" y="88">Direction: ancestor -&gt; descendants only; siblings isolated; null-org fail-closed.</text>
+    <text class="m" x="600" y="108">Sensitivity: Confidential / OVR / Private Task are floored before the rescue branch.</text>
+    <text class="m" x="600" y="128">Write: only status/transition may widen; create/update/delete stay strict same-org.</text>
+    <text class="m" x="600" y="148">Roles: cluster_auditor cannot inherit cluster_pmo caps; cluster_auditor is audit-only.</text>
+    <text class="m" x="600" y="168">PII: cross-org exports strip email/phone/token/IP/UA; respondent org is snapshot at submit.</text>
+    <text class="m" x="600" y="188">Audit: every grant path is observable via AuthorizationDecisionAudit (matched_role / matched_record_rule).</text>
+    <text class="m" x="600" y="208">SHADOW mode compares engine vs legacy spatie at runtime (non-prod only).</text>
+  </g>
+</svg>

@@ -2,7 +2,6 @@
 
 namespace App\Modules\Core\Http\Requests;
 
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use Illuminate\Foundation\Http\FormRequest;
@@ -44,7 +43,7 @@ class AssignDepartmentRoleRequest extends FormRequest
     {
         return [
             'user_id' => ['required', 'integer', 'exists:users,id'],
-            'role' => ['required', 'string', 'in:'.implode(',', array_keys(ScopedRole::getDepartmentRoles()))],
+            'role_id' => ['required', 'integer', 'exists:authorization_roles,id'],
             'inherit_to_children' => ['boolean'],
             'expires_at' => ['nullable', 'date', 'after:now'],
         ];

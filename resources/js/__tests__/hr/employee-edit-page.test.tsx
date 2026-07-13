@@ -122,13 +122,13 @@ vi.mock('@entities/user', () => ({
 
 vi.mock('@shared/contexts/AuthContext', () => ({
   useAuth: () => ({
-    hasPermission: (perm: string) => perm === 'manage_hr',
+    can: (capability: string) => capability === 'hr.manage',
     // Phase 9.3: production code reads useCan('hr.manage') from `user.access`;
     // mirror the legacy predicate by exposing the canonical capability.
     user: {
       id: 1,
       access: {
-        hr: { manage: true },
+        'hr.manage': true,
       },
     },
   }),

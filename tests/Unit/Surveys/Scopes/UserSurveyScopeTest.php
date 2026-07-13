@@ -46,7 +46,9 @@ class UserSurveyScopeTest extends TestCase
         ]);
 
         if ($role) {
-            $user->assignRole($role);
+            $role === 'super_admin'
+                ? $this->grantCanonicalSuperAdmin($user)
+                : $this->assignCanonicalRole($user, $role);
         }
 
         return $user;

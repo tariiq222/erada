@@ -36,7 +36,7 @@ class ProgramControllerTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
 
         $owner = User::factory()->create();
         $this->portfolio = Portfolio::factory()->active()->create();

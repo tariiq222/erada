@@ -666,7 +666,7 @@ export function useProjectForm({ id, projectType, triageAnswers }: UseProjectFor
           // out of being the manager. When checked, omit it so the backend
           // keeps the current behavior (creator becomes the manager). The
           // legacy manager_id / sponsor_id columns were dropped — the engine
-          // resolves the manager via manager_user_id (scoped role) only.
+          // resolves the manager via manager_user_id authorization assignment only.
           ...(isSelfManager
             ? {}
             : {

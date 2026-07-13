@@ -33,10 +33,11 @@ class Phase3VerificationTest extends TestCase
     /**
      * Query budget for GET /api/risk-management/risks with 10 seeded risks.
      *
-     * Observed breakdown (PostgreSQL, query log) — engine path (Wave 3 task 8):
+     * Observed breakdown (PostgreSQL, query log) — canonical engine path:
      *   - 2 Spatie role lookups (model_has_roles + roles)
      *   - 1 engine scoped-roles lookup (model_has_scoped_roles)
-     *   - 1 ScopedRoleDefinition lookup (the engine consults it per request)
+     *   - 1 authorization_role_permissions row count (the engine consults
+     *     the canonical pivot per request to resolve the capability)
      *   - 1 risk_settings read (governing-dept check inside UserRiskScope)
      *   - 1 paginator COUNT query
      *   - 1 main risks SELECT (withCount('actions') is an inline subquery)
@@ -46,8 +47,9 @@ class Phase3VerificationTest extends TestCase
      * holding the line at 10 proves the index eager-loads its relations.
      *
      * Legacy Spatie gate used the cache (3 fewer lookups: no scoped-roles,
-     * no ScopedRoleDefinition, no risk_settings). The engine path costs one
-     * extra round-trip per request in exchange for the contextual scope chain.
+     * no authorization_role_permissions row count, no risk_settings). The
+     * engine path costs one extra round-trip per request in exchange for
+     * the contextual scope chain.
      */
     private const INDEX_QUERY_BUDGET = 10;
 
@@ -72,11 +74,8 @@ class Phase3VerificationTest extends TestCase
         // Engine grants (Wave 3 task 8): replaces legacy Spatie view_risks +
         // view_risk_reports. RISKS_VIEW covers the list/dashboard/show paths;
         // RISKS_VIEW_REPORTS covers the matrix + CSV/PDF exports.
-        // Both capabilities MUST be granted in a single call: assignScopedRole has
-        // single-role-per-scope semantics, so two separate same-scope calls would
-        // silently revoke the first grant (Phase 3, ADR-UNIFIED-ROLE-ACCESS: the
-        // legacy can_* flag path that used to mask this by broadening view grants
-        // was removed — permissions[] is now the only grant source).
+        // Grant both capabilities on one canonical role assignment so the fixture
+        // mirrors the production permission graph at organization scope.
         $this->grantEngineCapability($this->user, [
             Capability::RISKS_VIEW,
             Capability::RISKS_VIEW_REPORTS,

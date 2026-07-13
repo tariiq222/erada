@@ -109,7 +109,7 @@ function mapProjectToCharter(project: ProjectDetails): ProjectCharterProject {
     expectedBenefits: project.expected_benefits ?? undefined,
 
     // People. The sponsor relation was removed (column dropped); only the
-    // project manager (scoped role) is resolved now.
+    // project manager authorization assignment is resolved now.
     managerName: project.manager?.name,
     teamMembers,
     stakeholders,
@@ -124,11 +124,7 @@ const ProjectView: React.FC = () => {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const canEditProject = useCan('projects.edit');
-  // Canonical member-management gate. `projects.manage_members` was the legacy
-  // capability (audit 2026-07-06) — it is no longer enforced; the engine routes
-  // member / role assignment through `projects.assign_roles` (unified with
-  // `/projects/{id}/roles/*`). The access-bridge keeps a 1-version sunset
-  // mapping for any stale session still carrying the old key.
+  // Member and role assignment share one canonical capability.
   const canManageMembers = useCan('projects.assign_roles');
   const canManageKpis = useCan('kpis.manage');
   const canViewStrategy = useCan('strategy.view');

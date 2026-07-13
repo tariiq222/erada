@@ -17,8 +17,8 @@ use Tests\TestCase;
  * full HTTP request/response cycle on `GET /api/performance/kpis/export/{format}`.
  *
  * IMPORTANT — test-helper gotcha: `grantEngineCapability` has single-role-per-scope
- * semantics via `assignScopedRole`. Always pass multiple capabilities as an array
- * so they go into the same ScopedRoleDefinition's `permissions[]`.
+ * semantics through canonical role assignments. Multiple capabilities are
+ * granted together to preserve the intended authorization fixture.
  *
  * Proves:
  *   1) A cluster admin (KPIS_EXPORT + CLUSTER_TREE_EXPORT) export endpoint
@@ -242,7 +242,7 @@ class KpiExportClusterTreeTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $this->makeKpi($cluster, ['code' => 'CL-SA', 'name' => 'Cluster Super']);
         $this->makeKpi($hospital, ['code' => 'HO-SA', 'name' => 'Hospital Super']);

@@ -2,6 +2,8 @@
 
 namespace Database\Seeders;
 
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\SystemSettings;
 use App\Modules\Core\Models\User;
@@ -19,11 +21,20 @@ class DatabaseSeeder extends Seeder
         // صلاحيات موديول الاجتماعات (القرارات + الاجتماعات + التوصيات)
         $this->call(MeetingsPermissionsSeeder::class);
 
-        // Department scope-type + capacity/cross-cutting scoped role definitions
+        // Transitional alias that re-applies the canonical capacity-role catalog.
         $this->call(ScopedDepartmentRolesSeeder::class);
 
-        // Additional scope_types for operational models (kpi/meeting/survey)
-        $this->call(AdditionalScopeTypesSeeder::class);
+        // Canonical organization-scoped assignments require a concrete scope.
+        // Keep the base seeder self-contained instead of relying on an optional
+        // demo/scenario seeder to create the first organization later.
+        Organization::firstOrCreate(
+            ['code' => 'DEFAULT'],
+            [
+                'name' => 'المؤسسة الافتراضية',
+                'type' => Organization::TYPE_ORGANIZATION,
+                'is_active' => true,
+            ],
+        );
 
         // إنشاء إعدادات النظام (idempotent)
         SystemSettings::firstOrCreate(
@@ -82,6 +93,9 @@ class DatabaseSeeder extends Seeder
             [
                 'name' => $name,
                 'password' => Hash::make('password'),
+                'failed_login_attempts' => 0,
+                'locked_until' => null,
+                'last_failed_login_at' => null,
                 'job_title' => $jobTitle,
                 'is_active' => true,
                 // Stamp the default organization so the user's data appears in
@@ -91,8 +105,24 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        if (! $user->hasRole($role)) {
-            $user->assignRole($role);
-        }
+        $authorizationRole = AuthorizationRole::query()->where('name', $role)->firstOrFail();
+        $scopeType = $role === 'super_admin' ? AuthorizationRoleAssignment::SCOPE_ALL : AuthorizationRoleAssignment::SCOPE_ORGANIZATION;
+        $scopeId = $scopeType === AuthorizationRoleAssignment::SCOPE_ALL ? null : $user->organization_id;
+
+        AuthorizationRoleAssignment::query()->updateOrCreate(
+            [
+                'authorization_role_id' => $authorizationRole->id,
+                'user_id' => $user->id,
+                'scope_type' => $scopeType,
+                'scope_id' => $scopeId,
+            ],
+            [
+                'organization_id' => $scopeType === AuthorizationRoleAssignment::SCOPE_ALL ? null : $user->organization_id,
+                'inherit_to_children' => true,
+                'expires_at' => null,
+                'source' => 'migration',
+                'granted_by' => null,
+            ],
+        );
     }
 }

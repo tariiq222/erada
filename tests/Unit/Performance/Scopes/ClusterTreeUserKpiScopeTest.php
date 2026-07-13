@@ -181,7 +181,7 @@ class ClusterTreeUserKpiScopeTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $super->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($super);
 
         Kpi::factory()->count(2)->create(['organization_id' => $cluster->id]);
         Kpi::factory()->count(3)->create(['organization_id' => $hospital->id]);

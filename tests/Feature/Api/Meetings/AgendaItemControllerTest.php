@@ -32,19 +32,15 @@ class AgendaItemControllerTest extends TestCase
         $this->seed(RolesAndPermissionsSeeder::class);
         $dept = Department::factory()->create();
 
-        $this->organizer = User::factory()->create([
-            'department_id' => $dept->id,
-            'organization_id' => $dept->organization_id,
-            'is_active' => true,
-        ]);
-        $this->organizer->assignRole('super_admin');
+        $this->organizer = User::factory()->create(['department_id' => $dept->id, 'is_active' => true]);
+        $this->grantCanonicalSuperAdmin($this->organizer);
 
         $this->attendee = User::factory()->create([
             'department_id' => $dept->id,
             'is_active' => true,
             'organization_id' => $this->organizer->organization_id,
         ]);
-        $this->attendee->assignRole('viewer');
+        $this->assignCanonicalRole($this->attendee, 'viewer');
 
         $this->meeting = Meeting::create([
             'title' => 'اجتماع',
@@ -76,7 +72,7 @@ class AgendaItemControllerTest extends TestCase
     public function test_non_participant_cannot_add_item(): void
     {
         $stranger = User::factory()->create(['is_active' => true]);
-        $stranger->assignRole('viewer');
+        $this->assignCanonicalRole($stranger, 'viewer');
 
         $this->actingAs($stranger, 'sanctum')
             ->postJson("/api/meetings/{$this->meeting->id}/agenda-items", ['title' => 'x'])
@@ -352,7 +348,7 @@ class AgendaItemControllerTest extends TestCase
         ]);
 
         $stranger = User::factory()->create(['is_active' => true]);
-        $stranger->assignRole('viewer');
+        $this->assignCanonicalRole($stranger, 'viewer');
 
         $this->actingAs($stranger, 'sanctum')
             ->putJson("/api/meetings/{$this->meeting->id}/agenda-items/{$item->id}", ['title' => 'x'])
@@ -436,7 +432,7 @@ class AgendaItemControllerTest extends TestCase
             'is_active' => true,
             'organization_id' => $orgB->id,
         ]);
-        $foreignOrganizer->assignRole('admin');
+        $this->assignCanonicalRole($foreignOrganizer, 'admin');
 
         $foreignMeeting = Meeting::create([
             'title' => 'foreign',
@@ -458,7 +454,7 @@ class AgendaItemControllerTest extends TestCase
             'is_active' => true,
             'organization_id' => $this->organizer->organization_id,
         ]);
-        $actor->assignRole('admin');
+        $this->assignCanonicalRole($actor, 'admin');
         $this->grantEngineCapability($actor, Capability::MEETINGS_EDIT);
 
         // Hit the nested route with the foreign meeting + item ids.

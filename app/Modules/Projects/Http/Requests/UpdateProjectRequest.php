@@ -247,16 +247,73 @@ class UpdateProjectRequest extends FormRequest
     }
 
     /**
-     * قواعد فريق العمل
+     * قواعد فريق العمل.
+     *
+     * Defense layer (CSD-CA23078-PROJECTS-002): a `projects.edit` actor must not
+     * be able to grant themselves a project role through the bulk update path.
+     * The dedicated `/api/projects/{id}/roles/*` endpoint is the only sanctioned
+     * way to assign scoped roles — it goes through
+     * `AuthorizationAssignmentService` and the canonical actor guard. Here we
+     * accept only self-assignments whose canonical role is `project_viewer`,
+     * which carries no privilege escalation risk.
+     *
+     * The actual mapping of free-form role strings to canonical names happens
+     * in `TeamService::ROLE_MAPPING`. We mirror the viewer-only check inline
+     * so the validator can short-circuit before any service-layer work — the
+     * service layer (`TeamService::replaceTeamMembers`) re-checks the same
+     * predicate as defense-in-depth for non-HTTP callers.
      */
     protected function teamRules(): array
     {
         return [
             'team_members' => 'nullable|array',
-            'team_members.*.user_id' => 'nullable|exists:users,id',
-            'team_members.*.name' => 'nullable|string|max:255',
-            'team_members.*.role' => 'nullable|string|max:255',
+            'team_members.*.user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'team_members.*.name' => ['nullable', 'string', 'max:255'],
+            'team_members.*.role' => [
+                'nullable',
+                'string',
+                'max:255',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (! preg_match('/^team_members\.(\d+)\.role$/', $attribute, $matches)) {
+                        return;
+                    }
+
+                    $entry = $this->input('team_members.'.$matches[1]);
+                    $entryUserId = is_array($entry) && isset($entry['user_id'])
+                        ? (int) $entry['user_id']
+                        : null;
+                    $actorId = $this->user()?->id;
+
+                    if ($entryUserId === null || $actorId === null || $entryUserId !== (int) $actorId) {
+                        return;
+                    }
+
+                    if ($this->canonicalRoleIsViewer($value) === false) {
+                        $fail('لا يمكنك تعيين نفسك عضواً في المشروع عبر هذا المسار. استخدم نقطة النهاية المخصصة لتعيين الأدوار (/api/projects/{id}/roles).');
+                    }
+                },
+            ],
         ];
+    }
+
+    /**
+     * True when the supplied role string maps to the lowest-privilege project
+     * scope (`project_viewer`). Mirrors `TeamService::ROLE_MAPPING` so the
+     * request validator and the service-layer defense reach the same verdict
+     * without sharing a static table (the validator only needs to recognise
+     * viewer aliases — anything else is escalated to the service-layer check).
+     */
+    private function canonicalRoleIsViewer(mixed $rawRole): bool
+    {
+        $rawRole = is_string($rawRole) ? trim($rawRole) : '';
+
+        if ($rawRole === '') {
+            return false;
+        }
+
+        $viewerAliases = ['viewer', 'project_viewer', 'مشاهد', 'مراقب'];
+
+        return in_array($rawRole, $viewerAliases, true);
     }
 
     /**

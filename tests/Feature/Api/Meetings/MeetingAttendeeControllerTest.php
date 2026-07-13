@@ -25,7 +25,7 @@ class MeetingAttendeeControllerTest extends TestCase
         $this->seed(RolesAndPermissionsSeeder::class);
         $dept = Department::factory()->create();
         $this->user = User::factory()->create(['department_id' => $dept->id, 'is_active' => true]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
         $this->attendee = User::factory()->create(['department_id' => $dept->id, 'is_active' => true]);
         $this->meeting = Meeting::factory()->create([
             'organizer_id' => $this->user->id,

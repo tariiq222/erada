@@ -23,7 +23,7 @@ class ResetDemoPasswordsCommand extends Command
 
     public function handle(): int
     {
-        if (! app()->environment(['local', 'staging'])) {
+        if (! app()->environment(['local', 'staging', 'testing'])) {
             $this->error('This command is not available in production.');
 
             return self::FAILURE;
@@ -41,8 +41,12 @@ class ResetDemoPasswordsCommand extends Command
                 continue;
             }
 
-            $user->password = $password;
-            $user->save();
+            $user->forceFill([
+                'password' => $password,
+                'failed_login_attempts' => 0,
+                'locked_until' => null,
+                'last_failed_login_at' => null,
+            ])->save();
             $count++;
 
             $this->info("✅ تم إعادة ضبط كلمة مرور: {$email}");

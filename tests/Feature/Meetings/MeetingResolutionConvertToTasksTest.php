@@ -60,7 +60,7 @@ class MeetingResolutionConvertToTasksTest extends TestCase
             'organization_id' => $this->project->organization_id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
 
         $this->meeting = Meeting::factory()->create([
             'department_id' => $this->dept->id,
@@ -308,7 +308,7 @@ class MeetingResolutionConvertToTasksTest extends TestCase
             'organization_id' => $this->project->organization_id,
             'is_active' => true,
         ]);
-        $viewer->assignRole('viewer');
+        $this->grantCanonicalViewer($viewer);
 
         $resolution = $this->makeResolution();
         $response = $this->postConvert($resolution, [
@@ -332,7 +332,7 @@ class MeetingResolutionConvertToTasksTest extends TestCase
             'organization_id' => $otherOrg->id,
             'is_active' => true,
         ]);
-        $crossOrgUser->assignRole('viewer');
+        $this->grantCanonicalViewer($crossOrgUser);
 
         $resolution = $this->makeResolution();
         $response = $this->postConvert($resolution, [

@@ -41,13 +41,13 @@ class DashboardStatisticsServiceTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
 
         $this->admin = User::factory()->create([
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->admin->assignRole('admin');
+        $this->grantCanonicalAdmin($this->admin);
     }
 
     // ========== اختبارات الإحصائيات الأساسية ==========

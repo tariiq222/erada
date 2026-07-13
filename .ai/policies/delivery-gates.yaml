@@ -1,0 +1,17 @@
+required_when_applicable:
+  - baseline
+  - unit
+  - contract
+  - backend_integration
+  - frontend_integration
+  - e2e
+  - lint
+  - typecheck
+  - build
+  - whole_branch_review
+  - full_fresh
+auto_pr_merge_requires:
+  - all_applicable_required_gates
+  - successful_pr_checks
+  - merged_pr
+  - post_merge_verification

@@ -2,16 +2,12 @@
 
 namespace Tests\Feature\Projects;
 
-use App\Modules\Core\Authorization\Capability;
-use App\Modules\Core\Models\ScopedRoleDefinition;
 use App\Modules\Core\Models\SystemSettings;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Services\ProjectSettingsService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -41,60 +37,25 @@ class ProjectSettingsUpdateTest extends TestCase
         parent::setUp();
         $this->seed(RolesAndPermissionsSeeder::class);
 
-        // Seed the org-scoped admin definition so AccessDecision::can(SETTINGS_EDIT)
-        // can grant via the Spatie role bridge. RolesAndPermissionsSeeder only
-        // creates the Spatie role; the engine needs the scoped_role_definitions row.
-        $this->seedAdminScopedRoleDefinition();
-
         $this->department = Department::factory()->create();
 
         $this->superAdmin = User::factory()->create([
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
 
         $this->settingsEditor = User::factory()->create([
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        // Engine path: assignRole('admin') routes through AccessDecision via the
-        // org-scoped definition seeded above.
-        $this->settingsEditor->assignRole('admin');
+        $this->grantCanonicalAdmin($this->settingsEditor);
 
         $this->regularUser = User::factory()->create([
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->regularUser->assignRole('viewer');
-    }
-
-    private function seedAdminScopedRoleDefinition(): void
-    {
-        $orgScopeId = DB::table('scope_types')->where('key', 'organization')->value('id');
-
-        $definition = ScopedRoleDefinition::firstOrNew([
-            'scope_type_id' => $orgScopeId,
-            'role_key' => 'admin',
-        ]);
-
-        $definition->forceFill([
-            'name' => 'organization.admin',
-            'display_name' => 'admin',
-            'scope_type' => 'organization',
-            'label_ar' => 'مدير إدارة',
-            'label_en' => 'Admin',
-            'permissions' => [
-                Capability::SETTINGS_VIEW,
-                Capability::SETTINGS_EDIT,
-                Capability::SETTINGS_MANAGE,
-            ],
-            'is_admin_role' => true,
-            'is_active' => true,
-            'sort_order' => 10,
-        ])->save();
-
-        Cache::flush();
+        $this->grantCanonicalViewer($this->regularUser);
     }
 
     /**

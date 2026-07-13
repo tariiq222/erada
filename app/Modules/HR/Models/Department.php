@@ -5,7 +5,6 @@ namespace App\Modules\HR\Models;
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Contracts\ScopeAware;
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\Projects\Models\Project;
 use App\Modules\Shared\Traits\LogsActivity;
@@ -301,15 +300,6 @@ class Department extends Model implements ScopeAware
     {
         return $this->hasMany(Task::class)
             ->where('type', 'department');
-    }
-
-    /**
-     * الأدوار السياقية المرتبطة بهذا القسم
-     */
-    public function scopedRoles(): HasMany
-    {
-        return $this->hasMany(ScopedRole::class, 'scope_id')
-            ->where('scope_type', ScopedRole::SCOPE_DEPARTMENT);
     }
 
     /**

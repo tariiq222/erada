@@ -90,11 +90,11 @@ class OVRModelPolicyNotificationTest extends TestCase
         ]);
 
         // منح المحرك بدلاً من الصلاحيات المسطّحة القديمة. viewer Spatie يمنح
-        // grantsAtOrganization(OVR_VIEW)=true عبر تعريف scoped_role_definitions
+        // A canonical organization assignment grants OVR_VIEW.
         // المُنشَأ في الـ seeder، فيغلق back-door المسطّح ovr.view_confidential ويُلزم
         // المرور بطبقة can_view_confidential من المحرك. role_key فريد (ovr_viewer)
         // لتجنّب تعارض findByKey مع تعريف legacy.test roles الذي يسبقه بالـ insert.
-        $departmentViewer->assignRole('viewer');
+        $this->grantCanonicalViewer($departmentViewer);
         $this->grantEngineCapability(
             $departmentViewer,
             [
@@ -120,7 +120,7 @@ class OVRModelPolicyNotificationTest extends TestCase
         // المُبلِّغ يملك قدرات تحرير/حذف/تصدير/إحصاء عبر المحرك (بدلاً من
         // ovr.edit_own / ovr.delete_own / ovr.export / ovr.view_statistics المسطّحة).
         // viewer Spatie يمنح grantsAtOrganization(OVR_VIEW) ليُغلق back-door المسطّح.
-        $this->reporter->assignRole('viewer');
+        $this->grantCanonicalViewer($this->reporter);
         $this->grantEngineCapability(
             $this->reporter,
             [

@@ -42,7 +42,7 @@ class MeetingResolutionCreateTest extends TestCase
             'organization_id' => $this->project->organization_id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
 
         $this->meeting = Meeting::factory()->create([
             'department_id' => $this->dept->id,

@@ -44,7 +44,9 @@ class SystemSettingsPolicyTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $user->assignRole($role);
+        $role === 'super_admin'
+                ? $this->grantCanonicalSuperAdmin($user)
+                : $this->assignCanonicalRole($user, $role);
 
         return $user;
     }

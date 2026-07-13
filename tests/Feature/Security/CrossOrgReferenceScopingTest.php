@@ -62,7 +62,7 @@ class CrossOrgReferenceScopingTest extends TestCase
             'department_id' => $homeDept->id,
             'is_active' => true,
         ]);
-        $user->assignRole('member');
+        $this->assignCanonicalRole($user, 'member');
 
         $this->actingAs($user, 'sanctum')
             ->putJson("/api/users/{$user->id}", [

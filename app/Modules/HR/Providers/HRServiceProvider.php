@@ -13,9 +13,10 @@ class HRServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // Tag the module's CapabilityProvider so AuthController can iterate
-        // all engined_capability_providers without referencing this module
-        // directly. See App\Modules\Core\Contracts\CapabilityProvider.
+        // Tag the module's CapabilityProvider as a legacy/advisory helper.
+        // The canonical /api/user projection derives capabilities from
+        // User::canonicalCapabilityNames() and does NOT iterate this tag.
+        // See App\Modules\Core\Contracts\CapabilityProvider.
         $this->app->tag([HRCapabilityProvider::class], 'engined_capability_providers');
     }
 

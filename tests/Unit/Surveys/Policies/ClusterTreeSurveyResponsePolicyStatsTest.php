@@ -214,7 +214,7 @@ class ClusterTreeSurveyResponsePolicyStatsTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         $childSurvey = $this->makeSurveyWithOrg($hospital->id);
 

@@ -2,7 +2,6 @@
 
 namespace App\Modules\Core\Http\Requests;
 
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\Projects\Models\Project;
 use Illuminate\Foundation\Http\FormRequest;
@@ -35,7 +34,7 @@ class AssignProjectRoleRequest extends FormRequest
     {
         return [
             'user_id' => ['required', 'integer', 'exists:users,id'],
-            'role' => ['required', 'string', 'in:'.implode(',', array_keys(ScopedRole::getProjectRoles()))],
+            'role_id' => ['required', 'integer', 'exists:authorization_roles,id'],
             'expires_at' => ['nullable', 'date', 'after:now'],
         ];
     }
@@ -72,13 +71,8 @@ class AssignProjectRoleRequest extends FormRequest
 
             // Privilege escalation: assigning PROJECT_MANAGER requires delete
             // capability on the project (matches ProjectController::addMember).
-            if ($this->input('role') === ScopedRole::PROJECT_MANAGER
-                && ! $actor->can('delete', $project)) {
-                $validator->errors()->add(
-                    'role',
-                    'لا يمكن ترقية مستخدم إلى مدير مشروع بدون صلاحية الحذف على المشروع.'
-                );
-            }
+            // Role capability escalation is enforced centrally by
+            // AuthorizationAssignmentActorGuard inside the assignment service.
         });
     }
 }

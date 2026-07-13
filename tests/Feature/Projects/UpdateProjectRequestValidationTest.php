@@ -3,7 +3,6 @@
 namespace Tests\Feature\Projects;
 
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
 use App\Modules\Projects\Models\Project;
@@ -47,7 +46,7 @@ class UpdateProjectRequestValidationTest extends TestCase
             'department_id' => $this->dept->id,
             'is_active' => true,
         ]);
-        $this->superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->superAdmin);
     }
 
     protected function makeProject(string $type, array $extra = []): Project
@@ -174,7 +173,8 @@ class UpdateProjectRequestValidationTest extends TestCase
             'department_id' => $homeDept->id,
             'is_active' => true,
         ]);
-        $editor->assignScopedRole('dept_manager', ScopedRole::SCOPE_DEPARTMENT, $homeDept->id, null, true);
+        $departmentAssignment = $this->assignCanonicalRole($editor, 'dept_manager', 'department', $homeDept->id);
+        $departmentAssignment->update(['inherit_to_children' => true]);
         Cache::flush();
 
         // مشروع في قسم المُعدِّل، وهو مديره السياقي (يملك صلاحية التحديث).
@@ -183,7 +183,7 @@ class UpdateProjectRequestValidationTest extends TestCase
             'department_id' => $homeDept->id,
             'type' => 'development',
         ]);
-        $editor->assignProjectRole($project, ScopedRole::PROJECT_MANAGER);
+        $this->assignCanonicalRole($editor, 'project_manager', 'project', $project->id);
         Cache::flush();
 
         $this->actingAs($editor, 'sanctum')

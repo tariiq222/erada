@@ -38,7 +38,7 @@ class KpiPolicyTest extends TestCase
             'organization_id' => null,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         return $user;
     }

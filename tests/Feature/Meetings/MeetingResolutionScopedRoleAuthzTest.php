@@ -22,14 +22,11 @@ use Tests\TestCase;
  * The brief's role-based checklist listed `dept_manager`, `dept_member`,
  * and `viewer` as roles that need explicit coverage. The previous
  * release validation passed on `super_admin`, `admin`, and cross-org;
- * this file adds the **scoped-role definitions** (which are engine
- * grants, NOT Spatie roles) so the matrix is complete.
+ * this file adds canonical department-scoped grants so the matrix is complete.
  *
- * Engine grants flow through `authorization_role_assignments` (the
- * `model_has_scoped_roles` table) joined to `scoped_role_definitions`.
- * Each definition's `permissions` JSON carries the capabilities it
- * grants. We use `GrantsEngineCapability::grantEngineCapability` to
- * wire the exact scope + permission shape that production grants.
+ * Engine grants flow exclusively through `authorization_role_assignments`
+ * joined to canonical role permissions. `GrantsEngineCapability` wires the
+ * exact scope + permission shape under test.
  */
 class MeetingResolutionScopedRoleAuthzTest extends TestCase
 {

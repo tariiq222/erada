@@ -465,10 +465,27 @@ vi.mock('react-i18next', () => {
 
 vi.mock('@entities/project', () => ({
   projectsApi: {
-    addMember: vi.fn().mockResolvedValue({}),
+    assignRoleAssignment: vi.fn().mockResolvedValue({
+      data: {
+        id: 103,
+        user_id: 3,
+        role_id: 12,
+        role_name: 'project_member',
+        role_display: 'عضو مشروع',
+      },
+    }),
     removeMember: vi.fn().mockResolvedValue({}),
-    // Return empty array so users are not filtered out
-    getMembers: vi.fn().mockResolvedValue([]),
+    updateMemberRole: vi.fn().mockResolvedValue({}),
+    getRoleAssignments: vi.fn().mockResolvedValue({
+      data: [
+        { id: 101, user_id: 1, role_id: 11, role_name: 'project_manager', role_display: 'مدير مشروع' },
+        { id: 102, user_id: 2, role_id: 12, role_name: 'project_member', role_display: 'عضو مشروع' },
+      ],
+      available_roles: [
+        { id: 11, name: 'project_manager', label: 'مدير مشروع' },
+        { id: 12, name: 'project_member', label: 'عضو مشروع' },
+      ],
+    }),
   },
 }));
 vi.mock('@entities/user', () => ({
@@ -745,9 +762,9 @@ describe('TeamSection Add Member', () => {
     fireEvent.click(screen.getByText('إضافة'));
 
     await waitFor(() => {
-      expect(projectsApi.addMember).toHaveBeenCalledWith(1, {
+      expect(projectsApi.assignRoleAssignment).toHaveBeenCalledWith(1, {
         user_id: 3,
-        role: 'member',
+        role_id: 11,
       });
     });
   });
@@ -792,7 +809,7 @@ describe('TeamSection Remove Member', () => {
     fireEvent.click(screen.getByText('تأكيد الحذف'));
 
     await waitFor(() => {
-      expect(projectsApi.removeMember).toHaveBeenCalledWith(1, 1);
+      expect(projectsApi.removeMember).toHaveBeenCalledWith(1, 1, 11);
     });
   });
 
@@ -848,7 +865,7 @@ describe('TeamSection Error Handling', () => {
 
   it('handles add member error', async () => {
     const { projectsApi } = await import('@entities/project');
-    (projectsApi.addMember as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Failed'));
+    (projectsApi.assignRoleAssignment as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Failed'));
 
     render(<TeamSection {...defaultProps} />);
 

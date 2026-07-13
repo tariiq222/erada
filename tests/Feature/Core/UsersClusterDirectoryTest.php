@@ -227,7 +227,7 @@ class UsersClusterDirectoryTest extends TestCase
             'organization_id' => $this->cluster->id,
             'is_active' => true,
         ]);
-        $super->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($super);
 
         $target = $this->makeTarget($this->hospital);
 
@@ -247,7 +247,7 @@ class UsersClusterDirectoryTest extends TestCase
             'department_id' => $this->deptHospital->id,
             'is_active' => true,
         ]);
-        $admin->assignRole('admin');
+        $this->grantCanonicalAdmin($admin);
 
         $target = User::factory()->create([
             'organization_id' => $this->hospital->id,

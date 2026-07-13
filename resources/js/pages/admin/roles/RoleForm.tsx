@@ -93,6 +93,7 @@ export const RoleForm: React.FC = () => {
   const [groups, setGroups] = useState<AbilityGroup[]>([]);
   const [scopeOptions, setScopeOptions] = useState<{ key: string; label: string }[]>([]);
   const [isSystem, setIsSystem] = useState(false);
+  const [isActive, setIsActive] = useState(true);
   // Per-module reach cap: module -> own | department | all (default all).
   const [reach, setReach] = useState<Record<string, string>>({});
 
@@ -124,19 +125,16 @@ export const RoleForm: React.FC = () => {
       try {
         const res = (await rolesApi.get(Number(id))) as { data: Role };
         const role = res.data;
-        // A role's grants live in two stores; the builder merges them into one set.
-        const selected = Array.from(
-          new Set([...(role.permissions || []), ...(role.capabilities || [])])
-        );
         setForm({
           name: role.name,
-          scope: role.scope_type || 'organization',
+          scope: role.scope_type,
           label_ar: role.label_ar || '',
           label_en: role.label_en || '',
-          selected,
+          selected: role.capabilities,
         });
-        setReach((role.reach as Record<string, string>) || {});
+        setReach(role.reach);
         setIsSystem(role.is_system);
+        setIsActive(role.is_active);
       } catch (err: any) {
         setError(err?.message || t('common.error'));
       } finally {
@@ -147,21 +145,14 @@ export const RoleForm: React.FC = () => {
 
   const locked = isEdit && isSystem;
 
-  // id -> store, so submit routes each grant to the correct backend column.
-  const idToStore = useMemo(() => {
-    const map = new Map<string, 'engine' | 'flat'>();
-    groups.forEach((g) => g.abilities.forEach((a) => map.set(a.id, g.store)));
-    return map;
-  }, [groups]);
-
-  // Modules the role grants at least one engine capability in — each gets a reach dial.
+  // Modules the role grants at least one capability in — each gets a reach dial.
   const selectedModules = useMemo(() => {
     const mods = new Set<string>();
     form.selected.forEach((id) => {
-      if (idToStore.get(id) === 'engine' && id.includes('.')) mods.add(id.split('.')[0]);
+      if (id.includes('.')) mods.add(id.split('.')[0]);
     });
     return Array.from(mods).sort();
-  }, [form.selected, idToStore]);
+  }, [form.selected]);
 
   const moduleLabel = useMemo(() => {
     const map = new Map<string, string>();
@@ -191,8 +182,6 @@ export const RoleForm: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
-      const permissions = form.selected.filter((p) => idToStore.get(p) === 'flat');
-      const permissions_capabilities = form.selected.filter((p) => idToStore.get(p) === 'engine');
       // Send only non-default reaches for granted modules — reach only restricts.
       const reachPayload: Record<string, string> = {};
       selectedModules.forEach((m) => {
@@ -200,12 +189,13 @@ export const RoleForm: React.FC = () => {
       });
       const payload = {
         name: form.name,
+        label: form.label_ar || form.label_en || form.name,
         scope_type: form.scope,
         label_ar: form.label_ar,
         label_en: form.label_en,
-        permissions,
-        permissions_capabilities,
+        capabilities: [...form.selected].sort(),
         reach: reachPayload,
+        is_active: isActive,
       };
       if (isEdit) await rolesApi.update(Number(id), payload);
       else await rolesApi.create(payload);
@@ -341,6 +331,18 @@ export const RoleForm: React.FC = () => {
               />
             </div>
           </div>
+          {!isSystem && (
+            <div className="mt-4 max-w-sm flex items-center justify-between gap-4">
+              <span className="text-sm font-medium text-[var(--text-primary)]">
+                {t('admin.roles.fields.active', 'الدور مفعّل')}
+              </span>
+              <Switch
+                checked={isActive}
+                onChange={() => setIsActive((current) => !current)}
+                aria-label={t('admin.roles.fields.active', 'الدور مفعّل')}
+              />
+            </div>
+          )}
         </Card>
 
         {/* الصلاحيات — بطاقة لكل وحدة */}

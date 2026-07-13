@@ -5,6 +5,7 @@ namespace App\Modules\Meetings\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Core\Authorization\AccessDecision;
 use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Contracts\ScopeAware;
 use App\Modules\Core\Models\User;
 use App\Modules\Meetings\Http\Requests\ApproveRecommendationRequest;
 use App\Modules\Meetings\Http\Requests\DeferRecommendationRequest;
@@ -23,6 +24,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Validation\ValidationException;
 
 class RecommendationController extends Controller
 {
@@ -157,6 +159,8 @@ class RecommendationController extends Controller
                     auth()->user(),
                     $meeting->organization_id
                 );
+
+                $this->assertDecidableTargetOrganization($validated, (int) $meeting->organization_id);
             }
         }
 
@@ -207,6 +211,8 @@ class RecommendationController extends Controller
                     auth()->user(),
                     $newMeeting->organization_id
                 );
+
+                $this->assertDecidableTargetOrganization($validated, (int) $newMeeting->organization_id);
             }
         }
 
@@ -468,5 +474,22 @@ class RecommendationController extends Controller
         }
 
         return $validated;
+    }
+
+    private function assertDecidableTargetOrganization(array $validated, int $organizationId): void
+    {
+        if (! isset($validated['decidable_type'], $validated['decidable_id'])) {
+            return;
+        }
+
+        $target = $validated['decidable_type']::query()
+            ->withoutGlobalScopes()
+            ->find((int) $validated['decidable_id']);
+
+        if (! $target instanceof ScopeAware || $target->scopeOrganizationId() !== $organizationId) {
+            throw ValidationException::withMessages([
+                'decidable_id' => 'The selected target is invalid.',
+            ]);
+        }
     }
 }

@@ -23,7 +23,7 @@ use Tests\TestCase;
  * Post-cutover (HR pre-cleanup + Wave 3 route middleware migration, 2026-06-28):
  *   - The HR route group is now gated by engine_capability:Capability::HR_VIEW
  *     (replaces the legacy `middleware('permission:view_hr')`). The engine
- *     capability grant alone satisfies the route gate; no Spatie `givePermissionTo`
+ *     capability grant alone satisfies the route gate without a compatibility grant
  *     is needed any more.
  *   - StoreEmployeeProfileRequest::authorize() now reads via AccessDecision too,
  *     so HR_MANAGE engine capability satisfies the FormRequest gate.
@@ -64,7 +64,7 @@ class EmployeeEngineAuthzTest extends TestCase
         // Engine route middleware + controller helper both need HR_VIEW; HR_MANAGE
         // satisfies the FormRequest authorize() gate (formerly manage_hr). Single
         // combined role covers both reads and writes — see the note in
-        // EmployeeControllerTest::setUp about assignScopedRole single-role-per-scope.
+        // EmployeeControllerTest::setUp documents the single assignment scope contract.
         $this->grantEngineCapability(
             $user,
             [Capability::HR_VIEW, Capability::HR_MANAGE]

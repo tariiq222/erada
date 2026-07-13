@@ -517,9 +517,8 @@ vi.mock('@shared/contexts/AuthContext', () => ({
     isAuthenticated: true,
     isLoading: false,
     logout: mockLogout,
+    can: () => true,
     isSuperAdmin: () => true,
-    hasRole: () => true,
-    hasPermission: () => true,
     canAccess: () => true,
     isAdmin: () => true,
   }),
@@ -829,18 +828,20 @@ describe('Sidebar Navigation Links', () => {
     expect(link).toBeInTheDocument();
   });
 
-  it('renders users link', () => {
-    mockLocation.pathname = '/admin/users';
+  it('renders the users link on the configured admin origin', async () => {
+    mockLocation.pathname = '/dashboard';
     render(<Sidebar isOpen={true} onToggle={vi.fn()} />);
 
+    await userEvent.click(screen.getAllByRole('button', { name: 'الإدارة' })[0]);
     const link = document.querySelector('a[href="/admin/users"]');
     expect(link).toBeInTheDocument();
   });
 
-  it('renders departments link', () => {
-    mockLocation.pathname = '/admin/departments';
+  it('renders the departments link on the configured admin origin', async () => {
+    mockLocation.pathname = '/dashboard';
     render(<Sidebar isOpen={true} onToggle={vi.fn()} />);
 
+    await userEvent.click(screen.getAllByRole('button', { name: 'الإدارة' })[0]);
     const link = document.querySelector('a[href="/admin/departments"]');
     expect(link).toBeInTheDocument();
   });

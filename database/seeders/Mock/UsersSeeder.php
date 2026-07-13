@@ -2,6 +2,8 @@
 
 namespace Database\Seeders\Mock;
 
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Seeder;
@@ -66,9 +68,26 @@ class UsersSeeder extends Seeder
                 ]
             );
 
-            if (! $user->hasRole($data['role'])) {
-                $user->assignRole($data['role']);
-            }
+            $canonicalRoleName = in_array($data['role'], ['project_manager', 'member'], true) ? 'viewer' : $data['role'];
+            $role = AuthorizationRole::query()->where('name', $canonicalRoleName)->firstOrFail();
+            $scopeType = $canonicalRoleName === 'super_admin' ? AuthorizationRoleAssignment::SCOPE_ALL : AuthorizationRoleAssignment::SCOPE_ORGANIZATION;
+            $scopeId = $scopeType === AuthorizationRoleAssignment::SCOPE_ALL ? null : $organizationId;
+
+            AuthorizationRoleAssignment::query()->updateOrCreate(
+                [
+                    'authorization_role_id' => $role->id,
+                    'user_id' => $user->id,
+                    'scope_type' => $scopeType,
+                    'scope_id' => $scopeId,
+                ],
+                [
+                    'organization_id' => $scopeType === AuthorizationRoleAssignment::SCOPE_ALL ? null : $organizationId,
+                    'inherit_to_children' => true,
+                    'expires_at' => null,
+                    'source' => 'migration',
+                    'granted_by' => null,
+                ],
+            );
 
             $this->users[] = $user;
         }

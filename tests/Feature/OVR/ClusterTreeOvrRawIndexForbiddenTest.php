@@ -114,7 +114,7 @@ class ClusterTreeOvrRawIndexForbiddenTest extends TestCase
             'organization_id' => $cluster->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         $this->makeReports($cluster, 2, 'OVR-CL');
         $this->makeReports($hospital, 3, 'OVR-HO');
@@ -148,7 +148,7 @@ class ClusterTreeOvrRawIndexForbiddenTest extends TestCase
             'organization_id' => $cluster->id,
             'is_active' => true,
         ]);
-        $user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($user);
 
         $this->makeReports($cluster, 2, 'OVR-CL');
         $this->makeReports($hospital, 3, 'OVR-HO');

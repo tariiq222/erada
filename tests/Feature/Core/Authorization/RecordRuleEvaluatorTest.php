@@ -52,10 +52,10 @@ class RecordRuleEvaluatorTest extends TestCase
 
     private function makeResource(): AuthorizationResource
     {
-        return AuthorizationResource::create([
-            'key' => self::RESOURCE_KEY,
-            'label' => 'Project',
-        ]);
+        return AuthorizationResource::firstOrCreate(
+            ['key' => self::RESOURCE_KEY],
+            ['label' => 'Project'],
+        );
     }
 
     /**
@@ -679,6 +679,54 @@ class RecordRuleEvaluatorTest extends TestCase
             $unassignedCompiled->toSql(),
             'Role-targeted rule must NOT apply to users without that role assignment.'
         );
+    }
+
+    public function test_role_rule_ignores_expired_assignments_and_inactive_roles(): void
+    {
+        $resource = $this->makeResource();
+        $org = Organization::create([
+            'name' => 'Lifecycle rule org',
+            'code' => 'LIFECYCLE-RULE-ORG',
+            'is_active' => true,
+        ]);
+        $role = AuthorizationRole::create([
+            'name' => 'lifecycle-rule-role',
+            'label' => 'Lifecycle rule role',
+            'is_active' => true,
+        ]);
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $assignment = AuthorizationRoleAssignment::create([
+            'authorization_role_id' => $role->id,
+            'user_id' => $user->id,
+            'scope_type' => 'organization',
+            'scope_id' => $org->id,
+            'organization_id' => $org->id,
+            'expires_at' => now()->subDay(),
+        ]);
+        AuthorizationRecordRule::create([
+            'authorization_resource_id' => $resource->id,
+            'authorization_role_id' => $role->id,
+            'action' => self::ACTION_READ,
+            'domain_json' => ['operator' => 'eq', 'column' => 'id', 'value' => 100],
+            'enabled' => true,
+        ]);
+
+        $evaluator = new RecordRuleEvaluator;
+        $this->assertSame($this->baseQuery()->toSql(), $evaluator->compileWheres(
+            self::RESOURCE_KEY,
+            self::ACTION_READ,
+            $user,
+            $this->baseQuery(),
+        )->toSql());
+
+        $assignment->update(['expires_at' => now()->addDay()]);
+        $role->update(['is_active' => false]);
+        $this->assertSame($this->baseQuery()->toSql(), $evaluator->compileWheres(
+            self::RESOURCE_KEY,
+            self::ACTION_READ,
+            $user,
+            $this->baseQuery(),
+        )->toSql());
     }
 
     public function test_wildcard_rule_applies_to_everyone(): void

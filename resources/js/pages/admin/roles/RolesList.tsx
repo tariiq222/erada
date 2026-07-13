@@ -40,7 +40,7 @@ export const RolesList: React.FC<{ embedded?: boolean }> = ({ embedded }) => {
     (r) =>
       !search ||
       r.name.toLowerCase().includes(search.toLowerCase()) ||
-      r.display_name.includes(search)
+      roleLabel(r).includes(search)
   );
 
   return (
@@ -124,20 +124,22 @@ export const RolesList: React.FC<{ embedded?: boolean }> = ({ embedded }) => {
                         {role.is_system && (
                           <IconLock className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
                         )}
-                        {role.display_name}
+                        {roleLabel(role)}
                       </div>
                       <div className="text-xs text-[var(--text-secondary)] font-mono">
                         {role.name}
                       </div>
                     </td>
                     <td className="py-3 px-2 font-mono text-xs">
-                      {role.permissions_count}
+                      {role.capabilities.length}
                     </td>
                     <td className="py-3 px-2 font-mono text-xs">
                       {role.users_count}
                     </td>
                     <td className="py-3 px-2">
-                      {role.is_system ? (
+                      {!role.is_active ? (
+                        <Badge variant="danger">{t('admin.roles.inactiveRole', 'غير مفعّل')}</Badge>
+                      ) : role.is_system ? (
                         <Badge variant="accent">{t('admin.roles.systemRole')}</Badge>
                       ) : (
                         <Badge variant="default">{t('admin.roles.customRole')}</Badge>
@@ -165,5 +167,7 @@ export const RolesList: React.FC<{ embedded?: boolean }> = ({ embedded }) => {
     </div>
   );
 };
+
+const roleLabel = (role: Role): string => role.label_ar || role.label || role.label_en || role.name;
 
 export default RolesList;

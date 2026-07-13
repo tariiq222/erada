@@ -27,7 +27,7 @@ class ClusterTreeMeetingReadRedactionTest extends TestCase
         $this->grantEngineCapability($clusterReader, [
             Capability::MEETINGS_VIEW,
             Capability::CLUSTER_TREE_VIEW,
-        ], 'organization', $cluster->id);
+        ], 'organization', $cluster->id, null, ['inherit_to_children' => true]);
 
         $organizer = User::factory()->create(['organization_id' => $hospital->id]);
         $attendee = User::factory()->create([

@@ -416,7 +416,7 @@ export const UserView: React.FC = () => {
 				<TabsContent value="permissions">
 					<Card className="p-0">
 						<CardContent className="p-6">
-							{/* Phase 9 cutover: display canonical capabilities instead of legacy permissions. */}
+							{/* Display the user's canonical capabilities. */}
 							{(user.capabilities?.length ?? 0) > 0 ? (
 								<div className="flex flex-wrap gap-2">
 									{(user.capabilities ?? []).map((capability) => (

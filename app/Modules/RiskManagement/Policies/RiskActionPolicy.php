@@ -14,7 +14,7 @@ use Illuminate\Auth\Access\HandlesAuthorization;
  * يعتمد كلياً على محرّك AuthZ الموحّد (AccessDecision::can).
  * RiskAction يطبّق ScopeAware — scopeParent() يرجع الـ Risk الأب —
  * فيُفرض عزل org عبر سلسلة الأب مباشرةً (إغلاق GAP-3).
- * المنطق القديم (Spatie flat permissions) أُزيل في Phase هـ Task 4.
+ * جميع القرارات تمر عبر محرك التفويض الموحّد.
  *
  * Phase CFA-05 — Cluster Full Authority widening:
  *   - view() widens via RISKS_VIEW + CLUSTER_TREE_VIEW on actor.org. The

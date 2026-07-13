@@ -54,7 +54,7 @@ class SurveyResponseReviewPermissionTest extends TestCase
             'organization_id' => ($org ?? $this->org)->id,
             'is_active' => true,
         ]);
-        $user->assignRole($role);
+        $this->assignCanonicalRole($user, $role);
 
         return $user;
     }

@@ -181,7 +181,7 @@ class RiskExportParityTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $superAdmin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($superAdmin);
 
         DB::flushQueryLog();
         DB::enableQueryLog();

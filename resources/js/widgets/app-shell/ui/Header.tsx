@@ -17,7 +17,7 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const { t } = useTranslation();
-  const { user, logout, canAccess } = useAuth();
+  const { user, logout, can } = useAuth();
   const { settings: systemSettings } = useSystemSettings();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   // triggerRef wraps the user button (in-flow), panelRef wraps the portaled menu (in <body>).
@@ -189,7 +189,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                     <IconUser className="h-4 w-4 text-[var(--text-tertiary)]" aria-hidden="true" />
                     <span className="text-sm font-medium">{t('nav.profile')}</span>
                   </Link>
-                  {canAccess({ permission: 'core.view_organizations' }) && (
+                  {can('core.view_organizations') && (
                     <Link
                       role="menuitem"
                       to="/admin/organizations"

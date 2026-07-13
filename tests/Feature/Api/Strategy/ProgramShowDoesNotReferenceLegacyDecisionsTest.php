@@ -52,7 +52,7 @@ class ProgramShowDoesNotReferenceLegacyDecisionsTest extends TestCase
             'department_id' => $this->department->id,
             'is_active' => true,
         ]);
-        $this->user->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($this->user);
 
         $this->portfolio = Portfolio::factory()->active()->create([
             'organization_id' => $this->org->id,

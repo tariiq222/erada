@@ -3,7 +3,6 @@
 namespace Tests\Feature\Projects;
 
 use App\Modules\Core\Models\Organization;
-use App\Modules\Core\Models\ScopedRole;
 use App\Modules\Core\Models\User;
 use App\Modules\Projects\Models\Project;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -49,13 +48,13 @@ class UpdateMemberRoleRouteTest extends TestCase
     {
         $org = Organization::factory()->create();
         $admin = User::factory()->create(['organization_id' => $org->id]);
-        $admin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($admin);
 
         $project = Project::factory()->create([
             'organization_id' => $org->id,
         ]);
         $member = User::factory()->create(['organization_id' => $org->id]);
-        $member->assignProjectRole($project, ScopedRole::PROJECT_MEMBER, $admin->id);
+        $this->assignCanonicalRole($member, 'project_member', 'project', $project->id);
 
         $response = $this->actingAs($admin)
             ->putJson(
@@ -75,13 +74,13 @@ class UpdateMemberRoleRouteTest extends TestCase
     {
         $org = Organization::factory()->create();
         $admin = User::factory()->create(['organization_id' => $org->id]);
-        $admin->assignRole('super_admin');
+        $this->grantCanonicalSuperAdmin($admin);
 
         $project = Project::factory()->create([
             'organization_id' => $org->id,
         ]);
         $member = User::factory()->create(['organization_id' => $org->id]);
-        $member->assignProjectRole($project, ScopedRole::PROJECT_MEMBER, $admin->id);
+        $this->assignCanonicalRole($member, 'project_member', 'project', $project->id);
 
         $response = $this->actingAs($admin)
             ->putJson(
