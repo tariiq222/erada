@@ -108,7 +108,7 @@ Route::middleware('auth:sanctum')->prefix('ovr')->group(function () {
         ->name('ovr.categories.reportable-types.store');
 });
 
-Route::middleware(['auth:sanctum', 'role:super_admin'])->prefix('admin/incident-types')->group(function () {
+Route::middleware('auth:sanctum')->prefix('admin/incident-types')->group(function () {
     Route::get('/', [IncidentTypeController::class, 'index'])
         ->middleware(['throttle:60,1', 'engine_capability:ovr.view']);
     Route::get('/list', [IncidentTypeController::class, 'list'])

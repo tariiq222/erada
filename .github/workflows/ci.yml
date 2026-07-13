@@ -191,6 +191,14 @@ jobs:
   quality:
     name: 📋 Code Quality
     runs-on: ubuntu-latest
+    env:
+      APP_ENV: testing
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: iradah_pmo_test
+      DB_USERNAME: iradah
+      DB_PASSWORD: secret
 
     services:
       postgres:
