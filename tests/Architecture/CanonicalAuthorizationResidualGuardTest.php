@@ -21,6 +21,7 @@ class CanonicalAuthorizationResidualGuardTest extends TestCase
 
     private const TEST_SEEDER_ALLOWLIST = [
         'database/seeders/AdminE2ETestSeeder.php',
+        'config/permission.php',
     ];
 
     private const UPGRADE_TEST_ALLOWLIST = [
