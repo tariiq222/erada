@@ -259,6 +259,7 @@ describe('2FA Loading State', () => {
     await userEvent.click(submitButton);
 
     expect(screen.getByText('جاري التحقق...')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('تحقق')).toBeInTheDocument());
   });
 
   it('disables button during verification', async () => {
@@ -273,6 +274,7 @@ describe('2FA Loading State', () => {
 
     const loadingButton = screen.getByText('جاري التحقق...').closest('button');
     expect(loadingButton).toBeDisabled();
+    await waitFor(() => expect(screen.getByText('تحقق')).toBeInTheDocument());
   });
 });
 
