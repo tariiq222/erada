@@ -1086,7 +1086,16 @@ const App: React.FC = () => {
 												   legacy/advisory CapabilityProvider tag. Users who
 												   legitimately hold `kpis.view` on actor.org were
 												   silently denied because the gate asked for a
-												   capability they were never granted. */}
+												   capability they were never granted.
+
+												   The /performance/kpis/new gate is `kpis.manage`
+												   (not the dormant `kpis.create` constant — see
+												   KpiController::authorizePerformance lines 188-191,
+												   which matches 'create' to Capability::KPIS_MANAGE;
+												   StoreKpiRequest::authorize() line 37 and
+												   KpiPolicy::create() line 104 likewise resolve to
+												   KPIS_MANAGE). A `kpis.create`-only user would
+												   reach the SPA form only to receive a backend 403. */}
 												<Route
 													path="/performance/kpis"
 													element={
@@ -1105,7 +1114,7 @@ const App: React.FC = () => {
 														<RequirePermission
 															requirement={{
 																capability:
-																	"kpis.create",
+																	"kpis.manage",
 															}}
 														>
 															<PerformanceKPIForm />

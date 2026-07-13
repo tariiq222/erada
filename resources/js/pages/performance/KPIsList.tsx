@@ -66,16 +66,20 @@ const KPIsList: React.FC = () => {
   });
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Phase 9.3 freeze cleanup (2026-07-06): KPI CRUD now goes through the
-  // canonical `kpis.*` namespace. The engine exposes `kpis.view/manage/edit/
-  // delete/create` (Capability::KPIS_*) and `kpis.manage` is the umbrella
-  // gate for create+edit+delete; we keep the granular gates for the row
-  // actions and fall back to `kpis.manage` when the granular key is absent.
-  const canCreateKpi = useCan('kpis.create');
+  // KPI CRUD gates use the canonical `kpis.*` capabilities matching the
+  // backend authorization. The create path resolves to `kpis.manage` per
+  // `KpiController::authorizePerformance` (lines 188-191: the `match` arm
+  // maps 'create' / 'update' / 'delete' to `Capability::KPIS_MANAGE`),
+  // `StoreKpiRequest::authorize()` (line 37), and `KpiPolicy::create()`
+  // (line 104). The `Capability::KPIS_CREATE = 'kpis.create'` constant is
+  // defined but unused in any controller/policy/request — using it on the
+  // SPA would let `kpis.create`-only users reach the form only to hit a
+  // backend 403, and would hide the button from `kpis.manage`-only users
+  // the engine accepts. So the create gate is `kpis.manage` only.
+  const canManageKpi = useCan('kpis.manage');
   const canEditKpi = useCan('kpis.edit');
   const canDeleteKpi = useCan('kpis.delete');
-  const canManageKpi = useCan('kpis.manage');
-  const canCreate = canCreateKpi || canManageKpi;
+  const canCreate = canManageKpi;
   const canEdit = canEditKpi || canManageKpi;
   const canDelete = canDeleteKpi || canManageKpi;
   const canImport = canCreate && canEdit;

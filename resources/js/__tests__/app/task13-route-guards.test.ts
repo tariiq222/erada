@@ -4,10 +4,16 @@
  * Pins three small but high-blast-radius contracts that the SPA relies on:
  *
  *  1. KPI routes in `resources/js/app.tsx` are gated on the canonical
- *     `kpis.view` / `kpis.create` / `kpis.edit` capabilities (NOT the
- *     legacy `strategy.*` capabilities which the Capability class
- *     does not list under Performance — see
- *     `App\Modules\Core\Authorization\Capability::KPIS_*`).
+ *     `kpis.*` capabilities matching the backend controllers
+ *     (`kpis.view`, `kpis.manage`, `kpis.edit`) — NOT the legacy
+ *     `strategy.*` capabilities, AND NOT the dormant `kpis.create`
+ *     constant (which the engine maps to no controller ability —
+ *     `KpiController::authorizePerformance` line 188-191 in the
+ *     `match` arm maps `'create' / 'update' / 'delete'` ALL to
+ *     `Capability::KPIS_MANAGE = 'kpis.manage'`; the same constant
+ *     flows through `StoreKpiRequest::authorize()` line 37 and
+ *     `KpiPolicy::create()` line 104). See
+ *     `App\Modules\Core\Authorization\Capability::KPIS_*`.
  *  2. The risk-statistics route uses `risks.view_reports` (the canonical
  *     reports capability in the Capability class), not the broader
  *     `risks.view` list-read capability.
@@ -191,7 +197,7 @@ describe('KPI route guards use canonical kpis.* capabilities', () => {
 
   it.each([
     ['/performance/kpis', 'kpis.view'],
-    ['/performance/kpis/new', 'kpis.create'],
+    ['/performance/kpis/new', 'kpis.manage'],
     ['/performance/kpis/:id', 'kpis.view'],
     ['/performance/kpis/:id/edit', 'kpis.edit'],
   ] as const)(
@@ -200,6 +206,27 @@ describe('KPI route guards use canonical kpis.* capabilities', () => {
       const slice = sliceForRoute(source, path);
       expect(slice, `route ${path} not found in app.tsx`).not.toBeNull();
       expect(slice).toContain(`"${capability}"`);
+    },
+  );
+
+  it.each([
+    '/performance/kpis/new',
+  ] as const)(
+    'route %s does NOT reference the dormant kpis.create capability',
+    (path) => {
+      // `kpis.create` is a defined Capability constant
+      // (Capability::KPIS_CREATE = 'kpis.create') but the backend never
+      // reads it: `KpiController::authorizePerformance('create')` matches
+      // `Capability::KPIS_MANAGE`, `StoreKpiRequest::authorize()` likewise
+      // checks `Capability::KPIS_MANAGE`, and `KpiPolicy::create()` returns
+      // `AccessDecision::can($user, Capability::KPIS_MANAGE)`. Gating the
+      // SPA on `kpis.create` would let `kpis.create`-only users reach the
+      // create form only to receive a backend 403, and would hide the form
+      // from `kpis.manage`-only users the engine accepts. Lock the gate to
+      // `kpis.manage`.
+      const slice = sliceForRoute(source, path);
+      expect(slice, `route ${path} not found in app.tsx`).not.toBeNull();
+      expect(slice).not.toMatch(/["']kpis\.create["']/);
     },
   );
 
@@ -238,14 +265,25 @@ describe('KPI NASAQ sidebar module uses canonical kpis.* capabilities', () => {
     expect(sidebar).toContain('"kpis.view"');
   });
 
-  it('gates the KPI create child on the canonical kpis.create capability', () => {
-    // The route guard at /performance/kpis/new uses `kpis.create` (see the
+  it('gates the KPI create child on the canonical kpis.manage capability', () => {
+    // The route guard at /performance/kpis/new uses `kpis.manage` (see the
     // route-guard describe block above). The sidebar's "create new" entry
     // is a navigation shortcut into that same route, so it must mirror the
-    // same capability string — otherwise users who only hold `kpis.create`
-    // would see the menu item but get blocked by the route guard.
+    // same capability string — otherwise users who only hold `kpis.manage`
+    // would see the menu item but get blocked by the route guard, or vice
+    // versa if the sidebar accepted the dormant `kpis.create` while the
+    // route was tightened to `kpis.manage`.
     expect(sidebar).not.toBeNull();
-    expect(sidebar).toContain('"kpis.create"');
+    expect(sidebar).toContain('"kpis.manage"');
+  });
+
+  it('does NOT pin the KPI create child to the dormant kpis.create capability', () => {
+    // Companion to the route-rejection test above. The backend create path
+    // resolves `Capability::KPIS_MANAGE` (see `KpiController::authorizePerformance`
+    // lines 188-191 and `StoreKpiRequest::authorize()` line 37) — never
+    // `kpis.create`. The sidebar child must mirror the route exactly.
+    expect(sidebar).not.toBeNull();
+    expect(sidebar).not.toMatch(/["']kpis\.create["']/);
   });
 
   it('does not reference legacy strategy.* capabilities anywhere in the KPI module', () => {
