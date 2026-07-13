@@ -93,6 +93,9 @@ class DatabaseSeeder extends Seeder
             [
                 'name' => $name,
                 'password' => Hash::make('password'),
+                'failed_login_attempts' => 0,
+                'locked_until' => null,
+                'last_failed_login_at' => null,
                 'job_title' => $jobTitle,
                 'is_active' => true,
                 // Stamp the default organization so the user's data appears in
