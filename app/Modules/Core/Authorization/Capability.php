@@ -474,6 +474,28 @@ final class Capability
     const SETTINGS_MANAGE = 'settings.manage';
 
     // ========================================================
+    // Organization-level user lifecycle (Phase 0)
+    // ========================================================
+    //
+    // Held by the `organization_super_admin` role; required to express
+    // the spec's actor / permission matrix. NOT granted to `admin` —
+    // the curated OrgAdmin role remains a read-mostly surface.
+    const USERS_ACTIVATE = 'users.activate';
+
+    const USERS_DEACTIVATE = 'users.deactivate';
+
+    // ========================================================
+    // Organization-scoped settings (Phase 0)
+    // ========================================================
+    //
+    // Distinct from `settings.view` / `settings.edit` (platform-wide
+    // SystemSettings). Held by `organization_super_admin` only;
+    // PlatformSuperAdmin retains both via Capability::all().
+    const ORGANIZATION_SETTINGS_VIEW = 'organization.settings.view';
+
+    const ORGANIZATION_SETTINGS_EDIT = 'organization.settings.edit';
+
+    // ========================================================
     // المرفقات — Attachments
     // ========================================================
 
