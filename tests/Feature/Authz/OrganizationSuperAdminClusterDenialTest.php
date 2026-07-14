@@ -315,6 +315,115 @@ class OrganizationSuperAdminClusterDenialTest extends TestCase
         );
     }
 
+    // ============================================================
+    // CSD-CA23078-CORE-010 (active plan Task 8 — cluster rescue +
+    // X-Organization-Id ignore regression).
+    //
+    // The Task 5 work above pins that the OrgSuper pivot set contains
+    // zero `core.cluster_tree.*` capabilities. Task 8 goes one layer
+    // deeper and pins that the cluster rescue branch inside
+    // `AccessDecision::evaluateCanonical()` MUST NOT fire for an
+    // OrgSuper actor even when the actor's organization is the
+    // ancestor of the target's organization (the only shape in which
+    // the rescue branch COULD grant), and that the X-Organization-Id
+    // header resolution keeps an OrgSuper actor locked to its own
+    // organization. These additve tests do not modify any Task 5
+    // method — they exercise a fresh engine-layer trace path and the
+    // existing `User::resolveActiveOrganizationId()` seam.
+    // ============================================================
+
+    public function test_org_super_cluster_rescue_branch_does_not_fire_against_descendant_target(): void
+    {
+        [$actorOrg, $actor] = $this->seedOrgSuper();
+
+        // Build the ONLY shape in which `canonicalClusterTreeGrant()`
+        // could plausibly fire: target in a descendant organization of
+        // the actor's organization. If the rescue branch returned a
+        // grant for OrgSuper, the trace layer would be 'cluster_tree_rescue'.
+        $descendantOrg = Organization::factory()->create([
+            'is_active' => true,
+            'parent_id' => $actorOrg->id,
+        ]);
+        $crossOrgTarget = User::factory()->create([
+            'organization_id' => $descendantOrg->id,
+            'is_active' => true,
+        ]);
+
+        foreach ([Capability::CLUSTER_TREE_VIEW, Capability::CLUSTER_TREE_MANAGE, Capability::CLUSTER_TREE_EXPORT] as $capability) {
+            $trace = AccessDecision::canonicalTrace($actor, $capability, $crossOrgTarget);
+
+            $this->assertFalse(
+                $trace['granted'],
+                "OrgSuper must NOT be granted $capability via cluster rescue against a descendant target."
+            );
+            $this->assertNotSame(
+                'cluster_tree_rescue',
+                $trace['layer'],
+                "OrgSuper must NEVER reach the cluster_tree_rescue trace layer for $capability; "
+                .'got: '.json_encode($trace)
+            );
+        }
+
+        // The boolean façade agrees with the trace for every primitive.
+        $this->assertFalse(AccessDecision::can($actor, Capability::CLUSTER_TREE_VIEW, $crossOrgTarget));
+        $this->assertFalse(AccessDecision::can($actor, Capability::CLUSTER_TREE_MANAGE, $crossOrgTarget));
+        $this->assertFalse(AccessDecision::can($actor, Capability::CLUSTER_TREE_EXPORT, $crossOrgTarget));
+    }
+
+    public function test_x_organization_id_header_does_not_widen_for_org_super(): void
+    {
+        [$actorOrg, $actor] = $this->seedOrgSuper();
+
+        // A second, unrelated organization the X-Organization-Id
+        // header could nominally point at. If the header resolves to
+        // this id instead of the actor's own id, an OrgSuper actor
+        // could pivot their entire scope across tenants.
+        $otherOrg = Organization::factory()->create(['is_active' => true]);
+
+        $resolved = $actor->resolveActiveOrganizationId((int) $otherOrg->id);
+
+        // Locked to actor.organization_id; X-Organization-Id header is
+        // ignored for any non-super-admin actor, including Org-Super.
+        $this->assertSame(
+            (int) $actorOrg->id,
+            $resolved,
+            'OrgSuper actors must not be widened by X-Organization-Id; only super_admin may switch orgs.'
+        );
+
+        // A null requested id (header absent) must keep the actor
+        // pinned to their own organization rather than escalating to a
+        // cross-tenant null (which would mean "all orgs").
+        $this->assertSame(
+            (int) $actorOrg->id,
+            $actor->resolveActiveOrganizationId(null),
+            'OrgSuper with null X-Organization-Id header must stay locked to actor.organization_id.'
+        );
+    }
+
+    public function test_org_super_audit_view_cross_org_is_strictly_denied_without_cluster_rescue(): void
+    {
+        [, $actor] = $this->seedOrgSuper();
+
+        // An Organization-level target in a DIFFERENT org. The audit.view
+        // surface explicitly maps to organization-wide audit pivots; an
+        // accidental cluster rescue widening here would let OrgSuper
+        // directors read another tenant's audit log.
+        $crossOrg = Organization::factory()->create(['is_active' => true]);
+
+        $trace = AccessDecision::canonicalTrace($actor, Capability::AUDIT_VIEW, $crossOrg);
+
+        $this->assertFalse(
+            $trace['granted'],
+            'OrgSuper must NOT receive a cluster rescue grant for audit.view against a cross-org target.'
+        );
+        $this->assertNotSame(
+            'cluster_tree_rescue',
+            $trace['layer'],
+            'audit.view must NEVER trace through cluster_tree_rescue for OrgSuper; '
+            .'got: '.json_encode($trace)
+        );
+    }
+
     /**
      * @return array{0: Organization, 1: User}
      */
