@@ -145,7 +145,7 @@ describe('admin user contracts', () => {
     const row = await screen.findByRole('row', { name: /Audit User/ });
     expect(within(row).getByRole('link', { name: i18n.t('common.view') })).toHaveAttribute('href', '/users/9');
     await actor.click(within(row).getByRole('button', { name: i18n.t('common.delete') }));
-    expect(confirm).toHaveBeenCalledWith(i18n.t('users.delete_confirm'));
+    expect(confirm).toHaveBeenCalledWith(i18n.t('users.delete_confirm', { name: 'Audit User' }));
     expect(apiDelete).toHaveBeenCalledWith('/users/9');
   });
 

@@ -103,6 +103,15 @@ export const adminApi = {
     update: (id: number, data: Partial<AdminUserInput>) => api.put(`/users/${id}`, data),
     unlock: (id: number) => api.post(`/users/${id}/unlock`, undefined),
     delete: (id: number) => api.delete(`/users/${id}`),
+    /**
+     * Activate / deactivate alias for `update(id, { is_active })`. The backend
+     * routes the mutation through the canonical FormRequest that authorizes
+     * OrgSuper against ordinary same-org targets only; protected admins
+     * (`super_admin`, `organization_super_admin`) are rejected, so the FE
+     * also hides the controls via `canMutateTargetLifecycle`.
+     */
+    setActive: (id: number, isActive: boolean) =>
+      api.put(`/users/${id}`, { is_active: isActive }),
     all: async (organizationId: number) => {
       const data: AdminUser[] = [];
       let page = 1;

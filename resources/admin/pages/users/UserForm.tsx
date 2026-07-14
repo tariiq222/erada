@@ -5,6 +5,7 @@ import { IconUser } from '@tabler/icons-react';
 import { useAuth } from '@shared/contexts/AuthContext';
 import { adminApi, apiErrorMessage } from '@admin/api/adminApi';
 import type { AdminUserInput, DepartmentSummary, Organization, RoleDefinition } from '@admin/model/admin';
+import { ActorView } from '@admin/model/adminPredicates';
 import { AdminPageHeader } from '@admin/pages/access/AdminPageHeader';
 import { Alert } from '@shared/ui/Alert';
 import { Button } from '@shared/ui/Button';
@@ -16,10 +17,13 @@ const empty: AdminUserInput = { name: '', email: '', password: '', organization_
 export function UserForm() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const actor = user as ActorView | null;
+  const actorIsSuperAdmin = actor?.is_super_admin === true;
+  const actorOrganizationId = actor?.organization_id ?? null;
   const { userId } = useParams();
   const navigate = useNavigate();
   const editing = userId !== undefined;
-  const [form, setForm] = useState<AdminUserInput>({ ...empty, organization_id: (user as { organization_id?: number | null } | null)?.organization_id ?? null });
+  const [form, setForm] = useState<AdminUserInput>({ ...empty, organization_id: actorOrganizationId });
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [departments, setDepartments] = useState<DepartmentSummary[]>([]);
   const [roles, setRoles] = useState<RoleDefinition[]>([]);
@@ -47,12 +51,31 @@ export function UserForm() {
     let active = true;
     (async () => {
       try {
-        const organizationResponse = await adminApi.organizations.all();
+        // Super admin keeps the cross-tenant organization catalog so the
+        // selector stays usable. OrgSuper never makes this call — the actor's
+        // organization is locked from the auth payload and the selector is
+        // hidden entirely below.
+        const organizationResponse = actorIsSuperAdmin ? await adminApi.organizations.all() : { data: [] as Organization[] };
         const roleResponse = await adminApi.roles.list();
-        let next: AdminUserInput = { ...empty, organization_id: (user as { organization_id?: number | null } | null)?.organization_id ?? null };
+        let next: AdminUserInput = { ...empty, organization_id: actorOrganizationId };
         if (editing) {
           const record = await adminApi.users.get(Number(userId));
-          next = { name: record.name, email: record.email, password: '', organization_id: record.organization_id, department_id: record.department?.id ?? record.department_id ?? null, phone: record.phone, extension: record.extension, job_title: record.job_title, is_active: record.is_active, roles: (record.roles ?? []).filter((role) => role !== 'super_admin') };
+          // OrgSuper cannot widen the target's organization — the form is
+          // pinned to the actor's organization regardless of what the row
+          // carries. Super admin keeps the existing flow.
+          const lockedOrganizationId = actorIsSuperAdmin ? record.organization_id : actorOrganizationId;
+          next = {
+            name: record.name,
+            email: record.email,
+            password: '',
+            organization_id: lockedOrganizationId,
+            department_id: record.department?.id ?? record.department_id ?? null,
+            phone: record.phone,
+            extension: record.extension,
+            job_title: record.job_title,
+            is_active: record.is_active,
+            roles: (record.roles ?? []).filter((role) => role !== 'super_admin'),
+          };
           if (active) { setForm(next); setHasLockedSuperAdminRole((record.roles ?? []).includes('super_admin')); }
         }
         if (active) {
@@ -66,9 +89,10 @@ export function UserForm() {
       } finally { if (active) setLoading(false); }
     })();
     return () => { active = false; invalidateDepartmentRequests(); };
-  }, [editing, invalidateDepartmentRequests, loadDepartments, t, user, userId]);
+  }, [actorIsSuperAdmin, actorOrganizationId, editing, invalidateDepartmentRequests, loadDepartments, t, userId]);
 
   const chooseOrganization = async (organizationId: number | null) => {
+    if (!actorIsSuperAdmin) return;
     setForm((current) => ({ ...current, organization_id: organizationId, department_id: null }));
     await loadDepartments(organizationId);
   };
@@ -99,7 +123,9 @@ export function UserForm() {
     <Input aria-label={t('common.name')} label={t('common.name')} value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} error={errors.name} />
     <Input aria-label={t('common.email')} type="email" label={t('common.email')} value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} error={errors.email} />
     <Input aria-label={t('users.password')} type="password" label={t('users.password')} value={form.password ?? ''} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} error={errors.password} />
-    <label className="text-sm">{t('admin.organizations.title')}<select aria-label={t('admin.organizations.title')} disabled={editing} className="mt-1 block w-full rounded-lg border p-2" value={form.organization_id ?? ''} onChange={(event) => void chooseOrganization(event.target.value ? Number(event.target.value) : null)}><option value="">{t('common.none')}</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label>
+    {actorIsSuperAdmin && (
+      <label className="text-sm">{t('admin.organizations.title')}<select aria-label={t('admin.organizations.title')} disabled={editing} className="mt-1 block w-full rounded-lg border p-2" value={form.organization_id ?? ''} onChange={(event) => void chooseOrganization(event.target.value ? Number(event.target.value) : null)}><option value="">{t('common.none')}</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label>
+    )}
     <label className="text-sm">{t('common.department')}<select aria-label={t('common.department')} className="mt-1 block w-full rounded-lg border p-2" value={form.department_id ?? ''} onChange={(event) => setForm((current) => ({ ...current, department_id: event.target.value ? Number(event.target.value) : null }))}><option value="">{t('users.select_department')}</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label>
     <Input label={t('common.phone')} value={form.phone ?? ''} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} />
     <Input label={t('users.extension')} value={form.extension ?? ''} onChange={(event) => setForm((current) => ({ ...current, extension: event.target.value }))} />
