@@ -188,6 +188,114 @@ class OrganizationSuperAdminClusterDenialTest extends TestCase
         );
     }
 
+    public function test_audit_insertion_failure_rolls_back_paired_pivot_deletion(): void
+    {
+        // CSD-CA23078-CORE-009 (Task 5 — atomic delete+audit invariant).
+        //
+        // The sweep's contract is "delete + audit in the same
+        // transaction, no orphan deletions AND no orphan audits on
+        // mid-sweep failure." This test forces a mid-sweep failure by
+        // adding a CHECK constraint on `authorization_assignment_audits`
+        // that rejects the sweep's specific event tag, so the very
+        // first audit insert inside the sweep's transaction raises a
+        // CHECK violation. The expected behavior is:
+        //   1. The exception propagates out of the sweep action.
+        //   2. The pivot deletion that ran immediately before the
+        //      failed audit insert is rolled back — pivots are intact.
+        //   3. No partial audit row from the failed insert is left
+        //      behind (PostgreSQL rolls back the whole statement on
+        //      the CHECK violation; the row never reaches the table).
+        //
+        // Implementation notes:
+        //   - `ALTER TABLE ... ADD CONSTRAINT ... CHECK` is a
+        //     transactional DDL in PostgreSQL 12+, so adding it inside
+        //     RefreshDatabase's outer transaction is safe — the
+        //     constraint reverts when the test's transaction is rolled
+        //     back at tearDown.
+        //   - The sweep's `DB::transaction` becomes a SAVEPOINT when
+        //     nested inside RefreshDatabase's outer transaction. A
+        //     CHECK violation inside the savepoint rolls back ONLY
+        //     the savepoint; the outer transaction stays usable, so
+        //     the post-failure assertions can run.
+        (new RolesAndPermissionsSeeder)->run();
+
+        $orgSuper = AuthorizationRole::query()->where('name', 'organization_super_admin')->firstOrFail();
+        $organizationResourceId = DB::table('authorization_resources')
+            ->where('key', Organization::class)
+            ->value('id');
+
+        $this->assertNotNull($organizationResourceId, 'precondition: Organization resource row must exist.');
+
+        $this->seedObsoleteOrgSuperOrganizationViewEditPivots($orgSuper->id, $organizationResourceId);
+
+        $pivotsBefore = DB::table('authorization_role_permissions')
+            ->where('authorization_role_id', $orgSuper->id)
+            ->where('authorization_resource_id', $organizationResourceId)
+            ->whereIn('action', SweepObsoleteOrgSuperOrganizationViewEditPivotsAction::TARGET_ACTIONS)
+            ->count();
+        $this->assertSame(2, $pivotsBefore, 'precondition: 2 obsolete pivots must be present before the sweep.');
+
+        $auditBefore = $this->countSweepAuditRows();
+        $this->assertSame(0, $auditBefore, 'precondition: no sweep audit rows before the sweep.');
+
+        // Force the audit insert to fail: a CHECK constraint that
+        // rejects the sweep's event tag. The constraint is added
+        // inside the test's outer transaction; PostgreSQL reverts
+        // it on tearDown.
+        DB::statement(
+            'ALTER TABLE authorization_assignment_audits '
+            .'ADD CONSTRAINT test_force_audit_failure_check '
+            ."CHECK (event NOT IN ('".SweepObsoleteOrgSuperOrganizationViewEditPivotsAction::AUDIT_EVENT."'))"
+        );
+
+        // The action's `DB::transaction` becomes a SAVEPOINT here
+        // (nested inside RefreshDatabase's outer transaction). The
+        // pivot delete runs first, then the audit insert fires the
+        // CHECK violation, the savepoint rolls back, and the
+        // exception propagates out. The outer transaction is
+        // untouched.
+        $threw = false;
+        $thrownMessage = '';
+        try {
+            SweepObsoleteOrgSuperOrganizationViewEditPivotsAction::execute();
+        } catch (\Throwable $exception) {
+            $threw = true;
+            $thrownMessage = $exception->getMessage();
+        }
+
+        $this->assertTrue(
+            $threw,
+            'Sweep must propagate the audit-insert failure out as an exception (got no throw).'
+        );
+
+        // The pivot deletion that ran immediately before the failed
+        // audit insert is rolled back by the savepoint — the
+        // pivots are intact.
+        $pivotsAfter = DB::table('authorization_role_permissions')
+            ->where('authorization_role_id', $orgSuper->id)
+            ->where('authorization_resource_id', $organizationResourceId)
+            ->whereIn('action', SweepObsoleteOrgSuperOrganizationViewEditPivotsAction::TARGET_ACTIONS)
+            ->count();
+
+        $this->assertSame(
+            2,
+            $pivotsAfter,
+            'Pivot deletion must be rolled back when the paired audit insert fails '
+            .'(the CHECK violation fired on the first audit insert; the savepoint '
+            .'rollback must have undone the first pivot delete too). '
+            .'Original error: '.$thrownMessage
+        );
+
+        // No audit row leaked through the failed savepoint. The CHECK
+        // violation rolls back the INSERT statement, so the audit
+        // table is unchanged.
+        $this->assertSame(
+            $auditBefore,
+            $this->countSweepAuditRows(),
+            'Failed audit insert must leave zero rows in authorization_assignment_audits.'
+        );
+    }
+
     /**
      * @return array{0: Organization, 1: User}
      */

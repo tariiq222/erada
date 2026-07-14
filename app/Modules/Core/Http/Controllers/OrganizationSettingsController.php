@@ -8,7 +8,6 @@ use App\Modules\Core\Http\Requests\ViewOrganizationSettingsRequest;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\OrganizationSettings;
 use App\Modules\Shared\Models\ActivityLog;
-use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
@@ -35,20 +34,34 @@ class OrganizationSettingsController extends Controller
     /**
      * Deep-merge PUT.
      *
-     * - `SELECT FOR UPDATE` first: locks the row if it already exists so
-     *   concurrent PUTs serialize on the existing-row path. If no row
-     *   exists yet, the lock acquires nothing and we fall through to a
-     *   direct INSERT (not `firstOrCreate`, which would race a second
-     *   concurrent transaction into a unique-constraint violation that
-     *   `lockForUpdate()->firstOrCreate()` does not catch).
-     * - The INSERT can still race when two concurrent PUTs arrive before
-     *   the row exists. PostgreSQL serializes the first INSERT by an
-     *   implicit row lock held until commit; the loser of the race
-     *   catches the SQLSTATE 23505 `QueryException` and re-fetches the
-     *   row under `SELECT FOR UPDATE`, which now blocks on the
-     *   committed winner. The loser's merge then proceeds against the
-     *   winner's committed settings — last writer wins, no corrupt
-     *   half-state visible to either transaction.
+     * - Atomic row upsert: `INSERT ... ON CONFLICT (organization_id) DO
+     *   NOTHING` (PostgreSQL 9.5+) is used instead of `SELECT FOR
+     *   UPDATE → firstOrCreate / create`. The two naive approaches BOTH
+     *   race when two concurrent PUTs arrive before the row exists:
+     *   both transactions see `lockForUpdate()->first() === null` and
+     *   both attempt the INSERT. The loser's unique-constraint hit
+     *   raises a SQLSTATE 23505 `QueryException` — and in PostgreSQL
+     *   that single 23505 marks the WHOLE transaction as in-error
+     *   state, so every subsequent query inside the same transaction
+     *   (including the follow-up `SELECT FOR UPDATE` that the
+     *   "catch-23505-then-re-fetch" pattern used to rely on) fails
+     *   with `current transaction is aborted, commands ignored until
+     *   end of transaction block`. The only safe recovery is
+     *   `ROLLBACK` plus a full retry of the transaction, which
+     *   re-emits the audit log and re-runs the deep-merge work for
+     *   what was a benign race. `ON CONFLICT DO NOTHING` is atomic at
+     *   the row level: the second writer's INSERT becomes a no-op
+     *   without ever raising 23505, no transaction is ever aborted,
+     *   and the second writer proceeds to a normal `SELECT FOR
+     *   UPDATE` (which now sees the just-inserted-or-already-present
+     *   row and acquires the existing row lock if any other
+     *   transaction holds it).
+     * - The loser's `SELECT FOR UPDATE` then blocks on the winner's
+     *   implicit row lock until the winner commits, at which point
+     *   the loser sees the winner's committed `settings` and
+     *   deep-merges its own payload against that committed state —
+     *   last writer wins on the union, no half-state visible to
+     *   either transaction.
      * - Deep merge across the three top-level keys
      *   (`locale_overrides`, `branding_overrides`, `notification_templates`).
      *   Only the keys present in the validated payload are written; sibling
@@ -70,44 +83,42 @@ class OrganizationSettingsController extends Controller
         unset($validated['__missing_idempotency_key']); // internal sentinel, never persisted.
 
         $settings = DB::transaction(function () use ($actor, $organization, $validated, $request): OrganizationSettings {
+            // Step 1: atomic row upsert. Either we just inserted the
+            // default-payload row, or the row already existed and our
+            // INSERT was a silent no-op. Either way the row is now
+            // present in storage and uniquely identified by
+            // `organization_id`. No SQLSTATE 23505 is ever raised; no
+            // transaction is ever aborted by this statement.
+            $defaultPayload = $this->defaultPayload();
+            $now = now();
+            DB::insert(
+                'INSERT INTO organization_settings '
+                .'(organization_id, settings, created_by, updated_by, created_at, updated_at) '
+                .'VALUES (?, ?::jsonb, ?, NULL, ?, ?) '
+                .'ON CONFLICT (organization_id) DO NOTHING',
+                [
+                    $organization->id,
+                    json_encode($defaultPayload, JSON_THROW_ON_ERROR),
+                    $actor?->id,
+                    $now,
+                    $now,
+                ],
+            );
+
+            // Step 2: lock the row. The upsert above is committed
+            // (this is a single transaction; the row is now visible to
+            // our own session). `lockForUpdate` acquires the row lock
+            // immediately on the no-op path; on the win path it locks
+            // our own just-inserted row. If a concurrent PUT holds the
+            // row lock, we block here until that transaction commits
+            // or rolls back, then proceed against whichever row state
+            // it left behind.
             $row = OrganizationSettings::query()
                 ->where('organization_id', $organization->id)
                 ->lockForUpdate()
-                ->first();
+                ->firstOrFail();
 
-            if ($row === null) {
-                // No row exists yet. Insert the default payload. Under
-                // contention, two concurrent transactions may BOTH reach
-                // this branch when no row exists yet; the
-                // `organization_id` unique index serializes them — the
-                // winner of the INSERT commits a default row, the loser
-                // catches a SQLSTATE 23505 and re-fetches under
-                // `lockForUpdate()` (which now blocks on the winner's
-                // implicit row lock until that transaction commits, then
-                // returns the winner's row).
-                try {
-                    $row = OrganizationSettings::query()->create([
-                        'organization_id' => $organization->id,
-                        'settings' => $this->defaultPayload(),
-                        'created_by' => $actor?->id,
-                    ]);
-                } catch (QueryException $exception) {
-                    if ((string) $exception->getCode() !== '23505') {
-                        throw $exception;
-                    }
-
-                    $row = OrganizationSettings::query()
-                        ->where('organization_id', $organization->id)
-                        ->lockForUpdate()
-                        ->firstOrFail();
-                }
-            }
-
-            // $row is now exclusively locked by this transaction (we
-            // either locked the existing row, won the INSERT race, or
-            // re-fetched under lock after losing the INSERT race — every
-            // path ends with this transaction holding the row lock).
-            $previous = $row->settings ?? $this->defaultPayload();
+            $previous = $row->settings ?? $defaultPayload;
             $merged = $this->deepMergeSettings($previous, $validated);
 
             $row->fill([
