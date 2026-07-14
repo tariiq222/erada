@@ -2341,6 +2341,8 @@
     "admin.shell.sidebar.aria": "تنقل المدير العام",
     "admin.shell.sidebar.section_primary": "الحوكمة",
     "admin.shell.sidebar.section_secondary": "الأدوات التقنية",
+    "admin.shell.sidebar.section_org": "المؤسسة",
+    "admin.shell.sidebar.section_platform": "المنصة",
     "admin.shell.sidebar.footer": "لوحة تحكم للقراءة فقط",
     "admin.shell.nav.overview": "نظرة عامة",
     "admin.shell.nav.security": "تنبيهات الأمان",

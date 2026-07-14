@@ -2284,6 +2284,8 @@
   "admin.shell.sidebar.aria": "Super Admin navigation",
   "admin.shell.sidebar.section_primary": "Governance",
   "admin.shell.sidebar.section_secondary": "Technical controls",
+  "admin.shell.sidebar.section_org": "Organization",
+  "admin.shell.sidebar.section_platform": "Platform",
   "admin.shell.sidebar.footer": "Read-only control plane",
   "admin.shell.nav.overview": "Overview",
   "admin.shell.nav.security": "Security alerts",

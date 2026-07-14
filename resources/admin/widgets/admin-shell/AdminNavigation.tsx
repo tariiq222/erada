@@ -107,9 +107,13 @@ interface AdminNavigationProps {
  *   2. Platform surface (visible to super admin only)
  *
  * Within each section items render in `ADMIN_NAV_ITEMS` declaration order.
- * Section headings use the existing RTL/LTR i18n keys
- * (`section_primary` / `section_secondary`) so translation parity with the
- * legacy chrome is preserved.
+ * Section headings use audience-scoped i18n keys
+ * (`admin.shell.sidebar.section_org` / `admin.shell.sidebar.section_platform`)
+ * so the labels accurately describe the audience they group, regardless of
+ * RTL/LTR. The legacy `section_primary` / `section_secondary` keys are
+ * preserved for the legacy main-SPA `AdminSidebar.tsx` and are NOT used
+ * here to avoid leaking stale "Governance" / "Technical controls" labels
+ * into the unified admin SPA.
  */
 export function AdminNavigation({ mode, onNavigate }: AdminNavigationProps) {
   const { t } = useTranslation();
@@ -118,7 +122,9 @@ export function AdminNavigation({ mode, onNavigate }: AdminNavigationProps) {
   type Section = {
     id: AdminNavAudience;
     items: AdminNavItem[];
-    headingKey: 'admin.shell.sidebar.section_primary' | 'admin.shell.sidebar.section_secondary';
+    headingKey:
+      | 'admin.shell.sidebar.section_org'
+      | 'admin.shell.sidebar.section_platform';
   };
 
   const sections: Section[] = (
@@ -132,8 +138,8 @@ export function AdminNavigation({ mode, onNavigate }: AdminNavigationProps) {
       items,
       headingKey:
         audience === 'org'
-          ? 'admin.shell.sidebar.section_primary'
-          : 'admin.shell.sidebar.section_secondary',
+          ? 'admin.shell.sidebar.section_org'
+          : 'admin.shell.sidebar.section_platform',
     };
   });
 

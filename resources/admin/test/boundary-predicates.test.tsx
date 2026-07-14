@@ -340,4 +340,95 @@ describe('admin navigation audience predicate', () => {
       expect(orgItems.map((orgItem) => orgItem.href)).not.toContain(item.href);
     }
   });
+
+  it('labels the org section with the section_org audience key (not the legacy governance key)', () => {
+    authState.user = {
+      id: 13,
+      name: 'Org Super',
+      email: 'orgsuper-section@example.test',
+      is_super_admin: false,
+      is_organization_super_admin: true,
+      is_org_admin: false,
+      roles: ['organization_super_admin'],
+    };
+
+    render(
+      <MemoryRouter initialEntries={['/users']}>
+        <AdminNavigation mode="desktop" />
+      </MemoryRouter>,
+    );
+
+    const nav = screen.getByTestId('admin-desktop-navigation');
+    const orgHeading = i18n.t('admin.shell.sidebar.section_org');
+    const legacyPrimary = i18n.t('admin.shell.sidebar.section_primary');
+    const legacySecondary = i18n.t('admin.shell.sidebar.section_secondary');
+
+    expect(orgHeading).toBeTruthy();
+    expect(legacyPrimary).not.toBe(orgHeading);
+    expect(legacySecondary).not.toBe(orgHeading);
+    expect(nav.textContent ?? '').toContain(orgHeading);
+    // The unified admin SPA must NOT reuse the legacy governance/controls labels.
+    expect(nav.textContent ?? '').not.toContain(legacyPrimary);
+    expect(nav.textContent ?? '').not.toContain(legacySecondary);
+  });
+
+  it('labels the platform section with the section_platform audience key for a super admin', () => {
+    authState.user = {
+      id: 14,
+      name: 'Super',
+      email: 'super-section@example.test',
+      is_super_admin: true,
+      is_organization_super_admin: false,
+      is_org_admin: false,
+      roles: [],
+    };
+
+    render(
+      <MemoryRouter initialEntries={['/overview']}>
+        <AdminNavigation mode="desktop" />
+      </MemoryRouter>,
+    );
+
+    const nav = screen.getByTestId('admin-desktop-navigation');
+    const orgHeading = i18n.t('admin.shell.sidebar.section_org');
+    const platformHeading = i18n.t('admin.shell.sidebar.section_platform');
+    const legacyPrimary = i18n.t('admin.shell.sidebar.section_primary');
+    const legacySecondary = i18n.t('admin.shell.sidebar.section_secondary');
+
+    expect(platformHeading).toBeTruthy();
+    expect(platformHeading).not.toBe(orgHeading);
+    expect(legacySecondary).not.toBe(platformHeading);
+    expect(nav.textContent ?? '').toContain(orgHeading);
+    expect(nav.textContent ?? '').toContain(platformHeading);
+    // The legacy governance/controls labels must not leak into either section.
+    expect(nav.textContent ?? '').not.toContain(legacyPrimary);
+    expect(nav.textContent ?? '').not.toContain(legacySecondary);
+  });
+
+  it('organizes headings so the org section appears before the platform section for a super admin', () => {
+    authState.user = {
+      id: 15,
+      name: 'Super',
+      email: 'super-ordering@example.test',
+      is_super_admin: true,
+      is_organization_super_admin: false,
+      is_org_admin: false,
+      roles: [],
+    };
+
+    render(
+      <MemoryRouter initialEntries={['/overview']}>
+        <AdminNavigation mode="desktop" />
+      </MemoryRouter>,
+    );
+
+    const nav = screen.getByTestId('admin-desktop-navigation');
+    const headings = Array.from(nav.querySelectorAll('p')).map((p) => p.textContent ?? '');
+    const orgHeading = i18n.t('admin.shell.sidebar.section_org');
+    const platformHeading = i18n.t('admin.shell.sidebar.section_platform');
+
+    expect(headings).toContain(orgHeading);
+    expect(headings).toContain(platformHeading);
+    expect(headings.indexOf(orgHeading)).toBeLessThan(headings.indexOf(platformHeading));
+  });
 });
