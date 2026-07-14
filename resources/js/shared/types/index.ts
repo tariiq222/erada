@@ -33,6 +33,8 @@ export interface User {
   is_super_admin?: boolean;
   /** Backend-computed org-admin flag from `/api/user`. Authoritative for org-admin gating. */
   is_org_admin?: boolean;
+  /** Backend-computed organization_super_admin flag from `/api/user`. Authoritative for OrgSuper gating. Additive: legacy payloads omit it. */
+  is_organization_super_admin?: boolean;
   /** Role names on administrative user-list payloads; never use for authorization. */
   roles?: string[];
   capabilities?: string[];

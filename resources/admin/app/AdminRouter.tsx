@@ -25,7 +25,6 @@ import { DepartmentsPage } from '@admin/pages/departments/DepartmentsPage';
 import { DepartmentForm } from '@admin/pages/departments/DepartmentForm';
 import { DepartmentDetails } from '@admin/pages/departments/DepartmentDetails';
 import { IncidentTypesPage } from '@admin/pages/incident-types/IncidentTypesPage';
-import { OrganizationSettingsPage } from '@admin/pages/organization-settings/OrganizationSettingsPage';
 
 export function AdminRouter() {
   return (
@@ -35,10 +34,7 @@ export function AdminRouter() {
         <Route path="/verify-2fa" element={<TwoFactorVerification />} />
 
         {/*
-          Platform-only routes — only `is_super_admin === true` may reach these.
-          These are the routes whose backend endpoints are gated by super-admin
-          capabilities (organizations, global role definitions, scope types,
-          platform-wide audit, incident types, governance rules).
+          System-only routes — only `is_super_admin === true` may reach these.
         */}
         <Route element={<SuperAdminBoundary />}>
           <Route element={<AdminLayout />}>
@@ -50,43 +46,40 @@ export function AdminRouter() {
             <Route path="/organizations/new" element={<OrganizationForm />} />
             <Route path="/organizations/:organizationId" element={<OrganizationDetails />} />
             <Route path="/organizations/:organizationId/edit" element={<OrganizationForm />} />
+            <Route path="/access" element={<AccessPage />} />
             <Route path="/access/governance" element={<GovernanceRulesPage />} />
             <Route path="/roles" element={<RolesPage />} />
             <Route path="/roles/new" element={<RoleForm />} />
-            <Route path="/roles/governing-departments" element={<Navigate to="/access/governance" replace />} />
+            <Route
+              path="/roles/governing-departments"
+              element={<Navigate to="/access/governance" replace />}
+            />
             <Route path="/roles/:roleId" element={<RoleForm />} />
             <Route path="/roles/:roleId/edit" element={<RoleForm />} />
+            <Route path="/activity-logs" element={<ActivityLogsPage />} />
+            <Route path="/scoped-roles/audit-logs" element={<ScopedRoleAuditPage />} />
             <Route path="/scope-types" element={<ScopeTypesPage />} />
-            <Route path="/incident-types" element={<IncidentTypesPage />} />
-          </Route>
-        </Route>
-
-        {/*
-          Org-admin-reachable routes — reachable by `is_super_admin === true`
-          OR `is_organization_super_admin === true`. These are the routes
-          whose backend endpoints are gated by the OrgSuper surface
-          (same-org user lifecycle, departments, organization-scoped access
-          summary, org-scoped activity logs, scoped-role audit). The catch-all
-          lives here so that an org-super navigating to an unknown URL sees
-          the standard 404 chrome rather than leaking into the super-only
-          fallback chain.
-        */}
-        <Route element={<OrgSuperOrSuperBoundary />}>
-          <Route element={<AdminLayout />}>
-            <Route index element={<Navigate to="/users" replace />} />
-            <Route path="/users" element={<UsersPage />} />
-            <Route path="/users/new" element={<UserForm />} />
-            <Route path="/users/:userId" element={<UserDetails />} />
-            <Route path="/users/:userId/edit" element={<UserForm />} />
             <Route path="/departments" element={<DepartmentsPage />} />
             <Route path="/departments/new" element={<DepartmentForm />} />
             <Route path="/departments/:departmentId" element={<DepartmentDetails />} />
             <Route path="/departments/:departmentId/edit" element={<DepartmentForm />} />
-            <Route path="/access" element={<AccessPage />} />
-            <Route path="/activity-logs" element={<ActivityLogsPage />} />
-            <Route path="/scoped-roles/audit-logs" element={<ScopedRoleAuditPage />} />
-            <Route path="/settings" element={<OrganizationSettingsPage />} />
+            <Route path="/incident-types" element={<IncidentTypesPage />} />
             <Route path="*" element={<NotFound />} />
+          </Route>
+        </Route>
+
+        {/*
+          Org-admin routes — reachable by `is_super_admin === true` OR
+          `is_organization_super_admin === true`. These wrap the routes whose
+          backend endpoints the OrgSuper surface (same-org user lifecycle,
+          targeted role-assignments, organization-scoped settings) hits.
+        */}
+        <Route element={<OrgSuperOrSuperBoundary />}>
+          <Route element={<AdminLayout />}>
+            <Route path="/users" element={<UsersPage />} />
+            <Route path="/users/new" element={<UserForm />} />
+            <Route path="/users/:userId" element={<UserDetails />} />
+            <Route path="/users/:userId/edit" element={<UserForm />} />
           </Route>
         </Route>
       </Routes>

@@ -107,7 +107,7 @@ function setPath(path: string, state: unknown = null) {
 
 function asUser(
   roles: string[],
-  flags: { is_super_admin?: boolean; is_org_admin?: boolean } = {},
+  flags: { is_super_admin?: boolean; is_org_admin?: boolean; is_organization_super_admin?: boolean } = {},
 ): User {
   return {
     id: 1,
@@ -121,6 +121,7 @@ function asUser(
     roles,
     is_super_admin: flags.is_super_admin,
     is_org_admin: flags.is_org_admin,
+    is_organization_super_admin: flags.is_organization_super_admin,
   };
 }
 
@@ -281,6 +282,32 @@ describe('admin authentication routing', () => {
       await waitFor(() => expect(window.location.pathname).toBe('/overview'));
     },
   );
+
+  it('renders a protected admin page for a user with is_organization_super_admin=true on the org-admin route /users', async () => {
+    authState = {
+      user: asUser([], { is_super_admin: false, is_org_admin: false, is_organization_super_admin: true }),
+      isLoading: false,
+      isAuthenticated: true,
+    };
+    setPath('/users');
+
+    render(<AdminRouter />);
+
+    expect(await screen.findByTestId('admin-protected-page')).toBeInTheDocument();
+  });
+
+  it('renders Forbidden for an org-super on a system-only admin route /organizations', async () => {
+    authState = {
+      user: asUser([], { is_super_admin: false, is_org_admin: false, is_organization_super_admin: true }),
+      isLoading: false,
+      isAuthenticated: true,
+    };
+    setPath('/organizations');
+
+    render(<AdminRouter />);
+
+    expect(await screen.findByRole('heading', { name: i18n.t('ovr.api.access_denied') })).toBeInTheDocument();
+  });
 
   it('returns successful two-factor verification to the saved admin route', async () => {
     const user = userEvent.setup();
