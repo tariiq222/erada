@@ -14,7 +14,7 @@ import { PageHeader } from '@shared/ui/PageHeader';
 import { useToast } from '@shared/ui/Toast';
 import { departmentsApi } from '@entities/hr';
 import { usersApi } from '@entities/user';
-import { rolesApi, type Role } from '@entities/role';
+import { rolesApi, filterAssignableRolesForOrgSuper, type Role } from '@entities/role';
 import { useAuth } from '@shared/contexts/AuthContext';
 import { useOrganization } from '@shared/contexts/OrganizationContext';
 

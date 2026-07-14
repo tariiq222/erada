@@ -1,4 +1,5 @@
 import { api } from '@shared/api/client';
+import { rolesApi } from '@entities/role/api/role.api';
 import type {
   AbilityRegistry,
   AccessSummary,
@@ -209,6 +210,20 @@ export const adminApi = {
     create: (data: RoleInput) => api.post('/roles', data),
     update: (id: number, data: RoleInput) => api.put(`/roles/${id}`, data),
     delete: (id: number) => api.delete(`/roles/${id}`),
+  },
+  /**
+   * Organization Super Admin role-assignment path.
+   *
+   * Thin pass-through to the entity `rolesApi.orgSuperAssignToUser`
+   * so the admin SPA and the operational SPA share one source of
+   * truth for the dedicated `/api/org-super/role-assignments`
+   * endpoint. Never routes to `/api/roles/assign` — that path is
+   * the canonical role-assignment write used by `super_admin` and
+   * other curated admins; OrgSuper actors MUST go through the
+   * dedicated route the BE narrows with the OrgSuper actor guard.
+   */
+  orgSuperRoleAssignments: {
+    assign: rolesApi.orgSuperAssignToUser,
   },
   users: {
     summary: () => api.get<{ data: AdminUserSummary[] }>('/users?per_page=100'),

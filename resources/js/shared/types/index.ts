@@ -24,15 +24,6 @@ export interface User {
   name: string;
   email: string;
   department_id: number | null;
-  /**
-   * Backend-computed current organization id from `/api/user` (see
-   * AuthController::user). Authoritative for actor-identity checks on
-   * org-scoped routes — never trust the `X-Organization-Id` request
-   * header for that purpose. `null` when the user is not currently
-   * bound to any organization (e.g. global super_admin before first
-   * org switch, or recently unassigned user).
-   */
-  organization_id?: number | null;
   phone: string | null;
   extension: string | null;
   job_title: string | null;
@@ -42,7 +33,14 @@ export interface User {
   is_super_admin?: boolean;
   /** Backend-computed org-admin flag from `/api/user`. Authoritative for org-admin gating. */
   is_org_admin?: boolean;
-  /** Backend-computed organization_super_admin flag from `/api/user`. Authoritative for OrgSuper gating. Additive: legacy payloads omit it. */
+  /**
+   * Backend-computed Organization Super Admin flag from `/api/user`.
+   * Authoritative for routing role-assignment writes through the
+   * dedicated OrgSuper-only `/api/org-super/role-assignments` endpoint,
+   * which carries a stricter actor guard than the canonical
+   * `/api/roles/assign` route. When `true`, the FE MUST use that
+   * dedicated path and never the canonical role-assignment route.
+   */
   is_organization_super_admin?: boolean;
   /** Role names on administrative user-list payloads; never use for authorization. */
   roles?: string[];

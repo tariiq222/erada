@@ -18,6 +18,45 @@ export interface Role {
   created_at?: string;
 }
 
+/**
+ * Roles Organization Super Admin is NEVER allowed to assign.
+ *
+ * Mirrors the forbidden-name list baked into
+ * App\Modules\Core\Authorization\Services\OrganizationSuperAdminRoleAssignmentActorGuard
+ * (`FORBIDDEN_ROLE_NAMES`) and the `is_admin_role || is_system`
+ * gate. The FE MUST keep this list in lock-step with the BE — any
+ * divergence lets an OrgSuper actor submit a payload the BE rejects,
+ * which surfaces as a 422 on the assignment route.
+ */
+export const ORG_SUPER_FORBIDDEN_ROLE_NAMES: readonly string[] = [
+  'super_admin',
+  'organization_super_admin',
+  'admin',
+] as const;
+
+/**
+ * Predicate: true when an Organization Super Admin actor is NOT
+ * permitted to assign `role` — either the role is a forbidden name,
+ * an admin-only role, or a system role. UI must use this to filter
+ * the role picker before submitting to
+ * `POST /api/org-super/role-assignments`; the BE enforces the same
+ * condition in `OrganizationSuperAdminRoleAssignmentActorGuard`.
+ */
+export function isProtectedRoleForOrgSuper(role: Pick<Role, 'name' | 'is_admin_role' | 'is_system'>): boolean {
+  if (role.is_admin_role || role.is_system) return true;
+  return ORG_SUPER_FORBIDDEN_ROLE_NAMES.includes(role.name);
+}
+
+/**
+ * Drop every role that Organization Super Admin is forbidden to
+ * assign. Convenience wrapper around `isProtectedRoleForOrgSuper`
+ * used by the user-role UI to remove protected roles from the
+ * picker before the actor submits an assignment.
+ */
+export function filterAssignableRolesForOrgSuper<R extends Pick<Role, 'name' | 'is_admin_role' | 'is_system'>>(roles: readonly R[]): R[] {
+  return roles.filter((role) => !isProtectedRoleForOrgSuper(role));
+}
+
 export interface RoleWrite {
   name: string;
   label: string;
