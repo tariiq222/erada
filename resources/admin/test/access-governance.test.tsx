@@ -153,15 +153,19 @@ describe('admin role and governance contracts', () => {
       })
       .mockResolvedValueOnce({
         data: {
-          functional_roles: ['viewer'],
-          scoped: [{
+          assignments: [{
+            id: 21,
+            role_id: 18,
             role: 'risk_reviewer',
             label: 'Risk Reviewer',
             scope_type: 'department',
             scope_id: 4,
             scope_name: 'Quality',
+            organization_id: 17,
+            inherit_to_children: false,
+            expires_at: null,
             source: 'auto',
-            reach: { risks: 'department' },
+            granted_by: null,
           }],
         },
       });
@@ -174,7 +178,7 @@ describe('admin role and governance contracts', () => {
     await user.click(within(row).getByRole('button', { name: i18n.t('admin.access.members.viewAccess') }));
 
     expect(await screen.findByText('Risk Reviewer')).toBeInTheDocument();
-    expect(screen.getByText(/risks/)).toHaveTextContent(i18n.t('admin.roles.reach.department'));
+    expect(screen.getByText(i18n.t('admin.access.auto'))).toBeInTheDocument();
     expect(apiGet).toHaveBeenLastCalledWith('/authorization-role-assignments/user/9/access-summary');
   });
 

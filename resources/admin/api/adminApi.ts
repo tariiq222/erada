@@ -1,5 +1,4 @@
 import { api } from '@shared/api/client';
-import { rolesApi } from '@entities/role/api/role.api';
 import type {
   AbilityRegistry,
   AccessSummary,
@@ -16,8 +15,7 @@ import type {
   IncidentTypeInput,
   Organization,
   OrganizationInput,
-  OrganizationSettingsInput,
-  OrganizationSettingsResponse,
+  OperationalRoleAssignmentInput,
   OverviewCounts,
   PaginatedResponse,
   RoleDefinition,
@@ -31,98 +29,6 @@ import type {
 
 type QueryValue = string | number | boolean | null | undefined;
 type DepartmentPage = { data: DepartmentSummary[]; current_page?: number; last_page?: number; per_page?: number; total?: number };
-
-/**
- * Read the XSRF-TOKEN cookie value Laravel/Sanctum sets as the JS-readable
- * CSRF token echo (the encrypted token, NOT the raw `csrf-token` meta tag).
- * The admin SPA has no `csrf-token` meta tag in its HTML shell, so we rely
- * on the cookie the framework always writes for stateful SPA traffic.
- */
-function readXsrfCookie(): string | null {
-  if (typeof document === 'undefined') return null;
-  const match = document.cookie
-    .split('; ')
-    .find((row) => row.startsWith('XSRF-TOKEN='));
-  if (!match) return null;
-  try {
-    return decodeURIComponent(match.split('=', 2)[1] ?? '');
-  } catch {
-    return null;
-  }
-}
-
-function generateIdempotencyKey(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  // Math.random fallback for environments without crypto.randomUUID
-  // (older jsdom in unit tests still resolves `crypto.randomUUID`).
-  return `idem-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
-}
-
-/**
- * Path-bound admin fetch. Used for endpoints whose scope is the URL path
- * (`/organizations/{id}/settings`), not a header-driven org switch.
- *
- * Explicitly does NOT inject `X-Organization-Id` — the shared
- * `ApiClient` reads `iradah:current_organization_id` from localStorage
- * and unconditionally attaches that header, but the settings endpoint
- * is org-bound on the URL and must never carry the legacy header.
- *
- * Honors:
- *   - `credentials: 'include'` (Sanctum HttpOnly cookies)
- *   - XSRF-TOKEN cookie (`X-XSRF-TOKEN` header) for mutating verbs
- *   - optional per-call `Idempotency-Key` (PUT only — the backend
- *     registers `idempotency` middleware only on the settings PUT and
- *     on the org tree PUT)
- */
-async function pathBoundFetch<T>(
-  endpoint: string,
-  options: {
-    method: 'GET' | 'PUT';
-    body?: unknown;
-    idempotencyKey?: string;
-  },
-): Promise<T> {
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-  };
-  if (options.method !== 'GET') {
-    headers['Content-Type'] = 'application/json';
-    const xsrf = readXsrfCookie();
-    if (xsrf) headers['X-XSRF-TOKEN'] = xsrf;
-    if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
-  }
-
-  const init: RequestInit = {
-    method: options.method,
-    credentials: 'include',
-    headers,
-  };
-  if (options.body !== undefined) {
-    init.body = JSON.stringify(options.body);
-  }
-
-  const response = await fetch(`/api${endpoint}`, init);
-  if (!response.ok) {
-    let errorBody: { message?: string; errors?: Record<string, string[]> } = {};
-    try {
-      errorBody = await response.json();
-    } catch {
-      // non-JSON error response — keep defaults
-    }
-    const firstValidation = errorBody.errors
-      ? Object.values(errorBody.errors).flat()[0]
-      : undefined;
-    const error: { message?: string; errors?: Record<string, string[]>; status?: number } = {
-      message: firstValidation ?? errorBody.message ?? 'Request failed',
-      errors: errorBody.errors,
-      status: response.status,
-    };
-    throw error;
-  }
-  return response.json() as Promise<T>;
-}
 
 function queryString(params?: Record<string, QueryValue>): string {
   if (!params) return '';
@@ -177,31 +83,6 @@ export const adminApi = {
       return { data };
     },
   },
-  /**
-   * Organization-scoped settings (Phase 0). Path-bound; never carries
-   * `X-Organization-Id`. The persisted row lives in `organization_settings`,
-   * not the legacy `organizations.settings` JSON column.
-   */
-  organizationSettings: {
-    get: (organizationId: number) =>
-      pathBoundFetch<OrganizationSettingsResponse>(
-        `/organizations/${organizationId}/settings/`,
-        { method: 'GET' },
-      ),
-    update: (
-      organizationId: number,
-      data: OrganizationSettingsInput,
-      options: { idempotencyKey?: string } = {},
-    ) =>
-      pathBoundFetch<OrganizationSettingsResponse>(
-        `/organizations/${organizationId}/settings/`,
-        {
-          method: 'PUT',
-          body: data,
-          idempotencyKey: options.idempotencyKey ?? generateIdempotencyKey(),
-        },
-      ),
-  },
   roles: {
     list: () => api.get<{ data: RoleDefinition[]; meta: { total: number } }>('/roles'),
     get: (id: number) => api.get<{ data: RoleDefinition }>(`/roles/${id}`),
@@ -210,20 +91,6 @@ export const adminApi = {
     create: (data: RoleInput) => api.post('/roles', data),
     update: (id: number, data: RoleInput) => api.put(`/roles/${id}`, data),
     delete: (id: number) => api.delete(`/roles/${id}`),
-  },
-  /**
-   * Organization Super Admin role-assignment path.
-   *
-   * Thin pass-through to the entity `rolesApi.orgSuperAssignToUser`
-   * so the admin SPA and the operational SPA share one source of
-   * truth for the dedicated `/api/org-super/role-assignments`
-   * endpoint. Never routes to `/api/roles/assign` — that path is
-   * the canonical role-assignment write used by `super_admin` and
-   * other curated admins; OrgSuper actors MUST go through the
-   * dedicated route the BE narrows with the OrgSuper actor guard.
-   */
-  orgSuperRoleAssignments: {
-    assign: rolesApi.orgSuperAssignToUser,
   },
   users: {
     summary: () => api.get<{ data: AdminUserSummary[] }>('/users?per_page=100'),
@@ -251,6 +118,11 @@ export const adminApi = {
   access: {
     summary: (userId: number) =>
       api.get<{ data: AccessSummary }>(`/authorization-role-assignments/user/${userId}/access-summary`),
+    assignOperationalRole: (data: OperationalRoleAssignmentInput) =>
+      api.post<{ message: string; data: { user_id: number; assignments: unknown[] } }>(
+        '/org-super/role-assignments',
+        data,
+      ),
   },
   departments: {
     list: (params?: Record<string, QueryValue>) =>

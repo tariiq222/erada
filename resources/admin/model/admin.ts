@@ -128,6 +128,7 @@ export interface RoleDefinition {
   permissions_count: number;
   users_count: number;
   is_system: boolean;
+  is_active?: boolean;
   scope_type: string;
   label_ar?: string;
   label_en?: string;
@@ -156,17 +157,34 @@ export interface AbilityRegistry {
   }[];
 }
 
+export interface AccessAssignment {
+  id: number;
+  role_id: number;
+  role: string;
+  label: string;
+  scope_type: string;
+  scope_id: number | null;
+  scope_name: string | null;
+  organization_id: number | null;
+  inherit_to_children: boolean;
+  expires_at: string | null;
+  source: string;
+  granted_by: number | null;
+}
+
 export interface AccessSummary {
-  functional_roles: string[];
-  scoped: {
-    role: string;
-    label: string;
-    scope_type: string;
+  assignments: AccessAssignment[];
+}
+
+export interface OperationalRoleAssignmentInput {
+  user_id: number;
+  replace_all: true;
+  assignments: [{
+    role_id: number;
+    scope_type: 'organization';
     scope_id: number;
-    scope_name: string | null;
-    source: string;
-    reach: Record<string, Reach>;
-  }[];
+    inherit_to_children: false;
+  }];
 }
 
 export interface AdminUserSummary {
