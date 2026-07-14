@@ -6,6 +6,7 @@ use App\Modules\Core\Http\Controllers\AuthorizationRoleAssignmentController;
 use App\Modules\Core\Http\Controllers\DashboardController;
 use App\Modules\Core\Http\Controllers\GovernanceRulesController;
 use App\Modules\Core\Http\Controllers\OrganizationController;
+use App\Modules\Core\Http\Controllers\OrganizationSettingsController;
 use App\Modules\Core\Http\Controllers\PasswordResetController;
 use App\Modules\Core\Http\Controllers\RegistrationController;
 use App\Modules\Core\Http\Controllers\RoleController;
@@ -211,6 +212,15 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware(['engine_capability:'.Capability::CLUSTER_TREE_MANAGE, 'idempotency']);
         Route::delete('/{organization}', [OrganizationController::class, 'destroy'])
             ->middleware(['engine_capability:'.Capability::CLUSTER_TREE_MANAGE, 'throttle:delete']);
+
+        // Org-scoped settings (Phase 0) — `organization_super_admin` boundary.
+        // GET is strictly non-mutating; PUT deep-merges against
+        // `organization_settings` (NOT against `organizations.settings`).
+        Route::prefix('{organization}/settings')->group(function () {
+            Route::get('/', [OrganizationSettingsController::class, 'show']);
+            Route::put('/', [OrganizationSettingsController::class, 'update'])
+                ->middleware(['throttle:sensitive', 'idempotency']);
+        });
     });
 
     // ========================================
