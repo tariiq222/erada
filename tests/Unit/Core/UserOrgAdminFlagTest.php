@@ -58,7 +58,13 @@ class UserOrgAdminFlagTest extends TestCase
             'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
             'scope_id' => $org->id,
             'organization_id' => $org->id,
-            'is_active' => false,
+            // `authorization_role_assignments` has NO `is_active` column (see
+            // migration 2026_07_12_000005_add_lifecycle_to_authorization_roles_and_assignments
+            // — it adds only `expires_at` to the assignments table). The
+            // lifecycle is honored by User::activeCanonicalRoleAssignments(),
+            // which filters `expires_at > now()`. Modeled as an unambiguously
+            // past immutable expiry so it is excluded from the active set.
+            'expires_at' => now()->subSecond()->toImmutable(),
         ]);
 
         $this->assertFalse($user->fresh()->isOrgAdmin());
