@@ -476,6 +476,7 @@ class AuthController extends Controller
                 'is_active' => $user->is_active,
                 'is_super_admin' => $user->isSuperAdmin(),
                 'is_org_admin' => $user->isOrgAdmin(),
+                'is_organization_super_admin' => $user->isOrganizationSuperAdmin(),
                 'department' => $user->department ? [
                     'id' => $user->department->id,
                     'name' => $user->department->name,
@@ -503,6 +504,7 @@ class AuthController extends Controller
                 'role_assignments' => [],
                 'is_super_admin' => false,
                 'is_org_admin' => false,
+                'is_organization_super_admin' => false,
             ];
         }
     }
