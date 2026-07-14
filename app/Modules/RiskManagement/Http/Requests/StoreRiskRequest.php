@@ -41,7 +41,7 @@ class StoreRiskRequest extends FormRequest
             'initial_likelihood' => ['required', 'integer', 'between:1,5'],
             'initial_impact' => ['required', 'integer', 'between:1,5'],
             'owner_id' => ['nullable', $this->orgScopedUserRule()],
-            'stakeholder_ids' => ['nullable', 'array'],
+            'stakeholder_ids' => ['nullable', 'array', 'distinct'],
             'stakeholder_ids.*' => ['integer', $this->orgScopedUserRule()],
             'preventive_measures' => ['nullable', 'string', 'max:5000'],
             'target_close_date' => ['nullable', 'date', 'after_or_equal:discovery_date'],

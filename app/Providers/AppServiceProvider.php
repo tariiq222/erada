@@ -60,6 +60,7 @@ use App\Modules\Tasks\Observers\TaskObserver;
 use App\Modules\Tasks\Policies\TaskPolicy;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Console\Events\ScheduledTaskFailed;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Queue\Events\JobFailed;
@@ -86,6 +87,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Prevent silent N+1 queries in non-production environments. Any lazy-load
+        // that fires without an explicit eager-load throws LazyLoadingViolationException
+        // so it is caught in dev/staging before it reaches production.
+        Model::preventLazyLoading(! app()->isProduction());
+
         // تعطيل wrapping للـ JsonResource (يُرجع البيانات مباشرة بدون "data" wrapper)
         JsonResource::withoutWrapping();
 
