@@ -20,6 +20,7 @@ use App\Modules\Core\Http\Resources\UserDirectoryResource;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Scopes\UserOrganizationScope;
 use App\Modules\HR\Models\Department;
+use App\Modules\Shared\Models\ActivityLog;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
@@ -311,8 +312,21 @@ class UserController extends Controller
     {
         try {
             $user = User::findOrFail($id);
+            $currentUser = $request->user();
+
+            // CSD-CA23078-CORE-008: Organization Super Admin target validation (UPDATE).
+            $this->assertOrgSuperTargetIsMutable($currentUser, $user, $request, 'users.edit');
 
             $validated = $request->validated();
+
+            if (! $currentUser->isSuperAdmin() && $currentUser->isOrganizationSuperAdmin()
+                && (int) $user->id === (int) $currentUser->id
+                && array_key_exists('organization_id', $request->all())
+                && (int) $request->input('organization_id') !== (int) $currentUser->organization_id) {
+                throw ValidationException::withMessages([
+                    'organization_id' => ['لا يمكن للمسؤول العام للمؤسسة نقل نفسه لمؤسسة أخرى.'],
+                ]);
+            }
 
             if (! empty($validated['password'])) {
                 $validated['password'] = Hash::make($validated['password']);
@@ -324,7 +338,6 @@ class UserController extends Controller
             unset($validated['assignments']);
 
             // منع نقل المستخدم لمؤسسة أخرى
-            $currentUser = $request->user();
             if (! $currentUser->isSuperAdmin()) {
                 if (array_key_exists('organization_id', $validated)) {
                     unset($validated['organization_id']);
@@ -419,6 +432,11 @@ class UserController extends Controller
         try {
             $user = User::findOrFail($id);
 
+            // CSD-CA23078-CORE-008: Organization Super Admin target validation (DELETE).
+            // Per user policy: OrgSuper cannot update OR delete
+            // OrganizationSuperAdmin/PlatformSuperAdmin targets.
+            $this->assertOrgSuperTargetIsMutable($request->user(), $user, $request, 'users.delete');
+
             // Authz against the user's `delete` ability already enforced by
             // DeleteUserRequest.
 
@@ -443,7 +461,57 @@ class UserController extends Controller
     private function canManageUserLifecycle(User $user): bool
     {
         return $user->isSuperAdmin()
-            || AccessDecision::canonicalTrace($user, Capability::USERS_MANAGE_ACCESS)['granted'];
+            || $user->isOrganizationSuperAdmin()
+            || AccessDecision::canonicalTrace($user, Capability::USERS_MANAGE_ACCESS)['granted']
+            || AccessDecision::can($user, Capability::USERS_ACTIVATE)
+            || AccessDecision::can($user, Capability::USERS_DEACTIVATE);
+    }
+
+    /**
+     * @throws ValidationException with 422 envelope when OrgSuper targets
+     *                             a `super_admin` or `organization_super_admin` user.
+     */
+    private function assertOrgSuperTargetIsMutable(User $actor, User $target, Request $request, string $requestedCapability): void
+    {
+        if ($actor->isSuperAdmin() || ! $actor->isOrganizationSuperAdmin()) {
+            return;
+        }
+        if ((int) $actor->id === (int) $target->id) {
+            // Self-mutation: UPDATE-time organization_id check fires here too;
+            // DELETE-time self-delete is enforced by UserPolicy::delete().
+            return;
+        }
+
+        $protectedTarget = AuthorizationRoleAssignment::query()
+            ->where('user_id', $target->id)
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->whereHas('role', fn ($role) => $role
+                ->whereIn('name', ['super_admin', 'organization_super_admin'])
+                ->where('is_active', true))
+            ->exists();
+
+        if (! $protectedTarget) {
+            return;
+        }
+
+        ActivityLog::create([
+            'user_id' => $actor->id,
+            'action' => ActivityLog::ACTION_ACCESS_DENIED,
+            'description' => "محاولة تعديل/حذف مستخدم محمي (super_admin/organization_super_admin): {$target->name}",
+            'loggable_type' => User::class,
+            'loggable_id' => $target->id,
+            'metadata' => [
+                'provenance' => 'organization_super_admin',
+                'requested_capability' => $requestedCapability,
+                'request_id' => $request->header('X-Request-Id'),
+            ],
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        throw ValidationException::withMessages([
+            'user_id' => ['لا يمكن تعديل أو حذف مستخدم يحمل دور super_admin أو organization_super_admin.'],
+        ]);
     }
 
     /**
