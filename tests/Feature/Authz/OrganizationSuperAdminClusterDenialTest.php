@@ -268,6 +268,25 @@ class OrganizationSuperAdminClusterDenialTest extends TestCase
             'Sweep must propagate the audit-insert failure out as an exception (got no throw).'
         );
 
+        // The exception must be the INJECTED CHECK constraint
+        // violation, not some unrelated failure (e.g. an SQLSTATE
+        // 23505 from the pivot delete, a connection error, a PHP type
+        // error). The codebase's diagnostic pattern for CHECK
+        // violations is `/check constraint|violates/i` in the
+        // exception message (PostgreSQL renders `violates check
+        // constraint "test_force_audit_failure_check"`), and the
+        // constraint name we injected above is the load-bearing
+        // fingerprint. If the assertion below fails, either the
+        // constraint was never added, the audit insert did not run
+        // first, or the wrong exception is propagating out — each of
+        // those is a regression in the atomic delete+audit invariant.
+        $this->assertTrue(
+            (bool) preg_match('/check constraint|violates/i', $thrownMessage),
+            'Sweep must propagate the INJECTED CHECK constraint '
+            .'(`test_force_audit_failure_check`) failure, not some '
+            .'other exception. Got: '.$thrownMessage
+        );
+
         // The pivot deletion that ran immediately before the failed
         // audit insert is rolled back by the savepoint — the
         // pivots are intact.

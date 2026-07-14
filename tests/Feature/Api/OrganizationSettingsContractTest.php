@@ -81,46 +81,65 @@ class OrganizationSettingsContractTest extends TestCase
         // aborted transaction used to fail with `current transaction is
         // aborted, commands ignored until end of transaction block`.
         //
-        // This test exercises the SQL the controller ships: it inserts
-        // a row, then runs the same upsert statement again, and asserts
-        // (a) no exception is raised and (b) only one row exists. A
-        // second `INSERT` against the same `organization_id` would
-        // raise 23505 in vanilla form; the `ON CONFLICT DO NOTHING`
-        // clause is the whole point of the fix.
+        // This test exercises the controller's `update()` path
+        // directly (via the HTTP seam) to prove the atomic upsert is
+        // hit on the SECOND PUT against an organization_id whose row
+        // already exists. Without `ON CONFLICT DO NOTHING`, the
+        // controller's `INSERT` would raise 23505 on the second PUT;
+        // with the clause, the second `INSERT` is a no-op, the
+        // follow-up `SELECT FOR UPDATE` finds the existing row, and
+        // the deep-merge runs against the committed state from the
+        // first PUT.
+        //
+        // The merge-into-committed-state invariant is the load-bearing
+        // signal: the second PUT carries a disjoint key (`logo_path`)
+        // that the first PUT did NOT set, while the first PUT set
+        // `primary_color` that the second PUT does NOT touch. After
+        // both PUTs, BOTH keys must be present on the same row — the
+        // merge ran against the first PUT's committed payload, not
+        // against a fresh default payload (which would have lost
+        // `primary_color`).
         [$org, $actor] = $this->seedOrgSuper();
+        Sanctum::actingAs($actor, ['*']);
 
-        $sql = 'INSERT INTO organization_settings '
-            .'(organization_id, settings, created_by, updated_by, created_at, updated_at) '
-            .'VALUES (?, ?::jsonb, ?, NULL, NOW(), NOW()) '
-            .'ON CONFLICT (organization_id) DO NOTHING';
-
-        // First insert: row is created.
-        DB::insert($sql, [
-            $org->id,
-            json_encode($this->defaultPayload(), JSON_THROW_ON_ERROR),
-            $actor->id,
+        // First PUT: exercises the controller's INSERT branch (row
+        // did not exist before). This sets `primary_color`.
+        $first = $this->putJson("/api/organizations/{$org->id}/settings", [
+            'branding_overrides' => ['primary_color' => '#FF0000'],
         ]);
-
+        $first->assertOk();
         $this->assertSame(
             1,
-            DB::table('organization_settings')->where('organization_id', $org->id)->count(),
-            'first insert must have created the row.'
+            OrganizationSettings::query()->where('organization_id', $org->id)->count(),
+            'first PUT must have created the row.'
         );
 
-        // Second insert: must NOT throw — ON CONFLICT DO NOTHING is a
-        // no-op. A non-atomic INSERT here would raise 23505 and prove
-        // the controller's race fix is bypassed.
-        DB::insert($sql, [
-            $org->id,
-            json_encode($this->defaultPayload(), JSON_THROW_ON_ERROR),
-            $actor->id,
+        // Second PUT: must NOT raise 23505. Without the atomic upsert,
+        // the controller's `INSERT` would collide with the existing
+        // row's unique key and the WHOLE transaction would be aborted
+        // by PostgreSQL. With `ON CONFLICT DO NOTHING`, the INSERT is
+        // a no-op and the request succeeds.
+        $second = $this->putJson("/api/organizations/{$org->id}/settings", [
+            'branding_overrides' => ['logo_path' => '/second-put.svg'],
         ]);
+        $second->assertOk();
 
+        // No duplicate row was created: the second PUT's INSERT was a
+        // silent no-op (ON CONFLICT DO NOTHING), not a 23505-then-rollback
+        // and re-insert dance.
         $this->assertSame(
             1,
-            DB::table('organization_settings')->where('organization_id', $org->id)->count(),
-            'second insert against the same organization_id must be a no-op (ON CONFLICT DO NOTHING).'
+            OrganizationSettings::query()->where('organization_id', $org->id)->count(),
+            'second PUT must NOT have created a duplicate row (atomic upsert path).'
         );
+
+        // The committed state carries BOTH keys: deep-merge ran against
+        // the row the first PUT committed (primary_color survives), AND
+        // absorbed the second PUT's disjoint key (logo_path lands). A
+        // controller whose atomic upsert silently fell back to a fresh
+        // default payload would lose primary_color.
+        $second->assertJsonPath('data.branding_overrides.primary_color', '#FF0000');
+        $second->assertJsonPath('data.branding_overrides.logo_path', '/second-put.svg');
     }
 
     public function test_first_put_against_concurrently_committed_row_uses_committed_payload(): void
@@ -139,10 +158,10 @@ class OrganizationSettingsContractTest extends TestCase
         // `ON CONFLICT DO NOTHING` makes the INSERT silent), the
         // follow-up `SELECT FOR UPDATE` finds the pre-existing row,
         // and the deep-merge is computed against THAT row's settings,
-        // not against `$this->defaultPayload()`. The PUT payload we
-        // send is a deep-merge of `notification_templates` (a new
-        // top-level key) against the pre-existing branding — both
-        // must survive, and the pre-existing `primary_color` must
+        // not against the controller's empty default payload. The PUT
+        // payload we send is a deep-merge of `notification_templates`
+        // (a new top-level key) against the pre-existing branding —
+        // both must survive, and the pre-existing `primary_color` must
         // NOT be wiped by the new payload.
         //
         // This is the "retry uses committed row" invariant the
@@ -478,22 +497,5 @@ class OrganizationSettingsContractTest extends TestCase
         ]);
 
         return [$org, $user];
-    }
-
-    /**
-     * Mirror of `OrganizationSettingsController::defaultPayload()`. The
-     * raw-SQL tests assert against this exact shape so the controller's
-     * "default-payload" fallback and the test's "race winner pre-insert"
-     * preconditions are anchored to the same canonical empty object.
-     *
-     * @return array{locale_overrides: array<string, string|null>, branding_overrides: array<string, string|null>, notification_templates: array<string, string>}
-     */
-    private function defaultPayload(): array
-    {
-        return [
-            'locale_overrides' => [],
-            'branding_overrides' => [],
-            'notification_templates' => [],
-        ];
     }
 }
