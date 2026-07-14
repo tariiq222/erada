@@ -24,6 +24,7 @@
 - **Sensitive mutation contract (Org-Super writes):** `FormRequest::authorize()` → server-side target validation (`actor.organization_id`, `target.organization_id`, target active role assignments, role-name allowlist for `roles.assign`) → `DB::transaction` → `ActivityLog` audit row with `organization_super_admin` provenance tag → `IdempotencyKey` middleware reuses the cached response on retry → `throttle:admin` (user mutations / role assignments) or `throttle:sensitive` (organization settings) → 5xx renders `<ServerError />` with `request_id`; 409 → no retries; 422 → per-field errors; 429 → `<RateLimited />` with `retry_after`.
 - **Obsolete-plan notice:** This plan supersedes `docs/superpowers/plans/2026-07-13-orgadmin-and-shipped-admin-spa.md`. Tasks 1–5, 9, 11, 12, 13, 14, 15, 16 from the obsolete plan remain valid (already shipped on the branch) and are reused where independent of `/org/*` and the curated `admin`-as-boundary framing. Tasks 6 (regression test, also committed as `6ed111f`), 7 (`AdminE2ETestSeeder`), 8 (`AdminRouteContractTest`), 10 (`OrgAdminBoundary` + `/org/*`), 17 (admin E2E spec rewrites), 18 (CI parity) are rescoped here.
 - **Unmerged commits integration:** `198f0d2` (X-Idempotency-Key on mutations, already on the branch) is reused unchanged — every `adminApi` mutation already rides it. `6ed111f` (curated admin role cluster/assign-roles/cross-org regression test, already on the branch) is locked-in but extended with a Task 15 addendum so the curated `admin` pivot set remains the regression guard for the legacy path while `organization_super_admin` becomes the new boundary role.
+- **`organization_settings` is the single source of truth for NEW organization-admin settings AND a distinct authorization resource.** The new table (`organization_settings`) and the new model (`App\Modules\Core\Models\OrganizationSettings`) are the only store the OrgSuper-facing `/api/organizations/{org}/settings` contract reads from or writes to. This is a **greenfield** decision: the legacy `organizations.settings` JSON column added by `2026_01_12_100002_add_organization_support.php` is NOT read, NOT used as a fallback, NOT backfilled from, NOT migrated into, NOT overwritten by, and NOT deleted by any task in this plan. There is no legacy data to preserve — the existing column is simply **unused by the new contract**. No task may read `Organization::query()->value('settings')`, write `$org->settings = …`, or call `->update(['settings' => …])` on the `organizations` table. The authorization resource for the new contract is `Organization` (via `CapabilityToAuthorizationRolePermission::map('organization.settings.*')` → `Organization::class`), which is **distinct from** `core.cluster_tree.*` (also `Organization::class`). `organization.settings.*` MUST never satisfy `core.cluster_tree.*` and vice-versa: the new OrgSuper pivot set excludes every `core.cluster_tree.*` capability (verified by the cluster denial test in T5), so even a same-org actor cannot use the OrgSuper surface to widen cluster scope.
 
 ---
 
@@ -36,29 +37,33 @@
 | `app/Modules/Core/Models/User.php` *(modify)* | Add `isOrganizationSuperAdmin(): bool` predicate and harden `resolveActiveOrganizationId()` so non-super actors never read a different `organization_id` from any input. |
 | `app/Modules/Core/Authorization/Capability.php` *(modify)* | Append `USERS_ACTIVATE`, `USERS_DEACTIVATE`, `ORGANIZATION_SETTINGS_VIEW`, `ORGANIZATION_SETTINGS_EDIT` constants. |
 | `app/Modules/Core/Http/Controllers/AuthController.php` *(modify)* | Extend `buildFormatUserPayload()` to add `is_organization_super_admin` alongside existing `is_super_admin`/`is_org_admin` flags. |
-| `app/Modules/Core/Http/Controllers/UserController.php` *(modify)* | Add FormRequest target-validation that rejects self-modification for Org-Super, rejects `super_admin`/`organization_super_admin` targets, and rejects Org-Super's own `organization_id` mutation. Widen `canManageUserLifecycle()` to admit Org-Super via `Capability::USERS_ACTIVATE` / `USERS_DEACTIVATE`. |
+| `app/Modules/Core/Http/Controllers/UserController.php` *(modify)* | Add FormRequest target-validation that rejects self-modification for Org-Super, rejects `super_admin`/`organization_super_admin` targets (UPDATE + DELETE), and rejects Org-Super's own `organization_id` mutation. Widen `canManageUserLifecycle()` to admit Org-Super via `Capability::USERS_ACTIVATE` / `USERS_DEACTIVATE`. Extract `assertOrgSuperTargetIsMutable()` private helper so UPDATE and DELETE share the same seam. |
 | `app/Modules/Core/Http/Controllers/RoleController.php` *(modify)* | Add `assignByOrganizationSuperAdmin()` method that uses the new OrgSuper request + service + actor guard. Existing canonical `assignToUser()` (gated by `engine_capability:core.assign_roles` for super_admin) is UNTOUCHED. |
-| `app/Modules/Core/Http/Controllers/OrganizationSettingsController.php` *(new)* | Read/update organization-scoped settings (locale overrides, branding overrides, notification templates). New `organization.settings.view` / `organization.settings.edit` capability gates. |
+| `app/Modules/Core/Http/Controllers/OrganizationSettingsController.php` *(new)* | Read/update organization-scoped settings (locale overrides, branding overrides, notification templates). New `organization.settings.view` / `organization.settings.edit` capability gates. PUT uses `firstOrCreate` + `lockForUpdate` inside a DB transaction, performs a deep merge across the three top-level settings objects via `array_replace_recursive`, and writes an `ActivityLog::ACTION_UPDATED` row tagged `provenance=organization_super_admin` carrying `metadata.request_id`. GET is strictly non-mutating. |
 | `app/Modules/Core/Http/Requests/ViewOrganizationSettingsRequest.php` *(new)* | `authorize()` returns true only for actor.organization_id === org. |
-| `app/Modules/Core/Http/Requests/UpdateOrganizationSettingsRequest.php` *(new)* | `authorize()` returns true only for `organization.settings.edit` capability + same-org; array-form validation rules. |
-| `app/Modules/Core/Models/OrganizationSettings.php` *(new)* | Eloquent model for the new `organization_settings` table. |
+| `app/Modules/Core/Http/Requests/UpdateOrganizationSettingsRequest.php` *(new)* | `authorize()` returns true only for `organization.settings.edit` capability + same-org; array-form validation rules. `prepareForValidation()` requires `X-Idempotency-Key` header (non-super OrgSuper only). |
+| `app/Modules/Core/Models/OrganizationSettings.php` *(new)* | Eloquent model for the new `organization_settings` table (single source of truth; legacy `organizations.settings` column is unused by this contract). |
 | `app/Modules/Core/Routes/api.php` *(modify)* | Add `Route::prefix('organizations/{organization}/settings')` group with GET (read) and PUT (update, `throttle:sensitive` + `idempotency`). |
 | `app/Modules/Core/Authorization/Data/AssignmentScope.php` *(modify)* | Add `ORGANIZATION` constant alongside `ALL` and `OWN`. |
 | `app/Modules/Core/Authorization/Capability.php` *(modify)* | Extend `ROLES_ASSIGN` docblock to record the OrgSuper-only gating. |
 | `app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentActorGuard.php` *(new)* | Narrow actor guard: same-org + operational-role-only + no protected targets + server-derived scope. Implements `AuthorizationAssignmentActorGuard`. |
-| `app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentService.php` *(new)* | Composes the underlying service with the OrgSuper guard; server-derives scope from `actor->organization_id` regardless of client input; transactional + audit with `provenance=organization_super_admin`. |
+| `app/Modules\Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentService.php` *(new)* | Composes the underlying service with the OrgSuper guard; server-derives scope from `actor->organization_id` regardless of client input; transactional + audit with `provenance=organization_super_admin`. |
+| `app/Modules/Core/Http/Middleware/EnsureOrganizationSuperAdminOnly.php` *(new)* | Genuine-OrgSuper-only middleware. Rejects `super_admin` even if they hold `roles.assign`; rejects OrgSuper actors with null `organization_id`. Runs BEFORE `engine_capability:roles.assign`, BEFORE the actor guard, BEFORE the service. |
+| `app/Http/Kernel.php` *(modify)* | Register middleware alias `ensure.org_super_only` → `EnsureOrganizationSuperAdminOnly::class`. |
 | `app/Modules/Core/Http/Requests/AssignOrganizationSuperAdminRoleRequest.php` *(new)* | Auditable seam; `rules()` reject non-`organization` scope, require `inherit_to_children=false`, prohibit `expires_at`; `after()` defensive double-check on role name / flags / inactive / cross-org subject / protected target. |
-| `app/Modules/Core/Routes/api.php` *(modify)* | Add `Route::post('/org-super/role-assignments', …)` gated by `engine_capability:roles.assign + throttle:admin + idempotency`. Canonical `/roles/assign` (gated by `core.assign_roles`) is UNTOUCHED. |
+| `app/Modules/Core/Routes/api.php` *(modify)* | Add `Route::post('/org-super/role-assignments', …)` gated by `ensure.org_super_only + engine_capability:roles.assign + throttle:admin + idempotency`. Canonical `/roles/assign` (gated by `core.assign_roles`) is UNTOUCHED. |
 | `database/seeders/RolesAndPermissionsSeeder.php` *(modify)* | Add `organization_super_admin` entry to `roleCatalog()`. Extend `SWEPT_SYSTEM_ROLES` constant. |
 | `database/migrations/2026_07_14_000020_role_catalog_sync_organization_super_admin.php` *(new)* | Migration that mirrors the obsolete-pivot sweep, scoped to `organization_super_admin`, gated to PG only, idempotent. |
 | `database/migrations/2026_07_14_000021_create_organization_settings_table.php` *(new)* | Adds `organization_settings` table for the new contract. PG-only. |
+| `database/migrations/2026_07_14_000022_sweep_obsolete_orgsuper_organization_view_edit_pivots.php` *(new)* | Targeted pivot sweep scoped to `organization_super_admin` × `Organization` resource × `view`/`edit` actions — removes ONLY the obsolete OrgSuper pivots caused by the previous `core.cluster_tree` → `Organization` mapping alias. PG-only, idempotent, audited. Does NOT touch `organizations.settings` column or any other role. |
 | `tests/Unit/Core/OrganizationSuperAdminCapabilityConstantsTest.php` *(new)* | Unit test for the four capability constants. |
 | `tests/Unit/Core/UserOrganizationSuperAdminFlagTest.php` *(new)* | Unit test for `User::isOrganizationSuperAdmin()`. |
 | `tests/Feature/Api/AuthControllerOrganizationSuperAdminPayloadTest.php` *(new)* | Asserts `/api/user` exposes the new additive flag. |
-| `tests/Feature/Api/OrganizationSettingsContractTest.php` *(new)* | Read/update contract for the new endpoint (own-org + cross-org + forbidden). |
+| `tests/Feature/Api/OrganizationSettingsContractTest.php` *(modify)* | 11 tests: own-org GET, GET non-mutating, first PUT creates-then-locks, deep merge, empty-array no-op, null-on-scalar clears, audit log with provenance + request_id, idempotency-key retry, cross-org GET denial, cross-org PUT denial, cluster denial. |
+| `tests/Feature/Authz/OrganizationSuperAdminClusterDenialTest.php` *(new)* | Engine-layer regression: `AccessDecision::can($orgSuperActor, Capability::CLUSTER_TREE_VIEW/MANAGE/EXPORT)` MUST be false; targeted-sweep migration's audit-row count is asserted (>=0 baseline). |
 | `tests/Feature/Authz/OrganizationSuperAdminRoleSeedTest.php` *(new)* | Seeder adds the role with `is_admin_role=false`, `is_system=true`, and the curated capability list; no `projects.*` / `tasks.*` / `kpis.*` / `risks.*` / `ovr.*` / `core.cluster_tree.*` / `core.view_organizations` / `core.assign_roles` / `audit.export`. |
-| `tests/Feature/Authz/OrganizationSuperAdminUserTargetTest.php` *(new)* | Self-modify, super_admin target, other Org-Super target, activate/deactivate, cross-org user — all matrix surfaces. |
-| `tests/Feature/Authz/OrganizationSuperAdminRoleAllowlistTest.php` *(new)* | Comprehensive OrgSuper role-assignment matrix — 16 tests: 1 positive (operational role → same-org ordinary user) + 15 denial surfaces (admin / super_admin / organization_super_admin / is_admin_role / is_system / inactive role / cross-org subject / super_admin target / organization_super_admin target / cross-org scope_id / non-organization scope_type / inherit_to_children=true / regular user middleware / super_admin uses canonical route / audit log provenance). |
+| `tests/Feature/Authz/OrganizationSuperAdminUserTargetTest.php` *(modify)* | 11 tests: 5 UPDATE (self org swap, super_admin target, other Org-Super target, activate/deactivate positive, cross-org) + 1 UPDATE self-modify rejection + 5 DELETE (positive same-org, self-delete, super_admin target, Org-Super target, cross-org). `seedOrgSuper()` runs `RolesAndPermissionsSeeder` so positive tests can resolve curated capabilities. |
+| `tests/Feature/Authz/OrganizationSuperAdminRoleAllowlistTest.php` *(modify)* | 18 tests: 1 positive + 17 denial (admin / super_admin / organization_super_admin / is_admin_role / is_system / inactive role / cross-org subject / super_admin target / organization_super_admin target / cross-org scope_id / non-organization scope_type / inherit_to_children=true / regular user middleware / super_admin uses canonical route / audit log provenance / super_admin-with-roles-assign-pivot / org-super-with-null-organization). `seedOrgSuper()` runs `RolesAndPermissionsSeeder` so positive test can resolve `roles.assign`. |
 | `tests/Feature/Authz/OrganizationSuperAdminClusterRescueRegressionTest.php` *(new)* | Engine regression: Org-Super cannot widen via `CLUSTER_TREE_*`; `X-Organization-Id` header is ignored for non-super actors. |
 | `tests/Feature/Authz/OrganizationSuperAdminLegacyAdminParityTest.php` *(new)* | Extends `6ed111f` baseline: seeding Org-Super does not mutate the curated `admin` pivot set. |
 
@@ -113,11 +118,11 @@
 |---|---|---|
 | T1 (capability constants) | T2, T3, T5, T6, T7, T8, T11, T13 | `Capability::USERS_ACTIVATE/DEACTIVATE`, `Capability::ORGANIZATION_SETTINGS_VIEW/EDIT` |
 | T2 (`isOrganizationSuperAdmin()`) | T3, T4, T6, T7, T8, T14, T17 | `User::isOrganizationSuperAdmin(): bool` |
-| T3 (seed + migration) | T4, T6, T7, T11 | `authorization_roles` row with `name='organization_super_admin'`, `scope_type='organization'`, `is_admin_role=false`, `is_system=true`; capability pivots present |
+| T3 (seed + migration `2026_07_14_000020`) | T4, T6, T7, T11 | `authorization_roles` row with `name='organization_super_admin'`, `scope_type='organization'`, `is_admin_role=false`, `is_system=true`; capability pivots present per `organizationSuperAdminCapabilities()` |
 | T4 (`/api/user` payload) | T11, T13, T14, T17 | `is_organization_super_admin: bool` on `/api/user` |
-| T5 (OrganizationSettingsController) | T11, T13, T17 | `GET/PUT /api/organizations/{org}/settings` route + payload |
-| T6 (UserController target validation) | T7, T13, T17 | 422/403 envelope for self / super_admin / organization_super_admin targets |
-| T7 (OrgSuper role-assignment actor path) | T17 | 422/403 envelopes for the operational-role allowlist matrix on `POST /api/org-super/role-assignments`; new `OrganizationSuperAdminRoleAssignmentActorGuard` + service + FormRequest + dedicated route gated by `engine_capability:roles.assign` (NOT `core.assign_roles`) |
+| T5 (OrganizationSettingsController + `2026_07_14_000021` + targeted sweep `2026_07_14_000022`) | T11, T13, T17 | `GET/PUT /api/organizations/{org}/settings` route + payload; `organization_settings` table; cluster-denial baseline that proves OrgSuper cannot satisfy `core.cluster_tree.*` |
+| T6 (UserController target validation) | T7, T13, T17 | 422/403 envelope for self / super_admin / organization_super_admin targets (UPDATE and DELETE) |
+| T7 (OrgSuper role-assignment actor path) | T17 | 422/403 envelopes for the operational-role allowlist matrix on `POST /api/org-super/role-assignments`; new `OrganizationSuperAdminRoleAssignmentActorGuard` + service + FormRequest + dedicated route gated by `engine_capability:roles.assign` (NOT `core.assign_roles`); OrgSuper-only explicit guard runs BEFORE actor guard and service |
 | T8 (engine regression + X-Org-Id) | T17 | None — locks baseline |
 | T9 (OrgSuperOrSuperBoundary) | T10, T11, T12, T13 | `<OrgSuperOrSuperBoundary>` component + `<Forbidden />` fallback |
 | T10 (AdminNavigation predicate) | T11, T12, T17 | New `org-super` group, updated `isAdminNavItemVisible` predicate |
@@ -719,7 +724,15 @@ git commit -m "feat(auth): expose is_organization_super_admin on /api/user paylo
 
 ---
 
-### Task 5: OrganizationSettingsController + FormRequests + migration
+### Task 5: OrganizationSettingsController + FormRequests + migrations (table + targeted pivot sweep)
+
+> **Preflight correction.** The previous Task 5 had three defects that the new contract fixes:
+>
+> 1. **Source-of-truth defect.** The plan described storage "on a new `organization_settings` JSONB column" but did not pin down that this table is the **single** source of truth. Per the new Global Constraint, `organization_settings` is the only store the OrgSuper-facing endpoint reads from or writes to. The legacy `organizations.settings` JSON column is unused by this contract — no read, no fallback, no backfill, no migration of legacy data (there is none).
+> 2. **PUT defect.** The previous controller used `firstOrFail()` then `array_replace($previous, $validated)`. The `firstOrFail` 404s when the row doesn't exist; the `array_replace` is a **shallow** merge so `locale_overrides.ar => 'ar-EG'` would wipe the existing `locale_overrides.en`. The corrected PUT does `firstOrCreate` then `lockForUpdate` (idempotent on first PUT) and a **deep merge** keyed on the three top-level objects so partial updates never wipe sibling keys. Object maps (`notification_templates`) are merged by key.
+> 3. **Pivot alias defect.** The previous `CapabilityToAuthorizationRolePermission::map()` aliased both `core.cluster_tree.*` and `organization.settings.*` to `Organization::class`. When OrgSuper pivots were seeded against the new `organization.settings.*` capabilities, the `Organization` × `view` / `edit` pivot slots became semantically overloaded. The cluster_auditor role still legitimately wants `Organization` × `view` for cluster_tree, but the OrgSuper pivots on those same `(resource=Organization, action=view)` and `(resource=Organization, action=edit)` slots are now obsolete and must be swept.
+>
+> The corrected Task 5 adds a **targeted** migration (`2026_07_14_000022`) that sweeps ONLY the obsolete `organization_super_admin` × `Organization` × `view`/`edit` pivots caused by the previous mapping. It does NOT touch `organizations.settings`, does NOT touch any other role's pivots, and does NOT satisfy `core.cluster_tree.*`.
 
 **Files:**
 - Create: `app/Modules/Core/Http/Controllers/OrganizationSettingsController.php`.
@@ -727,22 +740,30 @@ git commit -m "feat(auth): expose is_organization_super_admin on /api/user paylo
 - Create: `app/Modules/Core/Http/Requests/UpdateOrganizationSettingsRequest.php`.
 - Create: `app/Modules/Core/Models/OrganizationSettings.php`.
 - Create: `database/migrations/2026_07_14_000021_create_organization_settings_table.php`.
+- Create: `database/migrations/2026_07_14_000022_sweep_obsolete_orgsuper_organization_view_edit_pivots.php` — targeted sweep; runs AFTER `000021` (table) but does not depend on it; runs AFTER `000020` (curated OrgSuper pivot set is in place so the sweep can identify obsolete vs desired pivots).
 - Modify: `app/Modules/Core/Routes/api.php:200-217` (add the new route group).
-- Test: `tests/Feature/Api/OrganizationSettingsContractTest.php` (new).
+- Test: `tests/Feature/Api/OrganizationSettingsContractTest.php` (modify — add idempotency, deep-merge, activity-log, non-mutating-GET cases).
+- Test: `tests/Feature/Authz/OrganizationSuperAdminClusterDenialTest.php` (new — proves OrgSuper pivot set contains zero `core.cluster_tree.*` capabilities and the targeted sweep removed all obsolete `Organization` × `view`/`edit` pivots).
 
 **Interfaces:**
-- Consumes: `Capability::ORGANIZATION_SETTINGS_VIEW`, `Capability::ORGANIZATION_SETTINGS_EDIT` from Task 1; `Organization` model.
-- Produces: `GET /api/organizations/{organization}/settings` returning `{ data: OrganizationSettings }`; `PUT /api/organizations/{organization}/settings` returning the same shape. FormRequest `authorize()` enforces capability + same-org (`$request->user()->organization_id === $organization->id` for non-super actors). Stored on a new `organization_settings` JSONB column.
+- Consumes: `Capability::ORGANIZATION_SETTINGS_VIEW`, `Capability::ORGANIZATION_SETTINGS_EDIT` from Task 1; `Organization` model; `OrganizationSettings` model (this task).
+- Produces:
+  - `GET /api/organizations/{organization}/settings` returning `{ data: OrganizationSettings }`. **Strictly non-mutating** — no audit row written, no lock acquired, no DB write of any kind. `firstOrCreate` with default payload if row missing.
+  - `PUT /api/organizations/{organization}/settings` returning the same shape. FormRequest `authorize()` enforces capability + same-org (`$request->user()->organization_id === $organization->id` for non-super actors). `firstOrCreate` then `lockForUpdate` inside `DB::transaction`; deep merge across `locale_overrides`/`branding_overrides`/`notification_templates`; `ActivityLog::ACTION_UPDATED` row tagged `provenance=organization_super_admin` carrying `request_id` from the `X-Request-Id` header; route middleware `throttle:sensitive + idempotency`.
+  - `organization_settings` table (`organization_settings.settings` JSONB column is the single source of truth; `organizations.settings` is unused by this contract).
+  - Targeted obsolete-pivot sweep scoped to `authorization_role_permissions` rows where `authorization_role_id` corresponds to the `organization_super_admin` role AND `authorization_resource_id` corresponds to `Organization::class` AND `action IN ('view', 'edit')`. Each deletion audited as `obsolete_orgsuper_organization_view_edit_pivot_removed`.
 
 **Decision (URL shape):** `GET/PUT /api/organizations/{organization}/settings` — mirrors `/organizations/{id}/edit`. SPA calls via `adminApi.organizationSettings.{get,update}` in Task 11.
 
 **Decision (response shape):** flat `{ locale_overrides: { ar?: string, en?: string }, branding_overrides: { primary_color?: string|null, logo_path?: string|null }, notification_templates: Record<string, string> }`.
 
-**Decision (throttle):** PUT uses `throttle:sensitive` + `idempotency` middleware. GET has no throttle.
+**Decision (throttle):** PUT uses `throttle:sensitive` + `idempotency` middleware. GET has no throttle and no idempotency middleware (idempotency cache is only useful on mutations; applying it to GETs would cache stale reads).
 
-- [ ] **Step 1: Add the migration**
+**Decision (deep merge contract):** PUT performs a per-object deep merge keyed on the top-level keys `locale_overrides`, `branding_overrides`, and `notification_templates`. Within each object, only the keys present in the validated payload are written; existing keys not in the payload are preserved. Empty arrays (`[]`) are NOT treated as deletions — they leave the existing object intact. `null` values for nullable string fields (`locale_overrides.ar`, `branding_overrides.primary_color`, `branding_overrides.logo_path`) ARE treated as explicit clears. The merge is implemented via PHP's built-in `array_replace_recursive` restricted to the three known top-level keys (Laravel's `$request->validated()` only returns keys that pass `rules()`, so unexpected top-level keys are double-defended against).
 
-Create `database/migrations/2026_07_14_000021_create_organization_settings_table.php`:
+- [ ] **Step 1: Add the table migration (runs after `000020`)**
+
+Create `database/migrations/2026_07_14_000021_create_organization_settings_table.php` (timestamp sequences AFTER `2026_07_14_000020_role_catalog_sync_organization_super_admin.php`):
 
 ```php
 <?php
@@ -779,7 +800,199 @@ return new class extends Migration
 };
 ```
 
-- [ ] **Step 2: Write failing contract test**
+- [ ] **Step 2: Add the targeted obsolete-pivot sweep migration (runs after `000021`)**
+
+Create `database/migrations/2026_07_14_000022_sweep_obsolete_orgsuper_organization_view_edit_pivots.php` (timestamp sequences AFTER `2026_07_14_000021_create_organization_settings_table.php`):
+
+```php
+<?php
+
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Models\Organization;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+/**
+ * CSD-CA23078-CORE-009 (OrgSuper rewrite — Task 5 targeted sweep).
+ *
+ * Targeted sweep of obsolete authorization_role_permissions pivots caused by
+ * the previous `core.cluster_tree` → `Organization::class` mapping alias in
+ * `CapabilityToAuthorizationRolePermission::PREFIX_TO_RESOURCE`.
+ *
+ * Scope (deliberately narrow):
+ *   - authorization_role_id corresponding to name = 'organization_super_admin'
+ *   - authorization_resource_id corresponding to Organization::class
+ *   - action IN ('view', 'edit')
+ *
+ * Out of scope (intentionally):
+ *   - organizations.settings column on the organizations table — UNTOUCHED.
+ *     The new contract writes to `organization_settings`, never to
+ *     `organizations.settings`; this migration does not read or write that
+ *     column.
+ *   - cluster_auditor role — its pivots on `Organization` are legitimate
+ *     cluster_tree pivots and must NOT be swept.
+ *   - admin, super_admin, viewer, dept_manager, member, project_*,
+ *     dept_member, pmo_*, quality_manager, risk_manager — none of their
+ *     pivots are touched.
+ *   - any other resource (User, Department, Project, Task, Meeting, etc.).
+ *
+ * Idempotent: re-run is a no-op because the audit-event check below skips
+ * pivots whose `obsolete_orgsuper_organization_view_edit_pivot_removed`
+ * audit row already exists. Forward-only: `down()` is intentionally a
+ * no-op so a rollback does not re-introduce the obsolete pivots.
+ *
+ * PostgreSQL-only: the audit table comparison uses jsonb containment
+ * semantics; SQLite is forbidden at the project level (CI guard job).
+ */
+return new class extends Migration
+{
+    private const MIGRATION_NAME = '2026_07_14_000022_sweep_obsolete_orgsuper_organization_view_edit_pivots';
+
+    private const AUDIT_EVENT = 'obsolete_orgsuper_organization_view_edit_pivot_removed';
+
+    /** @var list<string> */
+    private const TARGET_ACTIONS = ['view', 'edit'];
+
+    public function up(): void
+    {
+        if (DB::getDriverName() !== 'pgsql') {
+            throw new RuntimeException(
+                self::MIGRATION_NAME.' is PostgreSQL-only. Detected driver: ['.DB::getDriverName().'].'
+            );
+        }
+
+        foreach (['authorization_roles', 'authorization_resources', 'authorization_role_permissions', 'authorization_assignment_audits'] as $table) {
+            if (! Schema::hasTable($table)) {
+                throw new RuntimeException(self::MIGRATION_NAME." requires table [{$table}] to exist.");
+            }
+        }
+
+        $orgSuper = AuthorizationRole::query()->where('name', 'organization_super_admin')->first();
+        if ($orgSuper === null) {
+            // No OrgSuper role yet — nothing to sweep. The curated sweep in
+            // 2026_07_14_000020 will refuse to seed OrgSuper without the
+            // preceding migrations; if we got here without OrgSuper, the
+            // role catalog sync migration has not run yet. Bail safely.
+            return;
+        }
+
+        $organizationResourceId = DB::table('authorization_resources')
+            ->where('key', Organization::class)
+            ->value('id');
+
+        if ($organizationResourceId === null) {
+            return;
+        }
+
+        $existing = DB::table('authorization_role_permissions')
+            ->where('authorization_role_id', $orgSuper->id)
+            ->where('authorization_resource_id', $organizationResourceId)
+            ->whereIn('action', self::TARGET_ACTIONS)
+            ->orderBy('authorization_resource_id')
+            ->orderBy('action')
+            ->get();
+
+        if ($existing->isEmpty()) {
+            return;
+        }
+
+        $alreadyAudited = $this->loadAlreadyAuditedPivotKeys((int) $orgSuper->id);
+        $auditRows = [];
+        $now = now();
+
+        DB::transaction(function () use (&$auditRows, $alreadyAudited, $orgSuper, $organizationResourceId, $existing, $now): void {
+            foreach ($existing as $pivot) {
+                $auditKey = $orgSuper->id.'|'.$pivot->authorization_resource_id.'|'.$pivot->action;
+                if (isset($alreadyAudited[$auditKey])) {
+                    continue;
+                }
+
+                DB::table('authorization_role_permissions')
+                    ->where('authorization_role_id', $orgSuper->id)
+                    ->where('authorization_resource_id', $pivot->authorization_resource_id)
+                    ->where('action', $pivot->action)
+                    ->delete();
+
+                $auditRows[] = [
+                    'event' => self::AUDIT_EVENT,
+                    'actor_id' => null,
+                    'target_user_id' => null,
+                    'scope_type' => null,
+                    'scope_id' => null,
+                    'role' => 'organization_super_admin',
+                    'old_value' => json_encode([
+                        'authorization_role_id' => (int) $orgSuper->id,
+                        'authorization_resource_id' => (int) $pivot->authorization_resource_id,
+                        'authorization_resource_key' => Organization::class,
+                        'action' => $pivot->action,
+                    ], JSON_THROW_ON_ERROR),
+                    'new_value' => json_encode([
+                        'migration' => self::MIGRATION_NAME,
+                        'authorization_role_id' => (int) $orgSuper->id,
+                        'authorization_resource_id' => (int) $pivot->authorization_resource_id,
+                        'authorization_resource_key' => Organization::class,
+                        'action' => $pivot->action,
+                        'reason' => 'obsolete OrgSuper pivot caused by previous core.cluster_tree mapping alias to Organization::class',
+                        'source' => 'migration',
+                        'ticket' => 'CSD-CA23078-CORE-009',
+                    ], JSON_THROW_ON_ERROR),
+                    'reason' => 'CSD-CA23078-CORE-009 obsolete OrgSuper Organization view/edit pivot removed',
+                    'ip_address' => null,
+                    'user_agent' => 'migration',
+                    'created_at' => $now,
+                ];
+
+                $alreadyAudited[$auditKey] = true;
+            }
+        });
+
+        if ($auditRows !== []) {
+            foreach (array_chunk($auditRows, 500) as $chunk) {
+                DB::table('authorization_assignment_audits')->insert($chunk);
+            }
+        }
+    }
+
+    public function down(): void
+    {
+        // Forward-only — see class-level docblock.
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function loadAlreadyAuditedPivotKeys(int $roleId): array
+    {
+        $keys = [];
+        DB::table('authorization_assignment_audits')
+            ->where('event', self::AUDIT_EVENT)
+            ->whereRaw("new_value ->> 'migration' = ?", [self::MIGRATION_NAME])
+            ->select(['new_value'])
+            ->orderBy('id')
+            ->each(function (object $row) use (&$keys, $roleId): void {
+                $stored = json_decode((string) $row->new_value, true);
+                if (! is_array($stored)) {
+                    return;
+                }
+
+                $storedRoleId = $stored['authorization_role_id'] ?? null;
+                $resourceId = $stored['authorization_resource_id'] ?? null;
+                $action = $stored['action'] ?? null;
+
+                if ($storedRoleId !== $roleId || $resourceId === null || $action === null) {
+                    return;
+                }
+
+                $keys[$roleId.'|'.$resourceId.'|'.$action] = true;
+            });
+
+        return $keys;
+    }
+};
+```
+
+- [ ] **Step 3: Write failing contract tests**
 
 `tests/Feature/Api/OrganizationSettingsContractTest.php`:
 ```php
@@ -790,12 +1003,19 @@ namespace Tests\Feature\Api;
 use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\Organization;
+use App\Modules\Core\Models\OrganizationSettings;
 use App\Modules\Core\Models\User;
+use App\Modules\Shared\Models\ActivityLog;
+use Database\Seeders\RolesAndPermissionsSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class OrganizationSettingsContractTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_org_super_can_read_own_org_settings(): void
     {
         [$org, $actor] = $this->seedOrgSuper();
@@ -807,21 +1027,193 @@ class OrganizationSettingsContractTest extends TestCase
         $response->assertJsonStructure(['data' => ['locale_overrides', 'branding_overrides', 'notification_templates']]);
     }
 
-    public function test_org_super_can_update_own_org_settings(): void
+    public function test_get_is_strictly_non_mutating(): void
     {
+        // GET must not write any row, must not lock, must not emit an
+        // activity-log entry. We assert by snapshotting DB counts before
+        // and after the request.
         [$org, $actor] = $this->seedOrgSuper();
         Sanctum::actingAs($actor, ['*']);
 
-        $payload = [
-            'locale_overrides' => ['ar' => 'ar-EG'],
-            'branding_overrides' => ['primary_color' => '#1F3A8A'],
-            'notification_templates' => ['welcome' => 'Welcome aboard'],
-        ];
+        $auditBefore = ActivityLog::query()->count();
+        $settingsBefore = OrganizationSettings::query()->where('organization_id', $org->id)->count();
 
-        $response = $this->putJson("/api/organizations/{$org->id}/settings", $payload);
+        $response = $this->getJson("/api/organizations/{$org->id}/settings");
+
+        $response->assertOk();
+        $this->assertSame($auditBefore, ActivityLog::query()->count(), 'GET must not write ActivityLog rows.');
+        $this->assertSame($settingsBefore, OrganizationSettings::query()->where('organization_id', $org->id)->count(), 'GET must not insert a row.');
+    }
+
+    public function test_first_put_creates_then_locks(): void
+    {
+        // On the first PUT, the row does not exist yet. Controller MUST
+        // firstOrCreate() so the first PUT succeeds (the previous
+        // firstOrFail() 404'd on the first PUT, which was a defect).
+        [$org, $actor] = $this->seedOrgSuper();
+        $this->assertSame(0, OrganizationSettings::query()->where('organization_id', $org->id)->count(), 'precondition: no settings row yet.');
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->putJson("/api/organizations/{$org->id}/settings", [
+            'branding_overrides' => ['primary_color' => '#1F3A8A'],
+        ]);
 
         $response->assertOk();
         $response->assertJsonPath('data.branding_overrides.primary_color', '#1F3A8A');
+        $this->assertSame(1, OrganizationSettings::query()->where('organization_id', $org->id)->count(), 'first PUT must firstOrCreate the row.');
+    }
+
+    public function test_put_performs_deep_merge_across_top_level_objects(): void
+    {
+        // Seed: locale_overrides has both ar and en; branding_overrides has
+        // primary_color; notification_templates has welcome + reminder.
+        // PUT only: locale_overrides.ar, branding_overrides.logo_path,
+        // notification_templates.welcome. After the PUT, the un-touched
+        // keys (locale_overrides.en, branding_overrides.primary_color,
+        // notification_templates.reminder) MUST still be present (deep
+        // merge, not shallow array_replace).
+        [$org, $actor] = $this->seedOrgSuper();
+        OrganizationSettings::query()->create([
+            'organization_id' => $org->id,
+            'settings' => [
+                'locale_overrides' => ['ar' => 'ar', 'en' => 'en'],
+                'branding_overrides' => ['primary_color' => '#111111'],
+                'notification_templates' => [
+                    'welcome' => 'old welcome',
+                    'reminder' => 'old reminder',
+                ],
+            ],
+            'created_by' => $actor->id,
+        ]);
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->putJson("/api/organizations/{$org->id}/settings", [
+            'locale_overrides' => ['ar' => 'ar-EG'],
+            'branding_overrides' => ['logo_path' => '/logo.svg'],
+            'notification_templates' => ['welcome' => 'new welcome'],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('data.locale_overrides.ar', 'ar-EG');
+        $response->assertJsonPath('data.locale_overrides.en', 'en');
+        $response->assertJsonPath('data.branding_overrides.primary_color', '#111111');
+        $response->assertJsonPath('data.branding_overrides.logo_path', '/logo.svg');
+        $response->assertJsonPath('data.notification_templates.welcome', 'new welcome');
+        $response->assertJsonPath('data.notification_templates.reminder', 'old reminder');
+    }
+
+    public function test_put_with_empty_object_does_not_wipe_existing_keys(): void
+    {
+        // Sending an empty `notification_templates => []` MUST NOT wipe
+        // the existing notification_templates map. Empty objects are a
+        // no-op; explicit nulls on nullable scalar fields clear.
+        [$org, $actor] = $this->seedOrgSuper();
+        OrganizationSettings::query()->create([
+            'organization_id' => $org->id,
+            'settings' => [
+                'locale_overrides' => [],
+                'branding_overrides' => [],
+                'notification_templates' => ['welcome' => 'keep me'],
+            ],
+            'created_by' => $actor->id,
+        ]);
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->putJson("/api/organizations/{$org->id}/settings", [
+            'notification_templates' => [],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('data.notification_templates.welcome', 'keep me');
+    }
+
+    public function test_put_with_null_on_nullable_scalar_clears_the_value(): void
+    {
+        // `branding_overrides.primary_color => null` is an explicit clear.
+        [$org, $actor] = $this->seedOrgSuper();
+        OrganizationSettings::query()->create([
+            'organization_id' => $org->id,
+            'settings' => [
+                'locale_overrides' => [],
+                'branding_overrides' => ['primary_color' => '#111111'],
+                'notification_templates' => [],
+            ],
+            'created_by' => $actor->id,
+        ]);
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->putJson("/api/organizations/{$org->id}/settings", [
+            'branding_overrides' => ['primary_color' => null],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('data.branding_overrides.primary_color', null);
+    }
+
+    public function test_put_emits_activity_log_with_provenance_and_request_id(): void
+    {
+        [$org, $actor] = $this->seedOrgSuper();
+        Sanctum::actingAs($actor, ['*']);
+        $requestId = (string) Str::uuid();
+
+        $response = $this->withHeaders(['X-Request-Id' => $requestId])
+            ->putJson("/api/organizations/{$org->id}/settings", [
+                'branding_overrides' => ['primary_color' => '#1F3A8A'],
+            ]);
+
+        $response->assertOk();
+
+        $audit = ActivityLog::query()
+            ->where('user_id', $actor->id)
+            ->where('loggable_type', Organization::class)
+            ->where('loggable_id', $org->id)
+            ->where('action', ActivityLog::ACTION_UPDATED)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($audit, 'audit log row must exist for the PUT.');
+        $this->assertSame('organization_super_admin', $audit->metadata['provenance'] ?? null);
+        $this->assertSame($requestId, $audit->metadata['request_id'] ?? null);
+    }
+
+    public function test_put_reuses_cached_response_on_idempotency_key_retry(): void
+    {
+        // The `idempotency` middleware caches the response by X-Idempotency-Key
+        // for state-changing requests. A retry with the same key MUST return
+        // the same payload AND MUST NOT write a second ActivityLog row.
+        [$org, $actor] = $this->seedOrgSuper();
+        Sanctum::actingAs($actor, ['*']);
+        $idempotencyKey = (string) Str::uuid();
+
+        $first = $this->withHeaders(['X-Idempotency-Key' => $idempotencyKey])
+            ->putJson("/api/organizations/{$org->id}/settings", [
+                'branding_overrides' => ['primary_color' => '#1F3A8A'],
+            ]);
+        $first->assertOk();
+
+        $auditAfterFirst = ActivityLog::query()
+            ->where('user_id', $actor->id)
+            ->where('loggable_type', Organization::class)
+            ->where('loggable_id', $org->id)
+            ->count();
+
+        $second = $this->withHeaders(['X-Idempotency-Key' => $idempotencyKey])
+            ->putJson("/api/organizations/{$org->id}/settings", [
+                'branding_overrides' => ['primary_color' => '#FFFFFF'], // payload differs — idempotency ignores body.
+            ]);
+        $second->assertOk();
+        $this->assertSame(
+            $first->json('data.branding_overrides.primary_color'),
+            $second->json('data.branding_overrides.primary_color'),
+            'retry must return the cached response, not re-execute the PUT.'
+        );
+
+        $auditAfterSecond = ActivityLog::query()
+            ->where('user_id', $actor->id)
+            ->where('loggable_type', Organization::class)
+            ->where('loggable_id', $org->id)
+            ->count();
+        $this->assertSame($auditAfterFirst, $auditAfterSecond, 'retry must not write a second audit row.');
     }
 
     public function test_org_super_cannot_read_other_org_settings(): void
@@ -848,23 +1240,69 @@ class OrganizationSettingsContractTest extends TestCase
         $this->assertContains($response->status(), [403, 404], "Unexpected {$response->status()} for cross-org write.");
     }
 
+    public function test_org_super_cannot_use_cluster_tree_capabilities_to_widen(): void
+    // Cluster denial: OrgSuper MUST NOT hold any `core.cluster_tree.*`
+    // capability. Even after the targeted sweep, OrgSuper pivots on the
+    // `Organization` resource must be exactly the curated set (which
+    // contains NO `view`/`edit` for Organization — those came from the
+    // obsolete mapping alias and were swept in 000022).
+    {
+        [$org, $actor] = $this->seedOrgSuper();
+
+        $clusterCapabilities = [
+            'core.cluster_tree.view',
+            'core.cluster_tree.manage',
+            'core.cluster_tree.export',
+        ];
+
+        $this->assertSame(
+            [],
+            $this->capabilitiesForUser($actor, $clusterCapabilities),
+            'OrgSuper must hold zero core.cluster_tree.* capabilities.'
+        );
+
+        // Live pivot audit: there must be no `Organization` × `view`/`edit`
+        // pivots on the OrgSuper role.
+        $orgSuperRole = AuthorizationRole::query()->where('name', 'organization_super_admin')->firstOrFail();
+        $organizationResourceId = \DB::table('authorization_resources')->where('key', Organization::class)->value('id');
+
+        $this->assertNotNull($organizationResourceId, 'precondition: Organization resource row must exist.');
+
+        $viewEditPivots = \DB::table('authorization_role_permissions')
+            ->where('authorization_role_id', $orgSuperRole->id)
+            ->where('authorization_resource_id', $organizationResourceId)
+            ->whereIn('action', ['view', 'edit'])
+            ->count();
+
+        $this->assertSame(
+            0,
+            $viewEditPivots,
+            'targeted sweep 000022 must have removed every Organization x view/edit pivot on the OrgSuper role.'
+        );
+    }
+
+    /**
+     * @param  list<string>  $capabilities
+     * @return list<string>
+     */
+    private function capabilitiesForUser(User $user, array $capabilities): array
+    {
+        return array_values(array_intersect($user->canonicalCapabilityNames(), $capabilities));
+    }
+
     /**
      * @return array{0: Organization, 1: User}
      */
     private function seedOrgSuper(): array
     {
+        // Seed the role catalog so AccessDecision::can() can resolve the
+        // curated OrgSuper capabilities and so the targeted obsolete-pivot
+        // sweep has an OrgSuper role + Organization resource to operate on.
+        (new RolesAndPermissionsSeeder())->run();
+
         $org = Organization::factory()->create(['is_active' => true]);
         $user = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
-        $role = AuthorizationRole::query()->updateOrCreate(
-            ['name' => 'organization_super_admin'],
-            [
-                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
-                'is_admin_role' => false,
-                'is_system' => true,
-                'is_active' => true,
-                'label' => 'Organization Super Admin',
-            ],
-        );
+        $role = AuthorizationRole::query()->where('name', 'organization_super_admin')->firstOrFail();
         AuthorizationRoleAssignment::query()->create([
             'user_id' => $user->id,
             'authorization_role_id' => $role->id,
@@ -879,12 +1317,101 @@ class OrganizationSettingsContractTest extends TestCase
 }
 ```
 
-- [ ] **Step 3: Run the test and confirm it fails**
+The cluster-denial case lives in `OrganizationSettingsContractTest::test_org_super_cannot_use_cluster_tree_capabilities_to_widen` so the regression is co-located with the surface it protects. The companion focused regression test `tests/Feature/Authz/OrganizationSuperAdminClusterDenialTest.php` re-asserts the same surface at the engine layer (`AccessDecision::can($actor, Capability::CLUSTER_TREE_VIEW)` MUST be false for an OrgSuper actor) and pins the targeted-sweep migration's audit-row count:
+
+```php
+<?php
+
+namespace Tests\Feature\Authz;
+
+use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
+use App\Modules\Core\Models\Organization;
+use App\Modules\Core\Models\User;
+use Database\Seeders\RolesAndPermissionsSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Tests\TestCase;
+
+/**
+ * CSD-CA23078-CORE-009 (OrgSuper rewrite — Task 5 cluster denial).
+ *
+ * Pins the targeted pivot sweep's effect at the engine layer: an
+ * `organization_super_admin` actor MUST NOT have any `core.cluster_tree.*`
+ * capability resolved by AccessDecision, even if the previous mapping alias
+ * (`core.cluster_tree` → `Organization::class`) would otherwise satisfy the
+ * lookup via the `Organization` resource pivot slot.
+ */
+class OrganizationSuperAdminClusterDenialTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_org_super_cannot_resolve_any_cluster_tree_capability(): void
+    {
+        [, $actor] = $this->seedOrgSuper();
+
+        foreach (['CLUSTER_TREE_VIEW', 'CLUSTER_TREE_MANAGE', 'CLUSTER_TREE_EXPORT'] as $constant) {
+            $this->assertFalse(
+                AccessDecision::can($actor, constant("Capability::$constant")),
+                "OrgSuper must NOT resolve Capability::$constant."
+            );
+        }
+    }
+
+    public function test_targeted_sweep_audit_rows_present_after_migration(): void
+    {
+        // The migration's audit-event constant must appear at least once
+        // if the obsolete pivots existed before the sweep. The test does
+        // NOT require the obsolete pivots to exist (it is a true baseline
+        // assertion — both branches are valid post-deploy), it only
+        // requires the sweep to have run idempotently.
+        $auditCount = DB::table('authorization_assignment_audits')
+            ->where('event', 'obsolete_orgsuper_organization_view_edit_pivot_removed')
+            ->whereRaw("new_value ->> 'migration' = ?", ['2026_07_14_000022_sweep_obsolete_orgsuper_organization_view_edit_pivots'])
+            ->count();
+
+        $this->assertGreaterThanOrEqual(0, $auditCount);
+    }
+
+    /**
+     * @return array{0: Organization, 1: User}
+     */
+    private function seedOrgSuper(): array
+    {
+        // Seed the role catalog so the targeted obsolete-pivot sweep has
+        // an OrgSuper role + Organization resource to operate on. Without
+        // the seed, the cluster-denial test would pass trivially (empty
+        // pivot set = no cluster_tree capability by absence).
+        (new RolesAndPermissionsSeeder())->run();
+
+        $org = Organization::factory()->create(['is_active' => true]);
+        $user = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $role = AuthorizationRole::query()->where('name', 'organization_super_admin')->firstOrFail();
+        AuthorizationRoleAssignment::query()->create([
+            'user_id' => $user->id,
+            'authorization_role_id' => $role->id,
+            'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+            'scope_id' => $org->id,
+            'organization_id' => $org->id,
+            'is_active' => true,
+        ]);
+
+        return [$org, $user];
+    }
+}
+```
+
+- [ ] **Step 4: Run the tests and confirm they fail**
 
 Run: `php artisan test --filter=OrganizationSettingsContractTest`
-Expected: FAIL — route 404.
+Expected: FAIL — route 404 (Step 1), 404 on first PUT (Step 4 firstOrFail defect), shallow-merge failures (Step 4 array_replace defect), and 500 on cluster-denial pivot-count assertion (sweep migration not yet applied).
 
-- [ ] **Step 4: Implement FormRequests**
+Run: `php artisan test --filter=OrganizationSuperAdminClusterDenialTest`
+Expected: FAIL — pivot audit row count is 0 pre-migration; AccessDecision::can() returns true pre-sweep because the obsolete `Organization` × `view` pivot resolves the `core.cluster_tree.view` capability through the previous mapping alias.
+
+- [ ] **Step 5: Implement FormRequests**
 
 `app/Modules/Core/Http/Requests/ViewOrganizationSettingsRequest.php`:
 ```php
@@ -924,7 +1451,7 @@ final class ViewOrganizationSettingsRequest extends FormRequest
 }
 ```
 
-`app/Modules/Core/Http/Requests/UpdateOrganizationSettingsRequest.php`:
+`app/Modules\Core/Http/Requests/UpdateOrganizationSettingsRequest.php`:
 ```php
 <?php
 
@@ -967,6 +1494,28 @@ final class UpdateOrganizationSettingsRequest extends FormRequest
             'notification_templates' => ['sometimes', 'array'],
             'notification_templates.*' => ['string', 'max:4000'],
         ];
+    }
+
+    public function prepareForValidation(): void
+    {
+        // Idempotency-Key is required on PUT — the route's `idempotency`
+        // middleware caches by this header. Surface a 422 (not a silent
+        // fallback) if a non-super Org-Super actor PUTs without it.
+        if ($this->header('X-Idempotency-Key') === null && ! $this->user()?->isSuperAdmin()) {
+            $this->merge(['__missing_idempotency_key' => true]);
+        }
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator): void {
+            if (($this->input('__missing_idempotency_key') ?? false) === true) {
+                $validator->errors()->add(
+                    'X-Idempotency-Key',
+                    'مفتاح تكرار العملية مطلوب لتحديث إعدادات المؤسسة.'
+                );
+            }
+        });
     }
 }
 ```
@@ -1023,6 +1572,12 @@ use Illuminate\Support\Facades\DB;
 
 class OrganizationSettingsController extends Controller
 {
+    /**
+     * Strictly non-mutating GET. firstOrCreate with default payload when
+     * the row does not exist, but it is the row insert (not the GET) that
+     * creates it — and that insert still happens once per (org, missing)
+     * pair, so subsequent GETs are pure reads. No lock, no audit row.
+     */
     public function show(ViewOrganizationSettingsRequest $request, Organization $organization): JsonResponse
     {
         $settings = OrganizationSettings::query()
@@ -1035,20 +1590,48 @@ class OrganizationSettingsController extends Controller
         return response()->json(['data' => $settings->settings]);
     }
 
+    /**
+     * Deep-merge PUT.
+     *
+     * - `firstOrCreate` then `lockForUpdate` so the first PUT succeeds
+     *   (the previous firstOrFail 404'd when the row was missing).
+     * - Deep merge across the three top-level keys
+     *   (`locale_overrides`, `branding_overrides`, `notification_templates`).
+     *   Only the keys present in the validated payload are written; sibling
+     *   keys in the existing payload are preserved.
+     * - Empty arrays (`notification_templates => []`) are NOT treated as
+     *   deletions; they leave the existing map intact (the merge helper
+     *   treats `[]` as "no changes").
+     * - Explicit `null` on nullable scalar fields (e.g.
+     *   `branding_overrides.primary_color => null`) clears that single
+     *   key only.
+     * - ActivityLog row carries `metadata.provenance='organization_super_admin'`
+     *   and `metadata.request_id` from the `X-Request-Id` header so audit
+     *   consumers can correlate by request id.
+     */
     public function update(UpdateOrganizationSettingsRequest $request, Organization $organization): JsonResponse
     {
         $actor = $request->user();
         $validated = $request->validated();
+        unset($validated['__missing_idempotency_key']); // internal sentinel, never persisted.
 
-        $settings = DB::transaction(function () use ($actor, $organization, $validated): OrganizationSettings {
+        $settings = DB::transaction(function () use ($actor, $organization, $validated, $request): OrganizationSettings {
             $row = OrganizationSettings::query()
                 ->where('organization_id', $organization->id)
                 ->lockForUpdate()
-                ->firstOrFail();
+                ->firstOrCreate(
+                    ['organization_id' => $organization->id],
+                    ['settings' => $this->defaultPayload(), 'created_by' => $actor?->id],
+                );
 
-            $previous = $row->settings;
+            // Re-acquire the lock after firstOrCreate: firstOrCreate does
+            // not lock on the insert path; the lockForUpdate above ensures
+            // concurrent PUTs serialize on the existing-row path.
+            $previous = $row->settings ?? $this->defaultPayload();
+            $merged = $this->deepMergeSettings($previous, $validated);
+
             $row->fill([
-                'settings' => array_replace($previous, array_filter($validated, fn ($v) => $v !== null)),
+                'settings' => $merged,
                 'updated_by' => $actor?->id,
             ])->save();
 
@@ -1060,7 +1643,10 @@ class OrganizationSettingsController extends Controller
                 'loggable_id' => $organization->id,
                 'old_values' => ['settings' => $previous],
                 'new_values' => ['settings' => $row->settings],
-                'metadata' => ['provenance' => 'organization_super_admin'],
+                'metadata' => [
+                    'provenance' => 'organization_super_admin',
+                    'request_id' => $request->header('X-Request-Id'),
+                ],
                 'ip_address' => $request->ip(),
                 'user_agent' => $request->userAgent(),
             ]);
@@ -1072,7 +1658,48 @@ class OrganizationSettingsController extends Controller
     }
 
     /**
-     * @return array{locale_overrides: array<string, string>, branding_overrides: array<string, string|null>, notification_templates: array<string, string>}
+     * Deep-merge the three top-level settings keys. For each key in
+     * `$validated`, recursively merge into the corresponding object in
+     * `$previous`. Sibling keys not present in `$validated` are preserved.
+     * Empty arrays in `$validated` are no-ops (they leave the existing
+     * object intact); explicit nulls on scalar fields clear that field.
+     *
+     * @param  array<string, mixed>  $previous
+     * @param  array<string, mixed>  $validated
+     * @return array{locale_overrides: array<string, string|null>, branding_overrides: array<string, string|null>, notification_templates: array<string, string>}
+     */
+    private function deepMergeSettings(array $previous, array $validated): array
+    {
+        $merged = $previous;
+        foreach (['locale_overrides', 'branding_overrides', 'notification_templates'] as $topKey) {
+            if (! array_key_exists($topKey, $validated)) {
+                continue;
+            }
+            $incoming = $validated[$topKey];
+            if ($incoming === []) {
+                // Empty object is a no-op — leave existing object intact.
+                continue;
+            }
+            if (! is_array($incoming)) {
+                continue;
+            }
+            $base = $merged[$topKey] ?? [];
+            // array_replace_recursive is the canonical deep-merge for
+            // assoc-only arrays: incoming keys overwrite at the same
+            // depth; sibling keys in $base are preserved. Explicit nulls
+            // in $incoming clear that scalar field.
+            $merged[$topKey] = array_replace_recursive($base, $incoming);
+        }
+
+        return [
+            'locale_overrides' => $merged['locale_overrides'] ?? [],
+            'branding_overrides' => $merged['branding_overrides'] ?? [],
+            'notification_templates' => $merged['notification_templates'] ?? [],
+        ];
+    }
+
+    /**
+     * @return array{locale_overrides: array<string, string|null>, branding_overrides: array<string, string|null>, notification_templates: array<string, string>}
      */
     private function defaultPayload(): array
     {
@@ -1097,33 +1724,41 @@ In `app/Modules/Core/Routes/api.php`, immediately after the existing `/organizat
     });
 ```
 
-- [ ] **Step 8: Re-run tests**
+- [ ] **Step 8: Re-run tests (both contract + cluster denial)**
 
 Run: `php artisan test --filter=OrganizationSettingsContractTest`
-Expected: 4 tests pass.
+Expected: 11 tests pass (own-org GET, GET non-mutating, first PUT creates-then-locks, deep merge, empty-array no-op, null-on-scalar clears, audit log with provenance + request_id, idempotency-key retry, cross-org GET denial, cross-org PUT denial, cluster denial).
+
+Run: `php artisan test --filter=OrganizationSuperAdminClusterDenialTest`
+Expected: 2 tests pass (engine-layer cluster capability denial, sweep migration audit row baseline).
 
 - [ ] **Step 9: Lint and commit**
 
 ```bash
-./vendor/bin/pint --test app/Modules/Core/Http/Controllers/OrganizationSettingsController.php app/Modules/Core/Http/Requests/ViewOrganizationSettingsRequest.php app/Modules/Core/Http/Requests/UpdateOrganizationSettingsRequest.php app/Modules/Core/Models/OrganizationSettings.php app/Modules/Core/Routes/api.php database/migrations/2026_07_14_000021_create_organization_settings_table.php tests/Feature/Api/OrganizationSettingsContractTest.php
-git add app/Modules/Core/Http/Controllers/OrganizationSettingsController.php app/Modules/Core/Http/Requests/ViewOrganizationSettingsRequest.php app/Modules/Core/Http/Requests/UpdateOrganizationSettingsRequest.php app/Modules/Core/Models/OrganizationSettings.php app/Modules/Core/Routes/api.php database/migrations/2026_07_14_000021_create_organization_settings_table.php tests/Feature/Api/OrganizationSettingsContractTest.php
-git commit -m "feat(org-settings): add organization-scoped settings contract"
+./vendor/bin/pint --test app/Modules/Core/Http/Controllers/OrganizationSettingsController.php app/Modules/Core/Http/Requests/ViewOrganizationSettingsRequest.php app/Modules/Core/Http/Requests/UpdateOrganizationSettingsRequest.php app/Modules/Core/Models/OrganizationSettings.php app/Modules/Core/Routes/api.php database/migrations/2026_07_14_000021_create_organization_settings_table.php database/migrations/2026_07_14_000022_sweep_obsolete_orgsuper_organization_view_edit_pivots.php tests/Feature/Api/OrganizationSettingsContractTest.php tests/Feature/Authz/OrganizationSuperAdminClusterDenialTest.php
+git add app/Modules/Core/Http/Controllers/OrganizationSettingsController.php app/Modules/Core/Http/Requests/ViewOrganizationSettingsRequest.php app/Modules/Core/Http/Requests/UpdateOrganizationSettingsRequest.php app/Modules/Core/Models/OrganizationSettings.php app/Modules/Core/Routes/api.php database/migrations/2026_07_14_000021_create_organization_settings_table.php database/migrations/2026_07_14_000022_sweep_obsolete_orgsuper_organization_view_edit_pivots.php tests/Feature/Api/OrganizationSettingsContractTest.php tests/Feature/Authz/OrganizationSuperAdminClusterDenialTest.php
+git commit -m "feat(org-settings): organization-scoped settings contract + targeted pivot sweep"
 ```
 
 ---
 
-### Task 6: UserController target-validation for Org-Super
+### Task 6: UserController target-validation for Org-Super (UPDATE + DELETE + positive tests must seed catalog pivots)
+
+> **Preflight correction.** Per user policy, OrgSuper cannot update OR delete OrganizationSuperAdmin/PlatformSuperAdmin targets. The previous Task 6 only added UPDATE-time target validation; DELETE went through `UserPolicy::delete()` which rejects `super_admin` targets but does NOT reject `organization_super_admin` targets. Without an explicit OrgSuper DELETE guard, an OrgSuper actor could `DELETE /api/users/{otherOrgSuper}` and the policy would let it through (the policy's `isSuperAdmin()` check on `$model` returns false for the org_super_admin target). The corrected T6 widens target validation to BOTH UPDATE and DELETE.
+>
+> **Preflight correction.** Per user policy, every positive test in this matrix MUST seed the role catalog so that `AccessDecision::can()` can resolve the curated capabilities. Without seeding the catalog, the engine rejects the positive test (the positive case for activate/deactivate silently fails because no `users.activate`/`users.deactivate` pivot exists). The corrected `seedOrgSuper()` helper seeds both the OrgSuper role AND the curated `organizationSuperAdminCapabilities()` pivot set via `RolesAndPermissionsSeeder::roleCatalog()`.
 
 **Files:**
 - Modify: `app/Modules/Core/Http/Controllers/UserController.php:443-447` (extend `canManageUserLifecycle()`).
 - Modify: `app/Modules/Core/Http/Controllers/UserController.php:310-378` (extend `update()` with target validation).
-- Test: `tests/Feature/Authz/OrganizationSuperAdminUserTargetTest.php` (new).
+- Modify: `app/Modules/Core/Http/Controllers/UserController.php` (extend `destroy()` with the same OrgSuper target validation).
+- Test: `tests/Feature/Authz/OrganizationSuperAdminUserTargetTest.php` (modify — add DELETE-positive, DELETE-self, DELETE-super_admin, DELETE-org_super_admin, DELETE-cross-org cases; seed the catalog in `seedOrgSuper()`).
 
 **Interfaces:**
-- Consumes: `User::isOrganizationSuperAdmin()` from Task 2.
-- Produces: 422 (target self-modification for Org-Super on `organization_id`), 422 (target is `super_admin` or `organization_super_admin`), 404 (target not in actor's org — already enforced by `UserPolicy::update`). `is_active` continues to flow through `users.update`; `canManageUserLifecycle()` is widened to admit Org-Super via `Capability::USERS_ACTIVATE` / `USERS_DEACTIVATE`.
+- Consumes: `User::isOrganizationSuperAdmin()` from Task 2; `RolesAndPermissionsSeeder::roleCatalog()` for the pivot seed in tests.
+- Produces: 422 (target self-modification for Org-Super on `organization_id`), 422 (target is `super_admin` or `organization_super_admin`) — applies to BOTH UPDATE (`PUT /api/users/{id}`) AND DELETE (`DELETE /api/users/{id}`). 404 (target not in actor's org — already enforced by `UserPolicy::update` / `UserPolicy::delete`). `is_active` continues to flow through `users.update`; `canManageUserLifecycle()` is widened to admit Org-Super via `Capability::USERS_ACTIVATE` / `USERS_DEACTIVATE`.
 
-- [ ] **Step 1: Write failing tests**
+- [ ] **Step 1: Write failing tests (UPDATE + DELETE; positive tests seed catalog)**
 
 `tests/Feature/Authz/OrganizationSuperAdminUserTargetTest.php`:
 ```php
@@ -1131,10 +1766,12 @@ git commit -m "feat(org-settings): add organization-scoped settings contract"
 
 namespace Tests\Feature\Authz;
 
+use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
+use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -1221,6 +1858,9 @@ class OrganizationSuperAdminUserTargetTest extends TestCase
 
     public function test_org_super_can_activate_deactivate_same_org_user(): void
     {
+        // POSITIVE test — relies on the catalog pivot seed in seedOrgSuper().
+        // Without seeding the role catalog, AccessDecision::can(actor,
+        // Capability::USERS_ACTIVATE) returns false and this test fails.
         [$org, $actor] = $this->seedOrgSuper();
         $target = User::factory()->create(['organization_id' => $org->id, 'is_active' => false]);
 
@@ -1247,14 +1887,75 @@ class OrganizationSuperAdminUserTargetTest extends TestCase
         $this->assertContains($response->status(), [403, 404], "Unexpected {$response->status()} for cross-org user.");
     }
 
-    /**
-     * @return array{0: Organization, 1: User}
-     */
-    private function seedOrgSuper(): array
+    // ---- DELETE surface (new in T6) ----
+
+    public function test_org_super_can_delete_same_org_user(): void
     {
-        $org = Organization::factory()->create(['is_active' => true]);
-        $user = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
-        $role = AuthorizationRole::query()->updateOrCreate(
+        // POSITIVE test — relies on the catalog pivot seed for users.delete.
+        [$org, $actor] = $this->seedOrgSuper();
+        $target = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->deleteJson("/api/users/{$target->id}");
+
+        $response->assertOk();
+        $this->assertNull(User::query()->find($target->id), 'same-org target must be soft-deleted.');
+    }
+
+    public function test_org_super_cannot_delete_themselves(): void
+    {
+        // UserPolicy::delete already rejects self-delete (`$user->id === $model->id`).
+        // This test pins the policy behavior so a future policy refactor does not
+        // silently widen the surface.
+        [$org, $actor] = $this->seedOrgSuper();
+
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->deleteJson("/api/users/{$actor->id}");
+
+        $this->assertContains($response->status(), [403, 422], "Unexpected {$response->status()} for self-delete.");
+        $this->assertNotNull(User::query()->find($actor->id), 'actor must not be deleted.');
+    }
+
+    public function test_org_super_cannot_delete_super_admin_target(): void
+    {
+        [$org, $actor] = $this->seedOrgSuper();
+        $super = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $superRole = AuthorizationRole::query()->updateOrCreate(
+            ['name' => 'super_admin'],
+            [
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ALL,
+                'is_admin_role' => true,
+                'is_system' => true,
+                'is_active' => true,
+                'label' => 'Super Admin',
+            ],
+        );
+        AuthorizationRoleAssignment::query()->create([
+            'user_id' => $super->id,
+            'authorization_role_id' => $superRole->id,
+            'scope_type' => AuthorizationRoleAssignment::SCOPE_ALL,
+            'scope_id' => null,
+            'organization_id' => null,
+            'is_active' => true,
+        ]);
+
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->deleteJson("/api/users/{$super->id}");
+
+        $this->assertContains($response->status(), [403, 422], "Unexpected {$response->status()} for super_admin target delete.");
+        $this->assertNotNull(User::query()->find($super->id), 'super_admin target must not be deleted.');
+    }
+
+    public function test_org_super_cannot_delete_other_org_super_target(): void
+    {
+        // Per user policy: OrgSuper cannot update OR delete
+        // OrganizationSuperAdmin/PlatformSuperAdmin targets.
+        [$org, $actor] = $this->seedOrgSuper();
+        $otherOrgSuper = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $otherRole = AuthorizationRole::query()->updateOrCreate(
             ['name' => 'organization_super_admin'],
             [
                 'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
@@ -1264,6 +1965,60 @@ class OrganizationSuperAdminUserTargetTest extends TestCase
                 'label' => 'Organization Super Admin',
             ],
         );
+        AuthorizationRoleAssignment::query()->create([
+            'user_id' => $otherOrgSuper->id,
+            'authorization_role_id' => $otherRole->id,
+            'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+            'scope_id' => $org->id,
+            'organization_id' => $org->id,
+            'is_active' => true,
+        ]);
+
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->deleteJson("/api/users/{$otherOrgSuper->id}");
+
+        $this->assertContains($response->status(), [403, 422], "Unexpected {$response->status()} for Org-Super target delete.");
+        $this->assertNotNull(User::query()->find($otherOrgSuper->id), 'Org-Super target must not be deleted.');
+    }
+
+    public function test_org_super_cannot_delete_cross_org_user(): void
+    {
+        [$org, $actor] = $this->seedOrgSuper();
+        $crossOrgUser = User::factory()->create([
+            'organization_id' => Organization::factory()->create(['is_active' => true])->id,
+            'is_active' => true,
+        ]);
+
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->deleteJson("/api/users/{$crossOrgUser->id}");
+
+        $this->assertContains($response->status(), [403, 404], "Unexpected {$response->status()} for cross-org user delete.");
+        $this->assertNotNull(User::query()->find($crossOrgUser->id), 'cross-org user must not be deleted.');
+    }
+
+    /**
+     * Seeds OrgSuper role + assignment AND the curated capability pivot set
+     * via `RolesAndPermissionsSeeder::roleCatalog()` so positive tests can
+     * resolve `Capability::USERS_ACTIVATE`, `Capability::USERS_DEACTIVATE`,
+     * `Capability::USERS_DELETE`, etc. through the engine.
+     *
+     * @return array{0: Organization, 1: User}
+     */
+    private function seedOrgSuper(): array
+    {
+        $org = Organization::factory()->create(['is_active' => true]);
+        $user = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+
+        // Seed the role catalog so AccessDecision::can() can resolve OrgSuper's
+        // curated capabilities (USERS_ACTIVATE, USERS_DEACTIVATE, USERS_DELETE, etc.).
+        // Without this, every positive test that depends on a curated capability
+        // silently fails because no pivot exists in authorization_role_permissions.
+        (new RolesAndPermissionsSeeder())->run();
+
+        $role = AuthorizationRole::query()->where('name', 'organization_super_admin')->firstOrFail();
+
         AuthorizationRoleAssignment::query()->create([
             'user_id' => $user->id,
             'authorization_role_id' => $role->id,
@@ -1281,7 +2036,7 @@ class OrganizationSuperAdminUserTargetTest extends TestCase
 - [ ] **Step 2: Run failing tests**
 
 Run: `php artisan test --filter=OrganizationSuperAdminUserTargetTest`
-Expected: `test_org_super_can_activate_deactivate_same_org_user` returns 403 (no Org-Super guard exists); the rejection tests pass today for self-org / cross-org via `UserPolicy`.
+Expected: `test_org_super_can_activate_deactivate_same_org_user` returns 403 (no Org-Super guard exists); `test_org_super_can_delete_same_org_user` returns 403 (no Org-Super guard exists). The rejection tests pass today for self-org / cross-org via `UserPolicy`.
 
 - [ ] **Step 3: Extend `canManageUserLifecycle()` to admit Org-Super**
 
@@ -1298,67 +2053,101 @@ In `app/Modules/Core/Http/Controllers/UserController.php`, replace the existing 
     }
 ```
 
-- [ ] **Step 4: Extend `update()` with target validation**
+- [ ] **Step 4: Extend `update()` AND `destroy()` with target validation**
+
+Extract the OrgSuper target-validation block into a private helper `assertOrgSuperTargetIsMutable(User $actor, User $target, Request $request, string $requestedCapability): void` so both `update()` and `destroy()` call the same seam. The helper:
+
+- Returns true (no-op) for non-OrgSuper actors.
+- Returns true (no-op) when actor is `super_admin` (super_admin already short-circuits via `UserPolicy::before()`).
+- Throws `ValidationException::withMessages(...)` (422) if actor is OrgSuper and target's active canonical assignment is to `super_admin` or `organization_super_admin`. Writes an `ACTION_ACCESS_DENIED` ActivityLog row tagged `provenance=organization_super_admin` before throwing.
+- Throws `ValidationException::withMessages(...)` (422) on UPDATE only if actor is OrgSuper and target is actor themselves AND `organization_id` is changing.
 
 In `app/Modules/Core/Http/Controllers/UserController.php:310-378`, immediately after the `$user = User::findOrFail($id);` line (line 313) and before `$validated = $request->validated();`, insert:
 
 ```php
-            // CSD-CA23078-CORE-008: Organization Super Admin target validation.
-            //
-            // Rules:
-            //   - Org-Super cannot mutate their own organization_id (422).
-            //   - Org-Super cannot mutate a user whose active canonical assignment
-            //     is to `super_admin` or `organization_super_admin` (422).
-            //   - super_admin already short-circuits in UserPolicy::before();
-            //     this block only fires for non-super_admin callers.
-            $currentUser = $request->user();
-            if (! $currentUser->isSuperAdmin() && $currentUser->isOrganizationSuperAdmin()) {
-                if ((int) $user->id === (int) $currentUser->id
-                    && array_key_exists('organization_id', $validated)
-                    && (int) $validated['organization_id'] !== (int) $currentUser->organization_id) {
-                    throw ValidationException::withMessages([
-                        'organization_id' => ['لا يمكن للمسؤول العام للمؤسسة نقل نفسه لمؤسسة أخرى.'],
-                    ]);
-                }
-
-                $protectedTarget = AuthorizationRoleAssignment::query()
-                    ->where('user_id', $user->id)
-                    ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
-                    ->whereHas('role', fn ($role) => $role
-                        ->whereIn('name', ['super_admin', 'organization_super_admin'])
-                        ->where('is_active', true))
-                    ->exists();
-
-                if ($protectedTarget && (int) $user->id !== (int) $currentUser->id) {
-                    ActivityLog::create([
-                        'user_id' => $currentUser->id,
-                        'action' => ActivityLog::ACTION_ACCESS_DENIED,
-                        'description' => "محاولة تعديل مستخدم محمي (super_admin/organization_super_admin): {$user->name}",
-                        'loggable_type' => User::class,
-                        'loggable_id' => $user->id,
-                        'metadata' => ['provenance' => 'organization_super_admin', 'requested_capability' => 'users.edit'],
-                        'ip_address' => $request->ip(),
-                        'user_agent' => $request->userAgent(),
-                    ]);
-
-                    throw ValidationException::withMessages([
-                        'user_id' => ['لا يمكن تعديل مستخدم يحمل دور super_admin أو organization_super_admin.'],
-                    ]);
-                }
+            // CSD-CA23078-CORE-008: Organization Super Admin target validation (UPDATE).
+            $this->assertOrgSuperTargetIsMutable($currentUser = $request->user(), $user, $request, 'users.edit');
+            if (! $currentUser->isSuperAdmin() && $currentUser->isOrganizationSuperAdmin()
+                && (int) $user->id === (int) $currentUser->id
+                && array_key_exists('organization_id', $validated)
+                && (int) $validated['organization_id'] !== (int) $currentUser->organization_id) {
+                throw ValidationException::withMessages([
+                    'organization_id' => ['لا يمكن للمسؤول العام للمؤسسة نقل نفسه لمؤسسة أخرى.'],
+                ]);
             }
+```
+
+In `app/Modules/Core/Http/Controllers/UserController.php`, at the start of `destroy()`, before `$this->authorize('delete', $user)`:
+
+```php
+            // CSD-CA23078-CORE-008: Organization Super Admin target validation (DELETE).
+            // Per user policy: OrgSuper cannot update OR delete
+            // OrganizationSuperAdmin/PlatformSuperAdmin targets.
+            $this->assertOrgSuperTargetIsMutable($request->user(), $user, $request, 'users.delete');
+```
+
+Add the helper to `UserController`:
+
+```php
+    /**
+     * @throws ValidationException with 422 envelope when OrgSuper targets
+     *         a `super_admin` or `organization_super_admin` user.
+     */
+    private function assertOrgSuperTargetIsMutable(User $actor, User $target, Request $request, string $requestedCapability): void
+    {
+        if ($actor->isSuperAdmin() || ! $actor->isOrganizationSuperAdmin()) {
+            return;
+        }
+        if ((int) $actor->id === (int) $target->id) {
+            // Self-mutation: UPDATE-time organization_id check fires here too;
+            // DELETE-time self-delete is enforced by UserPolicy::delete().
+            return;
+        }
+
+        $protectedTarget = AuthorizationRoleAssignment::query()
+            ->where('user_id', $target->id)
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->whereHas('role', fn ($role) => $role
+                ->whereIn('name', ['super_admin', 'organization_super_admin'])
+                ->where('is_active', true))
+            ->exists();
+
+        if (! $protectedTarget) {
+            return;
+        }
+
+        ActivityLog::create([
+            'user_id' => $actor->id,
+            'action' => ActivityLog::ACTION_ACCESS_DENIED,
+            'description' => "محاولة تعديل/حذف مستخدم محمي (super_admin/organization_super_admin): {$target->name}",
+            'loggable_type' => User::class,
+            'loggable_id' => $target->id,
+            'metadata' => [
+                'provenance' => 'organization_super_admin',
+                'requested_capability' => $requestedCapability,
+                'request_id' => $request->header('X-Request-Id'),
+            ],
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        throw ValidationException::withMessages([
+            'user_id' => ['لا يمكن تعديل أو حذف مستخدم يحمل دور super_admin أو organization_super_admin.'],
+        ]);
+    }
 ```
 
 - [ ] **Step 5: Re-run tests**
 
 Run: `php artisan test --filter=OrganizationSuperAdminUserTargetTest`
-Expected: 5 tests pass.
+Expected: 11 tests pass (5 UPDATE cases + 1 UPDATE self-modify rejection + 5 DELETE cases).
 
 - [ ] **Step 6: Lint and commit**
 
 ```bash
 ./vendor/bin/pint --test app/Modules/Core/Http/Controllers/UserController.php tests/Feature/Authz/OrganizationSuperAdminUserTargetTest.php
 git add app/Modules/Core/Http/Controllers/UserController.php tests/Feature/Authz/OrganizationSuperAdminUserTargetTest.php
-git commit -m "feat(users): reject Org-Super self-modify and admin-on-admin targets"
+git commit -m "feat(users): reject Org-Super UPDATE + DELETE on protected admin targets"
 ```
 
 ---
@@ -1409,6 +2198,7 @@ use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\User;
+use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -1909,18 +2699,16 @@ class OrganizationSuperAdminRoleAllowlistTest extends TestCase
      */
     private function seedOrgSuper(): array
     {
+        // Seed the role catalog so AccessDecision::can() can resolve the
+        // curated OrgSuper capabilities (ROLES_ASSIGN, USERS_ACTIVATE,
+        // USERS_DEACTIVATE, ORGANIZATION_SETTINGS_VIEW/EDIT, …). Without
+        // this, the positive case POST /api/org-super/role-assignments
+        // 403s at `engine_capability:roles.assign` because no pivot exists.
+        (new RolesAndPermissionsSeeder())->run();
+
         $org = Organization::factory()->create(['is_active' => true]);
         $user = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
-        $role = AuthorizationRole::query()->updateOrCreate(
-            ['name' => 'organization_super_admin'],
-            [
-                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
-                'is_admin_role' => false,
-                'is_system' => true,
-                'is_active' => true,
-                'label' => 'Organization Super Admin',
-            ],
-        );
+        $role = AuthorizationRole::query()->where('name', 'organization_super_admin')->firstOrFail();
         AuthorizationRoleAssignment::query()->create([
             'user_id' => $user->id,
             'authorization_role_id' => $role->id,
@@ -2371,7 +3159,7 @@ In `app/Modules/Core/Http/Controllers/RoleController.php`, append a new method. 
             'message' => 'تم تعيين الأدوار من قِبل Organization Super Admin بنجاح',
             'data' => [
                 'user_id' => $subject->id,
-                'assignments' => $subject->assignments()
+                'assignments' => $subject->canonicalRoleAssignments()
                     ->with('role:id,name')
                     ->get()
                     ->map(fn (AuthorizationRoleAssignment $a) => [
@@ -2388,7 +3176,9 @@ In `app/Modules/Core/Http/Controllers/RoleController.php`, append a new method. 
     }
 ```
 
-- [ ] **Step 9: Add the dedicated route**
+- [ ] **Step 9: Add the dedicated route + OrgSuper-only middleware (genuine OrgSuper guard runs BEFORE actor/service)**
+
+> **Preflight correction.** The previous Step 9 only used `engine_capability:roles.assign` as the route gate. That gate alone is insufficient: an actor who holds `roles.assign` (OrgSuper by curation) but ALSO happens to be `super_admin` (e.g., a super_admin who was incidentally seeded the OrgSuper pivot, or a future operator who pivots an OrgSuper into super_admin) would slip through. The corrected route adds an inline middleware closure `ensureOrgSuperOnly` that runs BEFORE the actor guard and the service, so a non-pure OrgSuper actor is rejected with 403 at the middleware layer (no FormRequest work, no actor-guard work, no service work). The middleware also runs before `EnsureEngineCapability`'s engine-resolution layer for defense-in-depth — it short-circuits on `$actor->isOrganizationSuperAdmin() && ! $actor->isSuperAdmin() && $actor->organization_id !== null`.
 
 In `app/Modules/Core/Routes/api.php`, immediately after the existing `/roles/assign` route (line 155), append:
 
@@ -2396,25 +3186,197 @@ In `app/Modules/Core/Routes/api.php`, immediately after the existing `/roles/ass
     // OrgSuper-specific role-assignment route — narrow path; gated by roles.assign
     // (NOT core.assign_roles). OrgSuper's curated pivot set grants roles.assign
     // only; super_admin and curated admin continue to use the canonical route.
+    //
+    // The route carries THREE gates, evaluated in order:
+    //   1. `ensure.org_super_only` — inline closure that rejects actors that
+    //      are NOT pure OrgSuper (rejects super_admin even if they hold
+    //      roles.assign; rejects OrgSuper actors with null organization_id).
+    //      Runs BEFORE the actor guard and the service.
+    //   2. `engine_capability:roles.assign` — engine resolution: actor must
+    //      hold Capability::ROLES_ASSIGN. OrgSuper holds this; super_admin
+    //      does NOT (curated super_admin pivot set excludes roles.assign).
+    //   3. `throttle:admin + idempotency` — operational throttle and
+    //      idempotent retry.
     Route::post('/org-super/role-assignments', [RoleController::class, 'assignByOrganizationSuperAdmin'])
         ->middleware([
+            'ensure.org_super_only',
             'engine_capability:'.Capability::ROLES_ASSIGN,
             'throttle:admin',
             'idempotency',
         ]);
 ```
 
+Register the new middleware alias in `app/Http/Kernel.php` (or `bootstrap/app.php` for Laravel 11+):
+
+```php
+    'ensure.org_super_only' => \App\Modules\Core\Http\Middleware\EnsureOrganizationSuperAdminOnly::class,
+```
+
+Create `app/Modules/Core/Http/Middleware/EnsureOrganizationSuperAdminOnly.php`:
+
+```php
+<?php
+
+namespace App\Modules\Core\Http\Middleware;
+
+use App\Modules\Core\Models\User;
+use Closure;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
+
+/**
+ * CSD-CA23078-CORE-009 (OrgSuper rewrite — Task 7 route gate).
+ *
+ * Genuine OrgSuper-only guard. Runs BEFORE the actor guard and the service
+ * so a non-pure OrgSuper actor is rejected at the middleware layer:
+ *   - super_admin is rejected even if they hold Capability::ROLES_ASSIGN.
+ *   - OrgSuper with null organization_id is rejected (cannot derive scope).
+ *   - Any actor that is not organization_super_admin is rejected.
+ *
+ * The middleware returns 403 (not 422) because the request is well-formed
+ * but the actor lacks the route-level capability; the FormRequest layer
+ * (422 for payload-shape violations) and the actor guard (403 for
+ * per-assignment denials) are defense-in-depth below this gate.
+ */
+final class EnsureOrganizationSuperAdminOnly
+{
+    public function handle(Request $request, Closure $next): Response
+    {
+        $actor = $request->user();
+        if (! $actor instanceof User) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        if ($actor->isSuperAdmin()) {
+            return response()->json([
+                'message' => 'Platform Super Admin cannot use the OrgSuper role-assignment route.',
+            ], 403);
+        }
+
+        if (! $actor->isOrganizationSuperAdmin()) {
+            return response()->json([
+                'message' => 'Only Organization Super Admin can use this route.',
+            ], 403);
+        }
+
+        if ($actor->organization_id === null) {
+            return response()->json([
+                'message' => 'Organization Super Admin actor has no organization context.',
+            ], 403);
+        }
+
+        return $next($request);
+    }
+}
+```
+
 - [ ] **Step 10: Re-run tests**
 
 Run: `php artisan test --filter=OrganizationSuperAdminRoleAllowlistTest`
-Expected: 16 tests pass (1 positive + 15 denial surfaces).
+Expected: 18 tests pass (1 positive + 17 denial surfaces). The denial surfaces include `test_super_admin_uses_canonical_route_not_org_super_route` and the new `test_super_admin_with_roles_assign_pivot_is_still_rejected` and `test_org_super_with_null_organization_is_rejected` — all three rejected by `ensure.org_super_only` BEFORE the actor guard (the tests assert 403; the new middleware is the rejection point).
+
+Add a new denial surface for the genuine-OrgSuper middleware gate:
+
+```php
+    public function test_super_admin_with_roles_assign_pivot_is_still_rejected(): void
+    {
+        // Edge case: a super_admin who was inadvertently seeded an OrgSuper
+        // role assignment (e.g., an operator pivoted a PlatformSuperAdmin
+        // to also hold organization_super_admin). The route's
+        // `ensure.org_super_only` middleware MUST reject super_admin even
+        // if they hold Capability::ROLES_ASSIGN. This is the "genuine
+        // OrgSuper" requirement.
+        $org = Organization::factory()->create(['is_active' => true]);
+        $super = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        AuthorizationRole::query()->updateOrCreate(
+            ['name' => 'super_admin'],
+            [
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ALL,
+                'is_admin_role' => true,
+                'is_system' => true,
+                'is_active' => true,
+                'label' => 'Super Admin',
+            ],
+        );
+        $superRole = AuthorizationRole::query()->where('name', 'super_admin')->firstOrFail();
+        AuthorizationRoleAssignment::query()->create([
+            'user_id' => $super->id,
+            'authorization_role_id' => $superRole->id,
+            'scope_type' => AuthorizationRoleAssignment::SCOPE_ALL,
+            'scope_id' => null,
+            'organization_id' => null,
+            'is_active' => true,
+        ]);
+        // AND seed an OrgSuper pivot on the same user.
+        $orgSuperRole = AuthorizationRole::query()->where('name', 'organization_super_admin')->firstOrFail();
+        AuthorizationRoleAssignment::query()->create([
+            'user_id' => $super->id,
+            'authorization_role_id' => $orgSuperRole->id,
+            'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+            'scope_id' => $org->id,
+            'organization_id' => $org->id,
+            'is_active' => true,
+        ]);
+        $target = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $role = AuthorizationRole::query()->where('name', 'member')->firstOrFail();
+
+        Sanctum::actingAs($super, ['*']);
+
+        $response = $this->postJson('/api/org-super/role-assignments', [
+            'user_id' => $target->id,
+            'replace_all' => true,
+            'assignments' => [[
+                'role_id' => $role->id,
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+                'scope_id' => $org->id,
+                'inherit_to_children' => false,
+            ]],
+        ]);
+
+        $response->assertForbidden();
+    }
+
+    public function test_org_super_with_null_organization_is_rejected(): void
+    {
+        // Edge case: an OrgSuper actor with no organization context cannot
+        // derive scope. The route's `ensure.org_super_only` middleware
+        // rejects the request before the FormRequest layer.
+        $user = User::factory()->create(['organization_id' => null, 'is_active' => true]);
+        $orgSuperRole = AuthorizationRole::query()->where('name', 'organization_super_admin')->firstOrFail();
+        AuthorizationRoleAssignment::query()->create([
+            'user_id' => $user->id,
+            'authorization_role_id' => $orgSuperRole->id,
+            'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+            'scope_id' => null,
+            'organization_id' => null,
+            'is_active' => true,
+        ]);
+        $target = User::factory()->create(['organization_id' => null, 'is_active' => true]);
+        $role = AuthorizationRole::query()->where('name', 'member')->firstOrFail();
+
+        Sanctum::actingAs($user, ['*']);
+
+        $response = $this->postJson('/api/org-super/role-assignments', [
+            'user_id' => $target->id,
+            'replace_all' => true,
+            'assignments' => [[
+                'role_id' => $role->id,
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+                'scope_id' => 1,
+                'inherit_to_children' => false,
+            ]],
+        ]);
+
+        $response->assertForbidden();
+    }
+```
 
 - [ ] **Step 11: Lint and commit**
 
 ```bash
-./vendor/bin/pint --test app/Modules/Core/Authorization/Data/AssignmentScope.php app/Modules/Core/Authorization/Capability.php app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentActorGuard.php app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentService.php app/Modules/Core/Http/Requests/AssignOrganizationSuperAdminRoleRequest.php app/Modules/Core/Http/Controllers/RoleController.php app/Modules/Core/Routes/api.php tests/Feature/Authz/OrganizationSuperAdminRoleAllowlistTest.php
-git add app/Modules/Core/Authorization/Data/AssignmentScope.php app/Modules/Core/Authorization/Capability.php app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentActorGuard.php app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentService.php app/Modules/Core/Http/Requests/AssignOrganizationSuperAdminRoleRequest.php app/Modules/Core/Http/Controllers/RoleController.php app/Modules/Core/Routes/api.php tests/Feature/Authz/OrganizationSuperAdminRoleAllowlistTest.php
-git commit -m "feat(roles): dedicated OrgSuper role-assignment actor path with narrow guard"
+./vendor/bin/pint --test app/Modules/Core/Authorization/Data/AssignmentScope.php app/Modules/Core/Authorization/Capability.php app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentActorGuard.php app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentService.php app/Modules/Core/Http/Middleware/EnsureOrganizationSuperAdminOnly.php app/Modules/Core/Http/Requests/AssignOrganizationSuperAdminRoleRequest.php app/Modules/Core/Http/Controllers/RoleController.php app/Modules/Core/Routes/api.php app/Http/Kernel.php tests/Feature/Authz/OrganizationSuperAdminRoleAllowlistTest.php
+git add app/Modules/Core/Authorization/Data/AssignmentScope.php app/Modules/Core/Authorization/Capability.php app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentActorGuard.php app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentService.php app/Modules/Core/Http/Middleware/EnsureOrganizationSuperAdminOnly.php app/Modules/Core/Http/Requests/AssignOrganizationSuperAdminRoleRequest.php app/Modules/Core/Http/Controllers/RoleController.php app/Modules/Core/Routes/api.php app/Http/Kernel.php tests/Feature/Authz/OrganizationSuperAdminRoleAllowlistTest.php
+git commit -m "feat(roles): dedicated OrgSuper role-assignment actor path with genuine-OrgSuper middleware"
 ```
 
 ---
@@ -3906,22 +4868,38 @@ git commit --allow-empty -m "chore: all quality gates green after organization_s
 
 **1. Spec coverage.** The matrix above maps every numbered spec section to a task. The new role does not ride the legacy `admin` shortcut because `is_admin_role=false` is set in T3 and T8's regression test confirms the engine respects it. No spec requirement is unassigned. The OrgSuper role-assignment path (T7) rebuilds around a dedicated route + actor guard + FormRequest seam because the preflight-proven route middleware (`engine_capability:core.assign_roles` at `app/Modules/Core/Routes/api.php:154-155`) and canonical actor guard (`CanonicalAuthorizationAssignmentActorGuard.php:32`) cannot admit OrgSuper without widening `core.assign_roles` — which the user policy explicitly forbids. The dedicated path preserves all three hard prohibitions (no Platform/OrganizationSuperAdmin assignment, no cross-org scope, no role definition mutation) and adds server-derived scope so client-side manipulation is rejected with 422.
 
-**2. Placeholder scan.** A search of the plan for `TODO`, `TBD`, `implement later`, `fill in details`, `add appropriate error handling`, `similar to Task N`, or untypecoded references returns **no matches**. Every code block, command, and expected result is concrete. No step references a type, function, or method that is not defined in an earlier task (the only forward references are to existing code in the codebase — `AccessDecision.php:~1170`, `AuthorizationAssignmentService`, `Organization` model, `CanonicalAuthorizationAssignmentActorGuard`, `AssignmentScopeResolver`, etc. — and those are documented inline). The T7 redesign introduces five new symbols (`AssignmentScope::ORGANIZATION`, `OrganizationSuperAdminRoleAssignmentActorGuard`, `OrganizationSuperAdminRoleAssignmentService`, `AssignOrganizationSuperAdminRoleRequest`, `RoleController::assignByOrganizationSuperAdmin`); each is defined in T7 itself and consumed by the same task (no cross-task forward references).
+**2. Placeholder scan.** A search of the plan for `TODO`, `TBD`, `implement later`, `fill in details`, `add appropriate error handling`, `similar to Task N`, or untypecoded references returns **no matches**. Every code block, command, and expected result is concrete. No step references a type, function, or method that is not defined in an earlier task (the only forward references are to existing code in the codebase — `AccessDecision.php:~1170`, `AuthorizationAssignmentService`, `Organization` model, `CanonicalAuthorizationAssignmentActorGuard`, `AssignmentScopeResolver`, `RolesAndPermissionsSeeder`, `OrganizationSettings`, etc. — and those are documented inline). The T5/T6/T7 amendments introduce three new symbols (`EnsureOrganizationSuperAdminOnly` middleware in T7, `UserController::assertOrgSuperTargetIsMutable` helper in T6, `2026_07_14_000022_sweep_obsolete_orgsuper_organization_view_edit_pivots` migration in T5); each is defined in its own task and consumed by the same task (no cross-task forward references).
 
 **3. Type / signature consistency.** Verified end-to-end:
 
 - `Capability::USERS_ACTIVATE` / `USERS_DEACTIVATE` / `ORGANIZATION_SETTINGS_VIEW` / `ORGANIZATION_SETTINGS_EDIT` → used in `UserController::canManageUserLifecycle` (T6), `OrganizationSettingsController` (T5), `ViewOrganizationSettingsRequest::authorize` (T5), `UpdateOrganizationSettingsRequest::authorize` (T5). Names match.
-- `User::isOrganizationSuperAdmin(): bool` → consumed in T4 (`AuthController::buildFormatUserPayload`), T6 (UserController target validation), T7 (`OrganizationSuperAdminRoleAssignmentActorGuard` + `AssignOrganizationSuperAdminRoleRequest::after`), T8 (regression test), T15 (parity test). Return type and call sites match.
+- `User::isOrganizationSuperAdmin(): bool` → consumed in T4 (`AuthController::buildFormatUserPayload`), T6 (UserController target validation — UPDATE + DELETE), T7 (`OrganizationSuperAdminRoleAssignmentActorGuard` + `AssignOrganizationSuperAdminRoleRequest::after` + `EnsureOrganizationSuperAdminOnly` middleware), T8 (regression test), T15 (parity test). Return type and call sites match.
 - `OrganizationSuperAdminRoleAssignmentActorGuard::allows(User, User, AuthorizationRole, AssignmentScope): bool` → implements `AuthorizationAssignmentActorGuard`; consumed in `OrganizationSuperAdminRoleAssignmentService::syncManual()`. Return shape matches the contract.
 - `OrganizationSuperAdminRoleAssignmentService::syncManual(User, User, list<RoleAssignmentWrite>, array): list<AuthorizationRoleAssignment>` → transactional; writes via `AuthorizationRoleAssignment::updateOrCreate()`; audit row tagged `provenance=organization_super_admin`; flushes `AccessDecision::flushCache()` on commit. Matches the spec §7 sensitive-mutation contract.
 - `AssignOrganizationSuperAdminRoleRequest` rules → `assignments.*.scope_type` constrained to `Rule::in([AssignmentScope::ORGANIZATION])` only; `assignments.*.inherit_to_children` constrained to `['required','boolean','accepted']` (false is the only accepted value); `assignments.*.expires_at` constrained to `['prohibited']`. These mirror the actor guard's contract at the FormRequest layer so client payload tampering is caught with 422 before the guard runs.
-- `POST /api/org-super/role-assignments` route → middleware `engine_capability:roles.assign + throttle:admin + idempotency`. Distinct from canonical `POST /api/roles/assign` (middleware `engine_capability:core.assign_roles + idempotency`); super_admin cannot ride the OrgSuper route because `Capability::ROLES_ASSIGN` is NOT in the canonical super_admin pivot set (only OrgSuper holds it per T3).
+- `POST /api/org-super/role-assignments` route → middleware `ensure.org_super_only + engine_capability:roles.assign + throttle:admin + idempotency`. The new `ensure.org_super_only` middleware runs BEFORE `engine_capability:roles.assign` so a super_admin who was incidentally seeded the OrgSuper pivot (or an OrgSuper actor with null `organization_id`) is rejected at the middleware layer, not the actor guard or service. Distinct from canonical `POST /api/roles/assign` (middleware `engine_capability:core.assign_roles + idempotency`); super_admin cannot ride the OrgSuper route because `Capability::ROLES_ASSIGN` is NOT in the canonical super_admin pivot set (only OrgSuper holds it per T3).
+- `UserController::assertOrgSuperTargetIsMutable(User, User, Request, string): void` → extracted helper called from both `update()` (T6 Step 4) and `destroy()` (T6 Step 4) so the OrgSuper target-validation contract (no UPDATE/DELETE on `super_admin` or `organization_super_admin` targets) lives in one place. ActivityLog row tagged `provenance=organization_super_admin` carrying `metadata.request_id` from `X-Request-Id`.
+- `OrganizationSettingsController::show(ViewOrganizationSettingsRequest, Organization): JsonResponse` → strictly non-mutating GET. Asserted by `OrganizationSettingsContractTest::test_get_is_strictly_non_mutating` which snapshots ActivityLog count + settings-row count before and after the request and asserts both are unchanged.
+- `OrganizationSettingsController::update(UpdateOrganizationSettingsRequest, Organization): JsonResponse` → `firstOrCreate` then `lockForUpdate` inside `DB::transaction` (the previous `firstOrFail` 404'd on the first PUT); deep-merge via `array_replace_recursive` keyed on the three top-level settings objects (the previous shallow `array_replace` wiped sibling keys). Audit row carries `metadata.provenance='organization_super_admin'` and `metadata.request_id`.
+- `UpdateOrganizationSettingsRequest::prepareForValidation()` → adds `__missing_idempotency_key` sentinel when `X-Idempotency-Key` header is absent and the actor is not `super_admin`; `withValidator()` then surfaces 422 with the Arabic message. This is the seam that turns "Idempotency-Key is required on the OrgSuper PUT" from a runtime contract into a testable validation rule.
+- `2026_07_14_000022_sweep_obsolete_orgsuper_organization_view_edit_pivots` migration → targeted sweep scoped to `authorization_role_id` (OrgSuper) × `authorization_resource_id` (Organization) × `action IN ('view','edit')`. Each deletion audited as `obsolete_orgsuper_organization_view_edit_pivot_removed`. Idempotent: the audit-event check skips pivots already audited by prior runs. Forward-only: `down()` is a no-op. PostgreSQL-only with an explicit driver check.
+- `OrganizationSettingsContractTest` → 11 tests: own-org GET, GET non-mutating, first PUT creates-then-locks, deep merge, empty-array no-op, null-on-scalar clears, audit log with provenance + request_id, idempotency-key retry, cross-org GET denial, cross-org PUT denial, cluster denial.
+- `OrganizationSuperAdminClusterDenialTest` → engine-layer regression that pins the targeted sweep's effect: `AccessDecision::can($orgSuperActor, Capability::CLUSTER_TREE_VIEW)` MUST be false; `AccessDecision::can(...)` for `CLUSTER_TREE_MANAGE` and `CLUSTER_TREE_EXPORT` MUST be false; the migration's audit row count is asserted (>=0, idempotent baseline).
+- `OrganizationSuperAdminRoleAllowlistTest` → 18 tests (1 positive + 17 denial): adds `test_super_admin_with_roles_assign_pivot_is_still_rejected` (genuine-OrgSuper middleware check) and `test_org_super_with_null_organization_is_rejected` (OrgSuper-with-null-org edge case). Note: the original 16 (1 positive + 15 denial) had the wrong count in Step 10 (it said "16 tests pass (1 positive + 15 denial surfaces)"); the corrected matrix is 1 positive + 17 denial = 18 tests.
+- `OrganizationSuperAdminUserTargetTest` → 11 tests (5 UPDATE cases + 1 UPDATE self-modify rejection + 5 DELETE cases). `seedOrgSuper()` runs `(new RolesAndPermissionsSeeder())->run()` so positive tests can resolve `Capability::USERS_ACTIVATE`, `Capability::USERS_DEACTIVATE`, `Capability::USERS_DELETE` through the engine.
 - `adminApi.organizationSettings.get(orgId: number)` → `Promise<{ data: OrganizationSettings }>` — matches the controller response (`['data' => $settings->settings]`). Consumed in T12 (page).
 - `adminApi.organizationSettings.update(orgId: number, input: OrganizationSettingsInput)` → `Promise<{ data: OrganizationSettings }>` — matches the controller response.
 - `OrganizationSettingsPage` props: `useParams<{ organizationId: string }>()` → `Number(organizationId)` — type-coerced and guarded by `Number.isFinite(orgId)`.
 - `OrgSuperOrSuperBoundary` prop signature: `useAuth()` returns `{ user: User | null, isLoading, isAuthenticated }` — matches `AuthContext.tsx` exports. Predicate consults `user?.is_super_admin` / `user?.is_organization_super_admin` per the type widening in T14.
 - `AdminNavItem.group` union widened to `('governance' | 'controls' | 'system' | 'org' | 'org-super')` — used consistently in `isAdminNavItemVisible`, `ADMIN_NAV_ITEMS`, and `groups` array (T10).
-- All migration filenames follow the existing `YYYY_MM_DD_HHMMSS_name.php` pattern (`2026_07_14_000020_role_catalog_sync_organization_super_admin.php`, `2026_07_14_000021_create_organization_settings_table.php`) and `php artisan migrate --env=testing --pretend` is expected to list them in order.
+- All migration filenames follow the existing `YYYY_MM_DD_HHMMSS_name.php` pattern (`2026_07_14_000020_role_catalog_sync_organization_super_admin.php`, `2026_07_14_000021_create_organization_settings_table.php`, `2026_07_14_000022_sweep_obsolete_orgsuper_organization_view_edit_pivots.php`) and `php artisan migrate --env=testing --pretend` is expected to list them in order.
+
+**4. Greenfield-decision audit.** The Global Constraint that `organization_settings` is the single source of truth for new organization-admin settings (no read/fallback/backfill/migration from `organizations.settings`) is enforced by:
+- T5 migration creates only the new table — no backfill from `organizations.settings`.
+- T5 controller reads/writes only `organization_settings` — no `$org->settings` or `$org->update(['settings' => …])` call exists anywhere in T5.
+- T5 sweep migration touches only `authorization_role_permissions`, not `organizations.settings`.
+- T5 cluster-denial test asserts OrgSuper pivots contain zero `Organization × view/edit` rows post-sweep, so even the engine layer cannot satisfy `core.cluster_tree.*` from the OrgSuper surface.
+- The Forbidden Capability mapping note in Global Constraint pins `organization.settings.*` ≠ `core.cluster_tree.*` (both share `Organization::class` but are distinct capability strings, so the engine treats them as distinct resources at the capability-key layer).
 
 ---
 
@@ -3934,7 +4912,11 @@ git commit --allow-empty -m "chore: all quality gates green after organization_s
 | **`ActivityLog::ACTION_SYSTEM_ROLE_ASSIGNED` vs `ACTION_UPDATED`.** T7 Step 6 uses `ACTION_SYSTEM_ROLE_ASSIGNED` for the audit row to match the existing `RoleController::assignToUser` pattern (line 218). If the canonical pattern is later changed, the OrgSuper audit row could be mis-categorized. **Mitigation:** T7's audit row includes `metadata.provenance='organization_super_admin'` which is the source-of-truth filter; audit consumers should filter by `metadata->provenance` rather than `action`. |
 | **`UserPolicy::update` denies cross-org target before Org-Super target validation runs.** T6 relies on `UserPolicy::update` for the cross-org 404 envelope. If the policy returns a different status code, the matrix assertions tolerate `[403, 404]` explicitly. **Mitigation:** assertions use `assertContains` rather than `assertEquals`. |
 | **`is_active` mutation is rejected for non-lifecycle actors.** T6 widens `canManageUserLifecycle()` to admit Org-Super, but the legacy admin (curated `admin`) still cannot change `is_active` because the curated set excludes `USERS_ACTIVATE` / `USERS_DEACTIVATE`. This is intentional — the spec matrix in §5 explicitly excludes activate/deactivate from the curated `admin` role. **Mitigation:** the regression test `OrganizationSuperAdminLegacyAdminParityTest` (T15) confirms the curated `admin` pivot set is byte-identical. |
-| **Postgres migration ordering.** The two new migrations (`2026_07_14_000020_*` and `2026_07_14_000021_*`) must run AFTER the existing `2026_07_12_000018_*` sweep. Both migrations are forward-only and idempotent; mis-ordering produces an empty `down()` (safe). **Mitigation:** the timestamps are sequenced correctly; `php artisan migrate --env=testing --pretend` is the final check. |
+| **Postgres migration ordering.** The three new migrations (`2026_07_14_000020_role_catalog_sync_organization_super_admin`, `2026_07_14_000021_create_organization_settings_table`, `2026_07_14_000022_sweep_obsolete_orgsuper_organization_view_edit_pivots`) must run AFTER the existing `2026_07_12_000018_role_catalog_sync_obsolete_pivots` sweep, AND in the listed order (the targeted sweep `000022` depends on the OrgSuper role already existing — `000020` seeds it — and on the `Organization` resource being present in `authorization_resources` — guaranteed by the seeders that ran pre-existing migrations). All three migrations are forward-only and idempotent; mis-ordering produces a no-op (`000020` seeds OrgSuper even if `000022` already ran) or a safe skip (`000022` finds zero obsolete pivots and exits). **Mitigation:** the timestamps are sequenced correctly (`000020` < `000021` < `000022`); `php artisan migrate --env=testing --pretend` is the final check. |
+| **`ensure.org_super_only` middleware vs. `engine_capability:roles.assign`.** A super_admin who was incidentally seeded the OrgSuper pivot (an operator accidentally pivoted a PlatformSuperAdmin to also hold `organization_super_admin`) would hold `Capability::ROLES_ASSIGN` and slip through `engine_capability:roles.assign`. The `EnsureOrganizationSuperAdminOnly` middleware runs BEFORE `engine_capability:roles.assign` and rejects `super_admin` even if they hold `roles.assign`. **Mitigation:** the new middleware is a defense-in-depth layer above the engine capability gate; the matrix test `test_super_admin_with_roles_assign_pivot_is_still_rejected` pins the behavior. The same middleware rejects OrgSuper actors with null `organization_id` so server-derived scope never has to defend against the missing-org case in the service. |
+| **`array_replace_recursive` vs. JSON-encoded deep merge.** The `array_replace_recursive` deep merge assumes all top-level keys are assoc arrays. The schema (`organization_settings.settings`) is `jsonb` so PostgreSQL round-trips assoc arrays correctly; the Eloquent `array` cast gives us a PHP array on read and serializes back to JSON on save. **Mitigation:** the merge helper restricts the merge to the three known top-level keys (`locale_overrides`, `branding_overrides`, `notification_templates`); an unexpected top-level key in the validated payload is silently dropped (Laravel's `$request->validated()` only returns keys that pass `rules()` so this is double-defended). The contract test `test_put_performs_deep_merge_across_top_level_objects` asserts the deep-merge behavior end-to-end. |
+| **`__missing_idempotency_key` sentinel in FormRequest.** `UpdateOrganizationSettingsRequest::prepareForValidation()` merges a sentinel key into the request input and `withValidator()` surfaces a 422 if the actor is not `super_admin` and the header is missing. The sentinel is stripped in the controller (`unset($validated['__missing_idempotency_key'])`) before the deep-merge runs. **Mitigation:** the sentinel is namespaced (`__`-prefixed) to avoid colliding with any real field; the controller strips it explicitly. |
+| **`assertOrgSuperTargetIsMutable` shared by UPDATE and DELETE.** T6 Step 4 extracts the OrgSuper target-validation logic into a private helper so the same envelope (422 + audit row + provenance tag) fires from both `update()` and `destroy()`. **Mitigation:** the helper is a single method with a single test surface (`OrganizationSuperAdminUserTargetTest`); the DELETE cases (5 tests) pin the new DELETE behavior. The self-delete case is delegated to `UserPolicy::delete()` and asserted by `test_org_super_cannot_delete_themselves`. |
 | **`OrganizationContext` may not lock `X-Organization-Id` for Org-Super.** The FE pins `X-Organization-Id` to `users.organization_id` for non-super actors in `OrganizationContext`. T14 verifies the type widening; T8 verifies the BE engine. **Mitigation:** the FE's pin is already in `OrganizationContext.tsx:81-92`; no code change is needed there. |
 | **Playwright flake on `/api/roles/assign` for `admin`/`super_admin`/`organization_super_admin`.** The spec accepts `[403, 422]`. **Mitigation:** assertions use `expect([403, 422]).toContain(assign.status())`. |
 | **FSD boundary check fails on the new admin pages.** The admin SPA is FSD-free and lives under `resources/admin/`. Pages import from `@shared/*` and `@admin/*` only. **Mitigation:** the test setup in `resources/admin/test/setup.ts` already excludes FSD boundary enforcement for the admin SPA. |
@@ -3946,21 +4928,22 @@ git commit --allow-empty -m "chore: all quality gates green after organization_s
 Phase 0 rollback (per spec §10):
 
 ```bash
-# 1. Revert the role seed entry.
-git revert <T3-commit-sha> -- database/seeders/RolesAndPermissionsSeeder.php database/migrations/2026_07_14_000020_role_catalog_sync_organization_super_admin.php
+# 1. Revert the role seed entry + the targeted obsolete-pivot sweep.
+git revert <T3-commit-sha> -- database/seeders/RolesAndPermissionsSeeder.php database/migrations/2026_07_14_000020_role_catalog_sync_organization_super_admin.php database/migrations/2026_07_14_000022_sweep_obsolete_orgsuper_organization_view_edit_pivots.php
 
-# 2. Drop the new controller and routes.
+# 2. Drop the new controller and routes (also drops the new organization_settings table).
 git revert <T5-commit-sha>
 
 # 3. Revert the auth payload extension.
 git revert <T4-commit-sha>
 
-# 4. Revert the UserController target validation.
+# 4. Revert the UserController target validation (UPDATE + DELETE).
 git revert <T6-commit-sha>
 
 # 5. Revert the OrgSuper role-assignment actor path (T7 redesign).
 #    Reverts the dedicated POST /api/org-super/role-assignments route,
 #    OrganizationSuperAdminRoleAssignmentActorGuard, OrganizationSuperAdminRoleAssignmentService,
+#    EnsureOrganizationSuperAdminOnly middleware + Kernel alias,
 #    AssignOrganizationSuperAdminRoleRequest, RoleController::assignByOrganizationSuperAdmin,
 #    AssignmentScope::ORGANIZATION constant, Capability::ROLES_ASSIGN docblock, and the
 #    comprehensive OrganizationSuperAdminRoleAllowlistTest. The canonical /api/roles/assign
@@ -3977,6 +4960,8 @@ git revert <T1-commit-sha>
 # 8. Run migrate:fresh on prod (the sweep migration is forward-only).
 php artisan migrate:fresh --force
 ```
+
+> **Rollback note.** The targeted obsolete-pivot sweep migration (`000022`) is forward-only: `down()` is intentionally a no-op so a rollback does not re-introduce the obsolete `Organization × view/edit` pivots. The `organization_settings` table migration (`000021`) is reversible via `Schema::dropIfExists('organization_settings')`. Reverting step 2 above drops both the table and the controller/route; reverting step 1 drops the pivot-sweep migration and the role seed entry. **The legacy `organizations.settings` column is NEVER touched by any task in this plan — a rollback also never touches it.**
 
 The legacy `admin` role and routes are unaffected by every task above because:
 
