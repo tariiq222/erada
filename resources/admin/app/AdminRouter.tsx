@@ -25,6 +25,7 @@ import { DepartmentsPage } from '@admin/pages/departments/DepartmentsPage';
 import { DepartmentForm } from '@admin/pages/departments/DepartmentForm';
 import { DepartmentDetails } from '@admin/pages/departments/DepartmentDetails';
 import { IncidentTypesPage } from '@admin/pages/incident-types/IncidentTypesPage';
+import { OrganizationSettingsPage } from '@admin/pages/organization-settings/OrganizationSettingsPage';
 
 export function AdminRouter() {
   return (
@@ -84,6 +85,7 @@ export function AdminRouter() {
             <Route path="/access" element={<AccessPage />} />
             <Route path="/activity-logs" element={<ActivityLogsPage />} />
             <Route path="/scoped-roles/audit-logs" element={<ScopedRoleAuditPage />} />
+            <Route path="/settings" element={<OrganizationSettingsPage />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Route>

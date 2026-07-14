@@ -325,6 +325,16 @@ describe('adminApi canonical route contract', () => {
       call: () => adminApi.incidentTypes.addReportableType('type-1', { name: 'Reportable', name_ar: 'قابل للإبلاغ' }),
       expectedArgs: ['/admin/incident-types/type-1/reportable-types', { name: 'Reportable', name_ar: 'قابل للإبلاغ' }],
     },
+    {
+      name: 'organizationSettings.get',
+      // GET hits the canonical `/organizations/{id}/settings` endpoint, NOT
+      // the legacy `/admin/organizations/.../settings` route — pinning both
+      // the path-prefix swap (organizations vs admin/organizations) and
+      // the wildcard `organizations` namespace.
+      method: 'get',
+      call: () => adminApi.organizationSettings.get(5),
+      expectedArgs: ['/organizations/5/settings'],
+    },
   ];
 
   for (const contract of preservedAdminCases) {

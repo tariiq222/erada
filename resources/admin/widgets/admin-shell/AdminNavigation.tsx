@@ -11,6 +11,7 @@ import {
   IconKey,
   IconLayoutDashboard,
   IconListDetails,
+  IconSettings,
   IconShieldLock,
   IconUsers,
   IconUserShield,
@@ -76,6 +77,7 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   // Org-Super surface — reachable by super admin OR organization super admin.
   { href: '/users', labelKey: 'admin.shell.nav.users', fallback: 'Users', audience: 'org', icon: IconUsers },
   { href: '/departments', labelKey: 'admin.departments.title', fallback: 'Departments', audience: 'org', icon: IconBuildingSkyscraper },
+  { href: '/settings', labelKey: 'admin.shell.nav.orgSettings', fallback: 'Org settings', audience: 'org', icon: IconSettings },
   { href: '/access', labelKey: 'admin.shell.nav.access', fallback: 'Permissions and access', audience: 'org', icon: IconKey },
   { href: '/activity-logs', labelKey: 'admin.shell.nav.activity_logs', fallback: 'Activity logs', audience: 'org', icon: IconActivity },
   { href: '/scoped-roles/audit-logs', labelKey: 'admin.shell.nav.scoped_role_audit', fallback: 'Scoped-role audit', audience: 'org', icon: IconUserShield },

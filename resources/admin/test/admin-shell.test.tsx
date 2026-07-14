@@ -73,7 +73,7 @@ describe('independent admin shell', () => {
     await user.click(screen.getByRole('button', { name: i18n.t('admin.shell.sidebar.aria') }));
     const mobileNavigation = screen.getByTestId('admin-mobile-navigation');
 
-    expect(ADMIN_NAV_ITEMS).toHaveLength(12);
+    expect(ADMIN_NAV_ITEMS).toHaveLength(13);
     for (const item of ADMIN_NAV_ITEMS) {
       expect(within(mobileNavigation).getByRole('link', {
         name: i18n.t(item.labelKey, item.fallback),
