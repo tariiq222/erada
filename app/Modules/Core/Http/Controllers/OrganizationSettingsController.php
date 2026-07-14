@@ -8,6 +8,7 @@ use App\Modules\Core\Http\Requests\ViewOrganizationSettingsRequest;
 use App\Modules\Core\Models\Organization;
 use App\Modules\Core\Models\OrganizationSettings;
 use App\Modules\Shared\Models\ActivityLog;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
@@ -17,7 +18,7 @@ class OrganizationSettingsController extends Controller
      * Strictly non-mutating GET. Returns the persisted settings payload
      * if the row exists; otherwise returns the default payload WITHOUT
      * inserting a row. The persisted row is only ever created by a
-     * PUT (firstOrCreate inside a transaction) so the GET path is a
+     * PUT (lock-then-insert inside a transaction) so the GET path is a
      * pure read — no audit row, no lock, no DB write of any kind.
      */
     public function show(ViewOrganizationSettingsRequest $request, Organization $organization): JsonResponse
@@ -34,8 +35,20 @@ class OrganizationSettingsController extends Controller
     /**
      * Deep-merge PUT.
      *
-     * - `firstOrCreate` then `lockForUpdate` so the first PUT succeeds
-     *   (the previous firstOrFail 404'd when the row was missing).
+     * - `SELECT FOR UPDATE` first: locks the row if it already exists so
+     *   concurrent PUTs serialize on the existing-row path. If no row
+     *   exists yet, the lock acquires nothing and we fall through to a
+     *   direct INSERT (not `firstOrCreate`, which would race a second
+     *   concurrent transaction into a unique-constraint violation that
+     *   `lockForUpdate()->firstOrCreate()` does not catch).
+     * - The INSERT can still race when two concurrent PUTs arrive before
+     *   the row exists. PostgreSQL serializes the first INSERT by an
+     *   implicit row lock held until commit; the loser of the race
+     *   catches the SQLSTATE 23505 `QueryException` and re-fetches the
+     *   row under `SELECT FOR UPDATE`, which now blocks on the
+     *   committed winner. The loser's merge then proceeds against the
+     *   winner's committed settings — last writer wins, no corrupt
+     *   half-state visible to either transaction.
      * - Deep merge across the three top-level keys
      *   (`locale_overrides`, `branding_overrides`, `notification_templates`).
      *   Only the keys present in the validated payload are written; sibling
@@ -60,14 +73,40 @@ class OrganizationSettingsController extends Controller
             $row = OrganizationSettings::query()
                 ->where('organization_id', $organization->id)
                 ->lockForUpdate()
-                ->firstOrCreate(
-                    ['organization_id' => $organization->id],
-                    ['settings' => $this->defaultPayload(), 'created_by' => $actor?->id],
-                );
+                ->first();
 
-            // Re-acquire the lock after firstOrCreate: firstOrCreate does
-            // not lock on the insert path; the lockForUpdate above ensures
-            // concurrent PUTs serialize on the existing-row path.
+            if ($row === null) {
+                // No row exists yet. Insert the default payload. Under
+                // contention, two concurrent transactions may BOTH reach
+                // this branch when no row exists yet; the
+                // `organization_id` unique index serializes them — the
+                // winner of the INSERT commits a default row, the loser
+                // catches a SQLSTATE 23505 and re-fetches under
+                // `lockForUpdate()` (which now blocks on the winner's
+                // implicit row lock until that transaction commits, then
+                // returns the winner's row).
+                try {
+                    $row = OrganizationSettings::query()->create([
+                        'organization_id' => $organization->id,
+                        'settings' => $this->defaultPayload(),
+                        'created_by' => $actor?->id,
+                    ]);
+                } catch (QueryException $exception) {
+                    if ((string) $exception->getCode() !== '23505') {
+                        throw $exception;
+                    }
+
+                    $row = OrganizationSettings::query()
+                        ->where('organization_id', $organization->id)
+                        ->lockForUpdate()
+                        ->firstOrFail();
+                }
+            }
+
+            // $row is now exclusively locked by this transaction (we
+            // either locked the existing row, won the INSERT race, or
+            // re-fetched under lock after losing the INSERT race — every
+            // path ends with this transaction holding the row lock).
             $previous = $row->settings ?? $this->defaultPayload();
             $merged = $this->deepMergeSettings($previous, $validated);
 
