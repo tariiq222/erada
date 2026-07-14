@@ -484,6 +484,22 @@ final class Capability
 
     const USERS_DEACTIVATE = 'users.deactivate';
 
+    /**
+     * Phase 0 — Organization Super Admin user-account unlock primitive.
+     *
+     * Held by the `organization_super_admin` role alongside
+     * `USERS_ACTIVATE` / `USERS_DEACTIVATE`. Gates the admin-spa
+     * "Unlock account" action that clears a locked user's
+     * `failed_attempts` / `locked_until` state. NOT granted to
+     * `admin` — the curated OrgAdmin role remains a read-mostly
+     * surface and only the explicit `organization_super_admin`
+     * boundary can re-enable a locked org-scoped account.
+     *
+     * Routes through `CapabilityToAuthorizationRolePermission::map()`
+     * with the standard `users.* -> User::class` resource mapping.
+     */
+    const USERS_UNLOCK = 'users.unlock';
+
     // ========================================================
     // Organization-scoped settings (Phase 0)
     // ========================================================

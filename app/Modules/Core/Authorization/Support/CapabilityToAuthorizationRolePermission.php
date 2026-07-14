@@ -77,6 +77,13 @@ final class CapabilityToAuthorizationRolePermission
         'audit' => ActivityLog::class,
         'core' => Organization::class,
         'core.cluster_tree' => Organization::class,
+        // Phase 0 — `organization.settings.*` is the org-scoped settings
+        // boundary (held by `organization_super_admin` only, distinct
+        // from the platform-wide `settings.*` SystemSettings resource).
+        // Same prefix-resolution rule as `core.cluster_tree.*`: the
+        // mapper splits on the LAST `.`, so the full `organization.settings`
+        // prefix must be present explicitly.
+        'organization.settings' => Organization::class,
         'roles' => AuthorizationRole::class,
         // Phase 8-C: dashboards are organization-scoped; map to the
         // Organization resource (the closest existing FQCN — the
