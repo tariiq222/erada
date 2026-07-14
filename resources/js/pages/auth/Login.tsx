@@ -9,6 +9,12 @@ import LanguageSwitcher from '@shared/ui/LanguageSwitcher';
 import ThemeSwitcher from '@shared/ui/ThemeSwitcher';
 import {IconMail, IconLock, IconLogin as LoginIcon, IconLoader, IconEye, IconEyeOff} from '@tabler/icons-react';
 
+const DevQuickLogin = import.meta.env.DEV
+  ? React.lazy(() =>
+      import('./devLogin').then((module) => ({ default: module.DevQuickLogin })),
+    )
+  : null;
+
 const IconLogin: React.FC = () => {
   const { t } = useTranslation();
   const { login, isAuthenticated, isLoading, refreshUser } = useAuth();
@@ -44,7 +50,23 @@ const IconLogin: React.FC = () => {
     setLoading(true);
 
     try {
-      await login(loginEmail, loginPassword);
+      const result = await login(loginEmail, loginPassword);
+
+      // 2FA challenge: backend accepted the password but did NOT issue the
+      // `auth_token` cookie. Surface the pending token to /verify-2fa so the
+      // second factor can complete the session.
+      if (result.requiresTwoFactor && result.pendingToken && result.userId) {
+        navigate('/verify-2fa', {
+          replace: true,
+          state: {
+            pendingToken: result.pendingToken,
+            userId: result.userId,
+            userName: result.userName,
+          },
+        });
+        return;
+      }
+
       await refreshUser();
       navigate('/dashboard');
     } catch (err: any) {
@@ -57,20 +79,6 @@ const IconLogin: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await doLogin(email, password);
-  };
-
-  // أزرار دخول سريع – بيئة التطوير فقط (هوية محايدة، tokens الحالة وظيفية فقط)
-  const devAccounts = [
-    { label: 'مدير النظام', email: 'admin@admin.com' },
-    { label: 'مدير إدارة', email: 'manager@admin.com' },
-    { label: 'موظف مشاريع', email: 'pmo.member@demo.com' },
-    { label: 'مدير المشاريع', email: 'pmo.manager@demo.com' },
-  ];
-
-  const quickLogin = (accEmail: string) => {
-    setEmail(accEmail);
-    setPassword('password');
-    void doLogin(accEmail, 'password');
   };
 
   return (
@@ -168,32 +176,17 @@ const IconLogin: React.FC = () => {
               </Link>
             </div>
 
-            {import.meta.env.DEV && (
-              <div className="mt-6 pt-5 border-t border-dashed border-[var(--border-default)]">
-                <p className="text-xs text-center text-[var(--text-secondary)] mb-3">
-                  دخول سريع (تطوير فقط)
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {devAccounts.map((acc) => (
-                    <Button
-                      key={acc.email}
-                      type="button"
-                      variant="outline"
-                      onClick={() => quickLogin(acc.email)}
-                      disabled={loading}
-                      className="h-10 px-2 text-xs"
-                    >
-                      {acc.label}
-                    </Button>
-                  ))}
-                </div>
-                <p
-                  dir="ltr"
-                  className="text-[11px] text-center text-[var(--text-secondary)] mt-2 font-mono"
-                >
-                  كلمة المرور الافتراضية: password
-                </p>
-              </div>
+            {DevQuickLogin && (
+              <React.Suspense fallback={null}>
+                <DevQuickLogin
+                  disabled={loading}
+                  onPick={(loginEmail, loginPassword) => {
+                    setEmail(loginEmail);
+                    setPassword(loginPassword);
+                    void doLogin(loginEmail, loginPassword);
+                  }}
+                />
+              </React.Suspense>
             )}
           </CardContent>
         </Card>

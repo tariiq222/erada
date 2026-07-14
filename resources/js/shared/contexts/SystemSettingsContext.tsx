@@ -191,7 +191,3 @@ export function useSystemSettings() {
   }
   return context;
 }
-
-// للتوافق مع الكود القديم
-export const OrganizationProvider = SystemSettingsProvider;
-export const useOrganization = useSystemSettings;

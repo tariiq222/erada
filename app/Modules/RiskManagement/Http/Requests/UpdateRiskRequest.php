@@ -30,7 +30,7 @@ class UpdateRiskRequest extends FormRequest
             'department_id' => ['nullable', $this->orgScopedDepartmentRule()],
             'description' => ['nullable', 'string', 'max:5000'],
             'owner_id' => ['nullable', $this->orgScopedUserRule()],
-            'stakeholder_ids' => ['nullable', 'array'],
+            'stakeholder_ids' => ['nullable', 'array', 'distinct'],
             'stakeholder_ids.*' => ['integer', $this->orgScopedUserRule()],
             'preventive_measures' => ['nullable', 'string', 'max:5000'],
             'target_close_date' => ['nullable', 'date'],

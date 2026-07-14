@@ -617,6 +617,36 @@ describe('Login Form Interaction', () => {
       expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
     });
   });
+
+  it('routes a 2FA challenge to /verify-2fa with the opaque pending token', async () => {
+    mockLogin.mockReset();
+    mockLogin.mockResolvedValue({
+      success: false,
+      requiresTwoFactor: true,
+      pendingToken: 'opaque-pending-token',
+      userId: 9,
+    });
+
+    render(<Login />);
+    const emailInput = screen.getByPlaceholderText('example@domain.com');
+    const passwordInput = screen.getByPlaceholderText('••••••••');
+
+    await userEvent.type(emailInput, 'twofa@example.com');
+    await userEvent.type(passwordInput, 'password123');
+
+    const submitButton = screen.getByText('دخول');
+    await userEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/verify-2fa', expect.objectContaining({
+        state: expect.objectContaining({
+          pendingToken: 'opaque-pending-token',
+          userId: 9,
+        }),
+        replace: true,
+      }));
+    });
+  });
 });
 
 describe('Login Error Handling', () => {

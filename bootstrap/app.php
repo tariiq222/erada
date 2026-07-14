@@ -12,6 +12,7 @@ use App\Http\Middleware\SanitizeInput;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SessionTimeout;
 use App\Http\Middleware\SetLocaleMiddleware;
+use App\Modules\Core\Http\Middleware\EnsureOrganizationSuperAdminOnly;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Auth\Middleware\Authenticate;
@@ -314,6 +315,11 @@ return Application::configure(basePath: dirname(__DIR__))
             // Route capability guards delegate canonical Capability constants to
             // AccessDecision::can().
             'engine_capability' => EnsureEngineCapability::class,
+            // Genuine-OrgSuper-only middleware (CSD-CA23078-CORE-009 / Task 7).
+            // Runs before `engine_capability:roles.assign` so non-pure OrgSuper
+            // actors (super_admin, null org) are rejected at the middleware
+            // layer before FormRequest / actor-guard / service work.
+            'ensure.org_super_only' => EnsureOrganizationSuperAdminOnly::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

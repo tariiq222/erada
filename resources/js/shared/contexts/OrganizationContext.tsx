@@ -8,7 +8,6 @@ import React, {
 	ReactNode,
 } from "react";
 import { authApi } from '@shared/api/auth';
-import { api } from '@shared/api/client';
 
 export interface OrganizationInfo {
 	id: number;
@@ -89,15 +88,22 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({
 			const target = organizations.find((o) => o.id === orgId);
 			if (!target) return;
 
+			// Client-side switch only. The org context is conveyed to the server
+			// via the `X-Organization-Id` header that ApiClient.buildFetchConfig
+			// attaches on every request from the `iradah:current_organization_id`
+			// localStorage value. The backend's `User::resolveActiveOrganizationId`
+			// still locks non-super_admin users to their own organization
+			// regardless of the header, and most endpoints ignore it entirely;
+			// the header is only honored on the endpoints that opt-in (e.g.
+			// DepartmentController::index). Reload resets ApiClient.pendingRequests
+			// and any in-memory state so subsequent requests carry the new value.
 			try {
-				// Best-effort: notify backend (when endpoint exists)
-				await api.post("/auth/switch-org", { organization_id: orgId });
+				localStorage.setItem(STORAGE_KEY, String(orgId));
 			} catch {
-				// Endpoint not yet implemented; persist locally only
+				// localStorage may be unavailable (private mode, quota); the
+				// in-memory currentOrganization is still updated below.
 			}
-
 			setCurrentOrg(target);
-			localStorage.setItem(STORAGE_KEY, String(orgId));
 			window.location.reload();
 		},
 		[organizations]

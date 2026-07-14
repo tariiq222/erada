@@ -11,10 +11,47 @@ import { authApi } from '@shared/api/auth';
 import { api } from '@shared/api/client';
 import { canUser } from '@shared/api/access';
 import type { User } from "@shared/types";
+import type {
+	LoginResponse,
+	LoginSuccessPayload,
+	LoginTwoFactorChallenge,
+} from '@shared/api/types';
+
+/**
+ * Type guard for the backend's 2FA challenge wire shape. Mirrors the
+ * source of truth — see app/Modules/Core/Http/Controllers/AuthController.php
+ * (response keys: `two_factor_required`, `user_id`, `pending_token`).
+ */
+function isTwoFactorChallenge(
+	response: LoginResponse,
+): response is LoginTwoFactorChallenge {
+	return (
+		(response as { two_factor_required?: unknown }).two_factor_required === true
+	);
+}
 
 // نتيجة تسجيل الدخول
+//
+// Returned by `useAuth().login()` after awaiting `POST /api/login`.
+// The HttpOnly `auth_token` cookie is set by the backend on either a
+// normal login success or a successful /api/2fa/verify; we must not
+// mark the user as authenticated before either of those events.
+//
+// Fields:
+//   - success=true                    → user is authenticated, AuthContext
+//                                       has promoted the user state and
+//                                       `isAuthenticated` is now true.
+//   - success=false + requiresTwoFactor → backend reports that the user is
+//                                       2FA-confirmed but the second
+//                                       factor has not yet been supplied.
+//                                       No auth_token cookie was issued;
+//                                       the caller must route to
+//                                       /verify-2fa with the `pendingToken`.
+//   - success=false (no 2FA fields)   → credentials were rejected.
 export interface LoginResult {
 	success: boolean;
+	requiresTwoFactor?: boolean;
+	pendingToken?: string;
 	userId?: number;
 	userName?: string;
 }
@@ -104,15 +141,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		email: string,
 		password: string,
 	): Promise<LoginResult> => {
+		// Wire shape comes from app/Modules/Core/Http/Controllers/AuthController
+		// (`/api/login`). When 2FA is required, the response is
+		// { two_factor_required: true, user_id, pending_token, message } and the
+		// backend deliberately issues NO Sanctum token and NO `auth_token`
+		// cookie — the only path to a session is /api/2fa/verify. We must
+		// surface that contract verbatim to the caller and never mark the user
+		// as authenticated on the password-only step.
 		const response = await authApi.login(email, password);
 
-		// الـ Token الآن يُرسل في HttpOnly Cookie من الخادم
-		// نحتفظ بـ setToken للتوافق مع الإصدارات السابقة فقط
-		if (response.token) {
-			api.setToken(response.token);
+		// 2FA challenge branch: backend has accepted the password but
+		// withheld the auth_token cookie until /api/2fa/verify completes.
+		// The single source-of-truth discriminant for the wire shape is
+		// `two_factor_required`; the union guard narrows to the challenge
+		// payload below.
+		const challenge = isTwoFactorChallenge(response) ? response : null;
+		if (challenge) {
+			return {
+				success: false,
+				requiresTwoFactor: true,
+				pendingToken: challenge.pending_token,
+				userId: challenge.user_id,
+				userName: undefined,
+			};
+		}
+
+		// Normal login success. The HttpOnly `auth_token` cookie was set by
+		// the backend; we mirror that into the in-memory auth flag and stash
+		// the user projection so isAuthenticated flips immediately. `setToken`
+		// is a legacy compatibility shim — body tokens are no longer returned.
+		const successResponse = response as LoginSuccessPayload;
+		if (successResponse.token) {
+			api.setToken(successResponse.token);
 		}
 		api.setAuthenticated(true);
-		setUser(response.user as User);
+		setUser(successResponse.user as User);
 
 		return { success: true };
 	}, []);

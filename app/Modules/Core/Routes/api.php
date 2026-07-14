@@ -6,6 +6,7 @@ use App\Modules\Core\Http\Controllers\AuthorizationRoleAssignmentController;
 use App\Modules\Core\Http\Controllers\DashboardController;
 use App\Modules\Core\Http\Controllers\GovernanceRulesController;
 use App\Modules\Core\Http\Controllers\OrganizationController;
+use App\Modules\Core\Http\Controllers\OrganizationSettingsController;
 use App\Modules\Core\Http\Controllers\PasswordResetController;
 use App\Modules\Core\Http\Controllers\RegistrationController;
 use App\Modules\Core\Http\Controllers\RoleController;
@@ -154,6 +155,28 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/roles/assign', [RoleController::class, 'assignToUser'])
         ->middleware(['engine_capability:'.Capability::CORE_ASSIGN_ROLES, 'idempotency']);
 
+    // OrgSuper-specific role-assignment route — narrow path; gated by roles.assign
+    // (NOT core.assign_roles). OrgSuper's curated pivot set grants roles.assign
+    // only; super_admin and curated admin continue to use the canonical route.
+    //
+    // The route carries THREE gates, evaluated in order:
+    //   1. `ensure.org_super_only` — inline middleware that rejects actors that
+    //      are NOT pure OrgSuper (rejects super_admin even if they hold
+    //      roles.assign; rejects OrgSuper actors with null organization_id).
+    //      Runs BEFORE the actor guard and the service.
+    //   2. `engine_capability:roles.assign` — engine resolution: actor must
+    //      hold Capability::ROLES_ASSIGN. OrgSuper holds this; super_admin
+    //      does NOT (curated super_admin pivot set excludes roles.assign).
+    //   3. `throttle:admin + idempotency` — operational throttle and
+    //      idempotent retry.
+    Route::post('/org-super/role-assignments', [RoleController::class, 'assignByOrganizationSuperAdmin'])
+        ->middleware([
+            'ensure.org_super_only',
+            'engine_capability:'.Capability::ROLES_ASSIGN,
+            'throttle:admin',
+            'idempotency',
+        ]);
+
     Route::prefix('roles')->group(function () {
         Route::get('/', [RoleController::class, 'index'])->middleware('engine_capability:'.Capability::ROLES_VIEW);
         Route::get('/permissions', [RoleController::class, 'permissions'])->middleware('engine_capability:'.Capability::ROLES_VIEW);
@@ -211,6 +234,15 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware(['engine_capability:'.Capability::CLUSTER_TREE_MANAGE, 'idempotency']);
         Route::delete('/{organization}', [OrganizationController::class, 'destroy'])
             ->middleware(['engine_capability:'.Capability::CLUSTER_TREE_MANAGE, 'throttle:delete']);
+
+        // Org-scoped settings (Phase 0) — `organization_super_admin` boundary.
+        // GET is strictly non-mutating; PUT deep-merges against
+        // `organization_settings` (NOT against `organizations.settings`).
+        Route::prefix('{organization}/settings')->group(function () {
+            Route::get('/', [OrganizationSettingsController::class, 'show']);
+            Route::put('/', [OrganizationSettingsController::class, 'update'])
+                ->middleware(['throttle:sensitive', 'idempotency']);
+        });
     });
 
     // ========================================

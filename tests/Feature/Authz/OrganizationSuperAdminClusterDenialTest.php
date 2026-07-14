@@ -1,0 +1,481 @@
+<?php
+
+namespace Tests\Feature\Authz;
+
+use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Actions\SweepObsoleteOrgSuperOrganizationViewEditPivotsAction;
+use App\Modules\Core\Authorization\Capability;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
+use App\Modules\Core\Models\Organization;
+use App\Modules\Core\Models\User;
+use Database\Seeders\RolesAndPermissionsSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Tests\TestCase;
+
+/**
+ * CSD-CA23078-CORE-009 (OrgSuper rewrite — Task 5 cluster denial).
+ *
+ * Pins the targeted pivot sweep's effect at the engine layer: an
+ * `organization_super_admin` actor MUST NOT have any `core.cluster_tree.*`
+ * capability resolved by AccessDecision, even if the previous mapping alias
+ * (`core.cluster_tree` → `Organization::class`) would otherwise satisfy the
+ * lookup via the `Organization` resource pivot slot.
+ */
+class OrganizationSuperAdminClusterDenialTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_org_super_cannot_resolve_any_cluster_tree_capability(): void
+    {
+        [, $actor] = $this->seedOrgSuper();
+
+        foreach (['CLUSTER_TREE_VIEW', 'CLUSTER_TREE_MANAGE', 'CLUSTER_TREE_EXPORT'] as $constant) {
+            $this->assertFalse(
+                AccessDecision::can($actor, constant(Capability::class.'::'.$constant)),
+                "OrgSuper must NOT resolve Capability::$constant."
+            );
+        }
+    }
+
+    public function test_sweep_converges_by_deleting_obsolete_pivots_and_writing_exact_audit_rows(): void
+    {
+        // Seed the role catalog. The seeder inserts the curated pivots;
+        // we then inject the obsolete OrgSuper Organization × view/edit
+        // pivots that the targeted sweep is meant to remove. The
+        // cluster_auditor Organization × view pivot was already inserted
+        // by the seeder via the CLUSTER_TREE_VIEW capability and must
+        // survive the sweep untouched.
+        (new RolesAndPermissionsSeeder)->run();
+
+        $orgSuper = AuthorizationRole::query()->where('name', 'organization_super_admin')->firstOrFail();
+        $clusterAuditor = AuthorizationRole::query()->where('name', 'cluster_auditor')->firstOrFail();
+        $organizationResourceId = DB::table('authorization_resources')
+            ->where('key', Organization::class)
+            ->value('id');
+
+        $this->assertNotNull($organizationResourceId, 'precondition: Organization resource row must exist.');
+
+        // The cluster_auditor Organization × view pivot is added by the
+        // seeder via the CLUSTER_TREE_VIEW capability mapped to the
+        // `Organization` resource. Assert it is present BEFORE the sweep
+        // so the post-sweep preservation assertion is anchored to a
+        // real pivot count (not zero).
+        $clusterAuditorViewBefore = DB::table('authorization_role_permissions')
+            ->where('authorization_role_id', $clusterAuditor->id)
+            ->where('authorization_resource_id', $organizationResourceId)
+            ->where('action', 'view')
+            ->count();
+
+        $this->assertSame(1, $clusterAuditorViewBefore, 'precondition: seeder must have produced the cluster_auditor Organization × view pivot before the sweep.');
+
+        // Inject the 2 obsolete OrgSuper Organization × view/edit pivots
+        // (must be deleted by the sweep).
+        $this->seedObsoleteOrgSuperOrganizationViewEditPivots($orgSuper->id, $organizationResourceId);
+
+        $auditBefore = $this->countSweepAuditRows();
+
+        // Run the same engine the migration ships — calling the action
+        // directly lets this test assert deletion + exact audit + role
+        // preservation after seeding pivots post-RefreshDatabase.
+        SweepObsoleteOrgSuperOrganizationViewEditPivotsAction::execute();
+
+        // Assertion 1: obsolete OrgSuper Organization × view/edit pivots are gone.
+        $this->assertSame(
+            0,
+            DB::table('authorization_role_permissions')
+                ->where('authorization_role_id', $orgSuper->id)
+                ->where('authorization_resource_id', $organizationResourceId)
+                ->whereIn('action', SweepObsoleteOrgSuperOrganizationViewEditPivotsAction::TARGET_ACTIONS)
+                ->count(),
+            'Sweep must have deleted the obsolete OrgSuper Organization view/edit pivots.'
+        );
+
+        // Assertion 2 (preservation): the cluster_auditor Organization ×
+        // view pivot must be untouched. cluster_auditor is the role whose
+        // legitimate cluster_tree view capability maps to Organization ×
+        // view and is the canary for "did we sweep too much?".
+        $this->assertSame(
+            $clusterAuditorViewBefore,
+            DB::table('authorization_role_permissions')
+                ->where('authorization_role_id', $clusterAuditor->id)
+                ->where('authorization_resource_id', $organizationResourceId)
+                ->where('action', 'view')
+                ->count(),
+            "Sweep must NOT touch cluster_auditor's legitimate Organization × view pivot."
+        );
+
+        // Assertion 3: exactly 2 audit rows were written (one per pivot
+        // swept). Anything more would mean the audit skip incorrectly
+        // triggered; anything less would mean a pivot deletion was not
+        // mirrored by its audit (the bug the atomic delete+audit fix
+        // closes).
+        $this->assertSame(
+            $auditBefore + 2,
+            $this->countSweepAuditRows(),
+            'Sweep must write exactly 2 audit rows (one for view, one for edit).'
+        );
+    }
+
+    public function test_sweep_on_rerun_deletes_recreated_pivots_without_duplicate_audit(): void
+    {
+        // Convergent re-run: if the operator re-runs RolesAndPermissionsSeeder
+        // between two migration executions, a recreated obsolete pivot must
+        // be re-deleted (convergence) but no duplicate audit row must be
+        // written (idempotency on the audit side). This is the scenario
+        // the original migration's `continue` short-circuit got wrong.
+        (new RolesAndPermissionsSeeder)->run();
+
+        $orgSuper = AuthorizationRole::query()->where('name', 'organization_super_admin')->firstOrFail();
+        $organizationResourceId = DB::table('authorization_resources')
+            ->where('key', Organization::class)
+            ->value('id');
+
+        $this->seedObsoleteOrgSuperOrganizationViewEditPivots($orgSuper->id, $organizationResourceId);
+
+        // First run: deletes both pivots, writes 2 fresh audit rows.
+        SweepObsoleteOrgSuperOrganizationViewEditPivotsAction::execute();
+
+        $auditAfterFirst = $this->countSweepAuditRows();
+
+        $this->assertSame(
+            0,
+            DB::table('authorization_role_permissions')
+                ->where('authorization_role_id', $orgSuper->id)
+                ->where('authorization_resource_id', $organizationResourceId)
+                ->whereIn('action', SweepObsoleteOrgSuperOrganizationViewEditPivotsAction::TARGET_ACTIONS)
+                ->count(),
+            'first run must have removed the obsolete pivots.'
+        );
+
+        // Operator re-runs the seeder, which (hypothetically) re-creates
+        // the obsolete pivots before the next migration execution.
+        $this->seedObsoleteOrgSuperOrganizationViewEditPivots($orgSuper->id, $organizationResourceId);
+
+        $pivotsBeforeRerun = DB::table('authorization_role_permissions')
+            ->where('authorization_role_id', $orgSuper->id)
+            ->where('authorization_resource_id', $organizationResourceId)
+            ->whereIn('action', SweepObsoleteOrgSuperOrganizationViewEditPivotsAction::TARGET_ACTIONS)
+            ->count();
+
+        $this->assertSame(
+            2,
+            $pivotsBeforeRerun,
+            'precondition: 2 recreated obsolete pivots must be present before the re-run.'
+        );
+
+        // Second run: deletes the recreated pivots AGAIN (convergence),
+        // but must NOT write duplicate audit rows (idempotency).
+        SweepObsoleteOrgSuperOrganizationViewEditPivotsAction::execute();
+
+        $auditAfterRerun = $this->countSweepAuditRows();
+
+        $this->assertSame(
+            $auditAfterFirst,
+            $auditAfterRerun,
+            'Re-run must NOT write duplicate audit rows for previously-swept pivots.'
+        );
+
+        $this->assertSame(
+            0,
+            DB::table('authorization_role_permissions')
+                ->where('authorization_role_id', $orgSuper->id)
+                ->where('authorization_resource_id', $organizationResourceId)
+                ->whereIn('action', SweepObsoleteOrgSuperOrganizationViewEditPivotsAction::TARGET_ACTIONS)
+                ->count(),
+            'Re-run MUST delete recreated obsolete pivots (convergence).'
+        );
+    }
+
+    public function test_audit_insertion_failure_rolls_back_paired_pivot_deletion(): void
+    {
+        // CSD-CA23078-CORE-009 (Task 5 — atomic delete+audit invariant).
+        //
+        // The sweep's contract is "delete + audit in the same
+        // transaction, no orphan deletions AND no orphan audits on
+        // mid-sweep failure." This test forces a mid-sweep failure by
+        // adding a CHECK constraint on `authorization_assignment_audits`
+        // that rejects the sweep's specific event tag, so the very
+        // first audit insert inside the sweep's transaction raises a
+        // CHECK violation. The expected behavior is:
+        //   1. The exception propagates out of the sweep action.
+        //   2. The pivot deletion that ran immediately before the
+        //      failed audit insert is rolled back — pivots are intact.
+        //   3. No partial audit row from the failed insert is left
+        //      behind (PostgreSQL rolls back the whole statement on
+        //      the CHECK violation; the row never reaches the table).
+        //
+        // Implementation notes:
+        //   - `ALTER TABLE ... ADD CONSTRAINT ... CHECK` is a
+        //     transactional DDL in PostgreSQL 12+, so adding it inside
+        //     RefreshDatabase's outer transaction is safe — the
+        //     constraint reverts when the test's transaction is rolled
+        //     back at tearDown.
+        //   - The sweep's `DB::transaction` becomes a SAVEPOINT when
+        //     nested inside RefreshDatabase's outer transaction. A
+        //     CHECK violation inside the savepoint rolls back ONLY
+        //     the savepoint; the outer transaction stays usable, so
+        //     the post-failure assertions can run.
+        (new RolesAndPermissionsSeeder)->run();
+
+        $orgSuper = AuthorizationRole::query()->where('name', 'organization_super_admin')->firstOrFail();
+        $organizationResourceId = DB::table('authorization_resources')
+            ->where('key', Organization::class)
+            ->value('id');
+
+        $this->assertNotNull($organizationResourceId, 'precondition: Organization resource row must exist.');
+
+        $this->seedObsoleteOrgSuperOrganizationViewEditPivots($orgSuper->id, $organizationResourceId);
+
+        $pivotsBefore = DB::table('authorization_role_permissions')
+            ->where('authorization_role_id', $orgSuper->id)
+            ->where('authorization_resource_id', $organizationResourceId)
+            ->whereIn('action', SweepObsoleteOrgSuperOrganizationViewEditPivotsAction::TARGET_ACTIONS)
+            ->count();
+        $this->assertSame(2, $pivotsBefore, 'precondition: 2 obsolete pivots must be present before the sweep.');
+
+        $auditBefore = $this->countSweepAuditRows();
+        $this->assertSame(0, $auditBefore, 'precondition: no sweep audit rows before the sweep.');
+
+        // Force the audit insert to fail: a CHECK constraint that
+        // rejects the sweep's event tag. The constraint is added
+        // inside the test's outer transaction; PostgreSQL reverts
+        // it on tearDown.
+        DB::statement(
+            'ALTER TABLE authorization_assignment_audits '
+            .'ADD CONSTRAINT test_force_audit_failure_check '
+            ."CHECK (event NOT IN ('".SweepObsoleteOrgSuperOrganizationViewEditPivotsAction::AUDIT_EVENT."'))"
+        );
+
+        // The action's `DB::transaction` becomes a SAVEPOINT here
+        // (nested inside RefreshDatabase's outer transaction). The
+        // pivot delete runs first, then the audit insert fires the
+        // CHECK violation, the savepoint rolls back, and the
+        // exception propagates out. The outer transaction is
+        // untouched.
+        $threw = false;
+        $thrownMessage = '';
+        try {
+            SweepObsoleteOrgSuperOrganizationViewEditPivotsAction::execute();
+        } catch (\Throwable $exception) {
+            $threw = true;
+            $thrownMessage = $exception->getMessage();
+        }
+
+        $this->assertTrue(
+            $threw,
+            'Sweep must propagate the audit-insert failure out as an exception (got no throw).'
+        );
+
+        // The exception must be the INJECTED CHECK constraint
+        // violation, not some unrelated failure (e.g. an SQLSTATE
+        // 23505 from the pivot delete, a connection error, a PHP type
+        // error). The codebase's diagnostic pattern for CHECK
+        // violations is `/check constraint|violates/i` in the
+        // exception message (PostgreSQL renders `violates check
+        // constraint "test_force_audit_failure_check"`), and the
+        // constraint name we injected above is the load-bearing
+        // fingerprint. If the assertion below fails, either the
+        // constraint was never added, the audit insert did not run
+        // first, or the wrong exception is propagating out — each of
+        // those is a regression in the atomic delete+audit invariant.
+        $this->assertTrue(
+            (bool) preg_match('/check constraint|violates/i', $thrownMessage),
+            'Sweep must propagate the INJECTED CHECK constraint '
+            .'(`test_force_audit_failure_check`) failure, not some '
+            .'other exception. Got: '.$thrownMessage
+        );
+
+        // The pivot deletion that ran immediately before the failed
+        // audit insert is rolled back by the savepoint — the
+        // pivots are intact.
+        $pivotsAfter = DB::table('authorization_role_permissions')
+            ->where('authorization_role_id', $orgSuper->id)
+            ->where('authorization_resource_id', $organizationResourceId)
+            ->whereIn('action', SweepObsoleteOrgSuperOrganizationViewEditPivotsAction::TARGET_ACTIONS)
+            ->count();
+
+        $this->assertSame(
+            2,
+            $pivotsAfter,
+            'Pivot deletion must be rolled back when the paired audit insert fails '
+            .'(the CHECK violation fired on the first audit insert; the savepoint '
+            .'rollback must have undone the first pivot delete too). '
+            .'Original error: '.$thrownMessage
+        );
+
+        // No audit row leaked through the failed savepoint. The CHECK
+        // violation rolls back the INSERT statement, so the audit
+        // table is unchanged.
+        $this->assertSame(
+            $auditBefore,
+            $this->countSweepAuditRows(),
+            'Failed audit insert must leave zero rows in authorization_assignment_audits.'
+        );
+    }
+
+    // ============================================================
+    // CSD-CA23078-CORE-010 (active plan Task 8 — cluster rescue +
+    // X-Organization-Id ignore regression).
+    //
+    // The Task 5 work above pins that the OrgSuper pivot set contains
+    // zero `core.cluster_tree.*` capabilities. Task 8 goes one layer
+    // deeper and pins that the cluster rescue branch inside
+    // `AccessDecision::evaluateCanonical()` MUST NOT fire for an
+    // OrgSuper actor even when the actor's organization is the
+    // ancestor of the target's organization (the only shape in which
+    // the rescue branch COULD grant), and that the X-Organization-Id
+    // header resolution keeps an OrgSuper actor locked to its own
+    // organization. These additve tests do not modify any Task 5
+    // method — they exercise a fresh engine-layer trace path and the
+    // existing `User::resolveActiveOrganizationId()` seam.
+    // ============================================================
+
+    public function test_org_super_cluster_rescue_branch_does_not_fire_against_descendant_target(): void
+    {
+        [$actorOrg, $actor] = $this->seedOrgSuper();
+
+        // Build the ONLY shape in which `canonicalClusterTreeGrant()`
+        // could plausibly fire: target in a descendant organization of
+        // the actor's organization. If the rescue branch returned a
+        // grant for OrgSuper, the trace layer would be 'cluster_tree_rescue'.
+        $descendantOrg = Organization::factory()->create([
+            'is_active' => true,
+            'parent_id' => $actorOrg->id,
+        ]);
+        $crossOrgTarget = User::factory()->create([
+            'organization_id' => $descendantOrg->id,
+            'is_active' => true,
+        ]);
+
+        foreach ([Capability::CLUSTER_TREE_VIEW, Capability::CLUSTER_TREE_MANAGE, Capability::CLUSTER_TREE_EXPORT] as $capability) {
+            $trace = AccessDecision::canonicalTrace($actor, $capability, $crossOrgTarget);
+
+            $this->assertFalse(
+                $trace['granted'],
+                "OrgSuper must NOT be granted $capability via cluster rescue against a descendant target."
+            );
+            $this->assertNotSame(
+                'cluster_tree_rescue',
+                $trace['layer'],
+                "OrgSuper must NEVER reach the cluster_tree_rescue trace layer for $capability; "
+                .'got: '.json_encode($trace)
+            );
+        }
+
+        // The boolean façade agrees with the trace for every primitive.
+        $this->assertFalse(AccessDecision::can($actor, Capability::CLUSTER_TREE_VIEW, $crossOrgTarget));
+        $this->assertFalse(AccessDecision::can($actor, Capability::CLUSTER_TREE_MANAGE, $crossOrgTarget));
+        $this->assertFalse(AccessDecision::can($actor, Capability::CLUSTER_TREE_EXPORT, $crossOrgTarget));
+    }
+
+    public function test_x_organization_id_header_does_not_widen_for_org_super(): void
+    {
+        [$actorOrg, $actor] = $this->seedOrgSuper();
+
+        // A second, unrelated organization the X-Organization-Id
+        // header could nominally point at. If the header resolves to
+        // this id instead of the actor's own id, an OrgSuper actor
+        // could pivot their entire scope across tenants.
+        $otherOrg = Organization::factory()->create(['is_active' => true]);
+
+        $resolved = $actor->resolveActiveOrganizationId((int) $otherOrg->id);
+
+        // Locked to actor.organization_id; X-Organization-Id header is
+        // ignored for any non-super-admin actor, including Org-Super.
+        $this->assertSame(
+            (int) $actorOrg->id,
+            $resolved,
+            'OrgSuper actors must not be widened by X-Organization-Id; only super_admin may switch orgs.'
+        );
+
+        // A null requested id (header absent) must keep the actor
+        // pinned to their own organization rather than escalating to a
+        // cross-tenant null (which would mean "all orgs").
+        $this->assertSame(
+            (int) $actorOrg->id,
+            $actor->resolveActiveOrganizationId(null),
+            'OrgSuper with null X-Organization-Id header must stay locked to actor.organization_id.'
+        );
+    }
+
+    public function test_org_super_audit_view_cross_org_is_strictly_denied_without_cluster_rescue(): void
+    {
+        [, $actor] = $this->seedOrgSuper();
+
+        // An Organization-level target in a DIFFERENT org. The audit.view
+        // surface explicitly maps to organization-wide audit pivots; an
+        // accidental cluster rescue widening here would let OrgSuper
+        // directors read another tenant's audit log.
+        $crossOrg = Organization::factory()->create(['is_active' => true]);
+
+        $trace = AccessDecision::canonicalTrace($actor, Capability::AUDIT_VIEW, $crossOrg);
+
+        $this->assertFalse(
+            $trace['granted'],
+            'OrgSuper must NOT receive a cluster rescue grant for audit.view against a cross-org target.'
+        );
+        $this->assertNotSame(
+            'cluster_tree_rescue',
+            $trace['layer'],
+            'audit.view must NEVER trace through cluster_tree_rescue for OrgSuper; '
+            .'got: '.json_encode($trace)
+        );
+    }
+
+    /**
+     * @return array{0: Organization, 1: User}
+     */
+    private function seedOrgSuper(): array
+    {
+        // Seed the role catalog so the targeted obsolete-pivot sweep has
+        // an OrgSuper role + Organization resource to operate on. Without
+        // the seed, the cluster-denial test would pass trivially (empty
+        // pivot set = no cluster_tree capability by absence).
+        (new RolesAndPermissionsSeeder)->run();
+
+        $org = Organization::factory()->create(['is_active' => true]);
+        $user = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $role = AuthorizationRole::query()->where('name', 'organization_super_admin')->firstOrFail();
+        AuthorizationRoleAssignment::query()->create([
+            'user_id' => $user->id,
+            'authorization_role_id' => $role->id,
+            'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+            'scope_id' => $org->id,
+            'organization_id' => $org->id,
+            'is_active' => true,
+        ]);
+
+        return [$org, $user];
+    }
+
+    /**
+     * Insert the two obsolete OrgSuper Organization × view/edit pivots.
+     * Used by both the "convergence on first run" and the "convergence on
+     * rerun" tests.
+     */
+    private function seedObsoleteOrgSuperOrganizationViewEditPivots(int $orgSuperRoleId, int $organizationResourceId): void
+    {
+        DB::table('authorization_role_permissions')->insert([
+            [
+                'authorization_role_id' => $orgSuperRoleId,
+                'authorization_resource_id' => $organizationResourceId,
+                'action' => 'view',
+            ],
+            [
+                'authorization_role_id' => $orgSuperRoleId,
+                'authorization_resource_id' => $organizationResourceId,
+                'action' => 'edit',
+            ],
+        ]);
+    }
+
+    private function countSweepAuditRows(): int
+    {
+        return (int) DB::table('authorization_assignment_audits')
+            ->where('event', SweepObsoleteOrgSuperOrganizationViewEditPivotsAction::AUDIT_EVENT)
+            ->whereRaw("new_value ->> 'migration' = ?", [SweepObsoleteOrgSuperOrganizationViewEditPivotsAction::MIGRATION_NAME])
+            ->count();
+    }
+}

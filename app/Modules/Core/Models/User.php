@@ -313,6 +313,43 @@ class User extends Authenticatable
             ->exists();
     }
 
+    // هل المستخدم Org Admin (مدير على مستوى المؤسسة عبر Authorization Role)
+    public function isOrgAdmin(): bool
+    {
+        return $this->activeCanonicalRoleAssignments()
+            ->where('scope_type', AuthorizationRoleAssignment::SCOPE_ORGANIZATION)
+            ->whereNotNull('scope_id')
+            ->whereHas('role', fn ($query) => $query
+                ->where('name', 'admin')
+                ->where('scope_type', AuthorizationRoleAssignment::SCOPE_ORGANIZATION)
+                ->where('is_admin_role', true))
+            ->exists();
+    }
+
+    // هل المستخدم Organization Super Admin — الدور الموحّد الجديد على مستوى المؤسسة.
+    //
+    // الإعداد:
+    //   - name = 'organization_super_admin'
+    //   - scope_type = 'organization'  (server-derived, لا يقبل X-Organization-Id للتوسيع)
+    //   - is_admin_role = false        (يحجب اختصار AccessDecision::whyCan() للمدير)
+    //   - is_system = true             (يحجز الدور في كتالوج البذور)
+    //
+    // التمييز عن isOrgAdmin() ضروري — كلاهما scope_type=organization لكن
+    // الاختلاف في is_admin_role يحدد سلوك المحرّك في فرع
+    // AccessDecision.php:~1170 (الـ admin-shortcut).
+    public function isOrganizationSuperAdmin(): bool
+    {
+        return $this->activeCanonicalRoleAssignments()
+            ->where('scope_type', AuthorizationRoleAssignment::SCOPE_ORGANIZATION)
+            ->whereNotNull('scope_id')
+            ->whereHas('role', fn ($query) => $query
+                ->where('name', 'organization_super_admin')
+                ->where('scope_type', AuthorizationRoleAssignment::SCOPE_ORGANIZATION)
+                ->where('is_admin_role', false)
+                ->where('is_system', true))
+            ->exists();
+    }
+
     /**
      * Resolve the organization to scope queries to, honoring the org picked in the
      * header. Only super_admin may switch; everyone else stays locked to their own

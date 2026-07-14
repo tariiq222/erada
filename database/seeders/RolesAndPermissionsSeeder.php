@@ -97,9 +97,19 @@ class RolesAndPermissionsSeeder extends Seeder
             ],
             'admin' => [
                 'label' => 'Organization Admin',
+                'label_ar' => 'مسؤول المنظمة',
+                'label_en' => 'Organization Admin',
                 'scope_type' => 'organization',
                 'is_admin_role' => true,
-                'capabilities' => Capability::all(),
+                'capabilities' => self::orgAdminCapabilities(),
+            ],
+            'organization_super_admin' => [
+                'label' => 'Organization Super Admin',
+                'label_ar' => 'المسؤول العام للمؤسسة',
+                'label_en' => 'Organization Super Admin',
+                'scope_type' => 'organization',
+                'is_admin_role' => false, // hard-off: blocks AccessDecision admin-shortcut (~line 1170).
+                'capabilities' => self::organizationSuperAdminCapabilities(),
             ],
             'viewer' => [
                 'label' => 'Viewer',
@@ -247,6 +257,7 @@ class RolesAndPermissionsSeeder extends Seeder
      */
     private const SWEPT_SYSTEM_ROLES = [
         'admin',
+        'organization_super_admin',
         'viewer',
         'dept_manager',
         'member',
@@ -285,7 +296,7 @@ class RolesAndPermissionsSeeder extends Seeder
                         'label_en' => $definition['label_en'] ?? $definition['label'],
                         'scope_type' => $definition['scope_type'],
                         'is_admin_role' => $definition['is_admin_role'],
-                        'is_system' => $name === 'super_admin',
+                        'is_system' => $name === 'super_admin' || $name === 'organization_super_admin',
                         'is_active' => true,
                     ],
                 );
@@ -425,6 +436,66 @@ class RolesAndPermissionsSeeder extends Seeder
         }
 
         return array_values($mapped);
+    }
+
+    /**
+     * Strict OrgAdmin capability set for the canonical `admin` role.
+     *
+     * The brief (Task 3) requires the role to grant ONLY the curation list
+     * below; no `Capability::all()` and no module write surface that
+     * operators don't expect on an org-scoped admin boundary. Adding new
+     * capabilities here requires a deliberate decision — see
+     * `sdd/task-3-brief.md`.
+     *
+     * @return list<string>
+     */
+    private static function orgAdminCapabilities(): array
+    {
+        return [
+            Capability::USERS_VIEW,
+            Capability::USERS_CREATE,
+            Capability::USERS_EDIT,
+            Capability::DEPARTMENTS_VIEW,
+            Capability::DEPARTMENTS_CREATE,
+            Capability::DEPARTMENTS_EDIT,
+            Capability::DEPARTMENTS_DELETE,
+            Capability::ROLES_VIEW,
+            Capability::SETTINGS_VIEW,
+            Capability::SETTINGS_EDIT,
+            Capability::AUDIT_VIEW,
+        ];
+    }
+
+    /**
+     * Strict Organization Super Admin capability set for the canonical
+     * `organization_super_admin` role (Phase 0).
+     *
+     * No `Capability::all()`, no module write surface, no cluster primitives.
+     * `is_admin_role=false` blocks the AccessDecision admin-shortcut, so this
+     * list is the ONLY source of grants for this role.
+     *
+     * @return list<string>
+     */
+    private static function organizationSuperAdminCapabilities(): array
+    {
+        return [
+            Capability::USERS_VIEW,
+            Capability::USERS_CREATE,
+            Capability::USERS_EDIT,
+            Capability::USERS_DELETE,
+            Capability::USERS_ACTIVATE,
+            Capability::USERS_DEACTIVATE,
+            Capability::USERS_UNLOCK,
+            Capability::DEPARTMENTS_VIEW,
+            Capability::DEPARTMENTS_CREATE,
+            Capability::DEPARTMENTS_EDIT,
+            Capability::DEPARTMENTS_DELETE,
+            Capability::ORGANIZATION_SETTINGS_VIEW,
+            Capability::ORGANIZATION_SETTINGS_EDIT,
+            Capability::AUDIT_VIEW,
+            Capability::ROLES_VIEW,
+            Capability::ROLES_ASSIGN,
+        ];
     }
 
     /** @return list<string> */

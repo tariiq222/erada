@@ -80,7 +80,7 @@ vi.mock('@shared/api/client', () => ({
           },
         });
       }
-      if (path === '/admin/organizations/42') {
+      if (path === '/organizations/42') {
         return Promise.resolve({
           data: {
             id: 42,
@@ -105,7 +105,10 @@ function setPath(path: string, state: unknown = null) {
   window.history.replaceState({ usr: state, key: 'admin-test', idx: 0 }, '', path);
 }
 
-function asUser(roles: string[]): User {
+function asUser(
+  roles: string[],
+  flags: { is_super_admin?: boolean; is_org_admin?: boolean } = {},
+): User {
   return {
     id: 1,
     name: 'Admin User',
@@ -116,6 +119,8 @@ function asUser(roles: string[]): User {
     job_title: null,
     is_active: true,
     roles,
+    is_super_admin: flags.is_super_admin,
+    is_org_admin: flags.is_org_admin,
   };
 }
 
@@ -140,9 +145,9 @@ describe('admin authentication routing', () => {
     );
   });
 
-  it('renders Forbidden for an authenticated user without the literal super_admin role', async () => {
+  it('renders Forbidden for an authenticated user without the is_super_admin flag', async () => {
     authState = {
-      user: asUser(['organization_admin']),
+      user: asUser(['organization_admin'], { is_super_admin: false, is_org_admin: true }),
       isLoading: false,
       isAuthenticated: true,
     };
@@ -153,9 +158,9 @@ describe('admin authentication routing', () => {
     expect(await screen.findByRole('heading', { name: i18n.t('ovr.api.access_denied') })).toBeInTheDocument();
   });
 
-  it('renders a protected admin page for the literal super_admin role', async () => {
+  it('renders a protected admin page for a user with is_super_admin=true', async () => {
     authState = {
-      user: asUser(['super_admin']),
+      user: asUser([], { is_super_admin: true, is_org_admin: false }),
       isLoading: false,
       isAuthenticated: true,
     };
@@ -171,7 +176,7 @@ describe('admin authentication routing', () => {
     setPath('/login?returnTo=%2Forganizations%2F42');
     authMocks.login.mockImplementation(async () => {
       authState = {
-        user: asUser(['super_admin']),
+        user: asUser([], { is_super_admin: true }),
         isLoading: false,
         isAuthenticated: true,
       };
@@ -232,7 +237,7 @@ describe('admin authentication routing', () => {
   it('uses the active locale direction on forbidden and not-found pages', async () => {
     localeDirection = 'ltr';
     authState = {
-      user: asUser(['organization_admin']),
+      user: asUser([], { is_super_admin: false, is_org_admin: true }),
       isLoading: false,
       isAuthenticated: true,
     };
@@ -243,7 +248,7 @@ describe('admin authentication routing', () => {
     forbiddenRender.unmount();
 
     authState = {
-      user: asUser(['super_admin']),
+      user: asUser([], { is_super_admin: true }),
       isLoading: false,
       isAuthenticated: true,
     };
@@ -260,7 +265,7 @@ describe('admin authentication routing', () => {
       setPath(`/login?returnTo=${encodeURIComponent(returnTo)}`);
       authMocks.login.mockImplementation(async () => {
         authState = {
-          user: asUser(['super_admin']),
+          user: asUser([], { is_super_admin: true }),
           isLoading: false,
           isAuthenticated: true,
         };
@@ -288,7 +293,7 @@ describe('admin authentication routing', () => {
     authMocks.verifyTwoFactor.mockResolvedValue({ user: { id: 1 }, token: 'cookie-compat' });
     authMocks.refreshUser.mockImplementation(async () => {
       authState = {
-        user: asUser(['super_admin']),
+        user: asUser([], { is_super_admin: true }),
         isLoading: false,
         isAuthenticated: true,
       };

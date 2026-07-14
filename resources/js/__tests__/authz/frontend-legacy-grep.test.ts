@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
  *   - transition-only legacy strings that intentionally route through
  *     `permissions[]` only during the Phase 9 cleanup freeze
  *     (see `docs/authz/frontend-access-migration-report.md`)
- *   - any string appearing outside `app.tsx`, `Sidebar.tsx`, `nasaq/app.tsx`
+ *   - any string appearing outside `app.tsx`, `nasaq/app.tsx`
  *
  * Not allowed:
  *   - one-to-one legacy flat strings such as `view_projects` or
@@ -26,11 +26,14 @@ import { fileURLToPath } from 'node:url';
  * (`resources/js/pages/`) and feature entrypoints (`resources/js/features/`)
  * are now scanned too — if a future page reintroduces a flat string like
  * `view_projects`, the test fails before the SPA silently grants nothing.
+ *
+ * Task 14 cutover (2026-07-14): the legacy `widgets/app-shell/ui/Sidebar.tsx`
+ * component was deleted and replaced by `@shared/nasaq/app` — removed from
+ * the route/nav scan list.
  */
 
 const ROUTE_NAV_FILES = [
 	'resources/js/app.tsx',
-	'resources/js/widgets/app-shell/ui/Sidebar.tsx',
 	'resources/js/shared/nasaq/app.tsx',
 ] as const;
 

@@ -29,6 +29,10 @@ export interface User {
   job_title: string | null;
   is_active: boolean;
   preferred_locale?: string | null;
+  /** Backend-computed super_admin flag from `/api/user`. Authoritative for super gating. */
+  is_super_admin?: boolean;
+  /** Backend-computed org-admin flag from `/api/user`. Authoritative for org-admin gating. */
+  is_org_admin?: boolean;
   /** Role names on administrative user-list payloads; never use for authorization. */
   roles?: string[];
   capabilities?: string[];

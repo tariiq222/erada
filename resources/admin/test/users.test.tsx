@@ -19,7 +19,8 @@ const authState = {
     extension: null,
     job_title: null,
     is_active: true,
-    roles: ['super_admin'],
+    is_super_admin: true,
+    is_org_admin: false,
     organization_id: 17,
   } satisfies User & { organization_id: number },
   isLoading: false,
@@ -93,13 +94,13 @@ describe('admin user contracts', () => {
     await adminApi.users.unlock(9);
     await adminApi.users.delete(9);
 
-    expect(apiGet).toHaveBeenNthCalledWith(1, '/admin/users?search=audit&page=2');
-    expect(apiGet).toHaveBeenNthCalledWith(2, '/admin/users/9');
-    expect(apiGet).toHaveBeenNthCalledWith(3, '/admin/users/9/security');
-    expect(apiPost).toHaveBeenNthCalledWith(1, '/admin/users', expect.objectContaining({ email: 'audit@example.test' }));
-    expect(apiPut).toHaveBeenCalledWith('/admin/users/9', { name: 'Updated User' });
-    expect(apiPost).toHaveBeenNthCalledWith(2, '/admin/users/9/unlock', undefined);
-    expect(apiDelete).toHaveBeenCalledWith('/admin/users/9');
+    expect(apiGet).toHaveBeenNthCalledWith(1, '/users?search=audit&page=2');
+    expect(apiGet).toHaveBeenNthCalledWith(2, '/users/9');
+    expect(apiGet).toHaveBeenNthCalledWith(3, '/users/9/security');
+    expect(apiPost).toHaveBeenNthCalledWith(1, '/users', expect.objectContaining({ email: 'audit@example.test' }));
+    expect(apiPut).toHaveBeenCalledWith('/users/9', { name: 'Updated User' });
+    expect(apiPost).toHaveBeenNthCalledWith(2, '/users/9/unlock', undefined);
+    expect(apiDelete).toHaveBeenCalledWith('/users/9');
   });
 
   it('loads every organization and manager-candidate page through canonical filters', async () => {
@@ -114,10 +115,10 @@ describe('admin user contracts', () => {
 
     expect(organizations.data.map((row) => row.id)).toEqual([17, 18]);
     expect(managers.data.map((row) => row.id)).toEqual([9, 10]);
-    expect(apiGet).toHaveBeenNthCalledWith(1, '/admin/organizations?per_page=100&page=1');
-    expect(apiGet).toHaveBeenNthCalledWith(2, '/admin/organizations?per_page=100&page=2');
-    expect(apiGet).toHaveBeenNthCalledWith(3, '/admin/users?organization_id=17&per_page=100&page=1');
-    expect(apiGet).toHaveBeenNthCalledWith(4, '/admin/users?organization_id=17&per_page=100&page=2');
+    expect(apiGet).toHaveBeenNthCalledWith(1, '/organizations?per_page=100&page=1');
+    expect(apiGet).toHaveBeenNthCalledWith(2, '/organizations?per_page=100&page=2');
+    expect(apiGet).toHaveBeenNthCalledWith(3, '/users?organization_id=17&per_page=100&page=1');
+    expect(apiGet).toHaveBeenNthCalledWith(4, '/users?organization_id=17&per_page=100&page=2');
   });
 
   it('requires a trusted operational origin and rejects unsafe record paths', () => {
@@ -144,8 +145,8 @@ describe('admin user contracts', () => {
     const row = await screen.findByRole('row', { name: /Audit User/ });
     expect(within(row).getByRole('link', { name: i18n.t('common.view') })).toHaveAttribute('href', '/users/9');
     await actor.click(within(row).getByRole('button', { name: i18n.t('common.delete') }));
-    expect(confirm).toHaveBeenCalledWith(i18n.t('users.delete_confirm'));
-    expect(apiDelete).toHaveBeenCalledWith('/admin/users/9');
+    expect(confirm).toHaveBeenCalledWith(i18n.t('users.delete_confirm', { name: 'Audit User' }));
+    expect(apiDelete).toHaveBeenCalledWith('/users/9');
   });
 
   it('validates create fields and submits the exact FormRequest contract', async () => {
@@ -169,7 +170,7 @@ describe('admin user contracts', () => {
     await actor.selectOptions(screen.getByLabelText(i18n.t('common.department')), '4');
     await actor.click(screen.getByRole('button', { name: i18n.t('common.create') }));
 
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/admin/users', {
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/users', {
       name: 'Audit User',
       email: 'audit@example.test',
       password: 'Secret123!',
@@ -227,7 +228,7 @@ describe('admin user contracts', () => {
 
   it('filters the user list by the selected organization', async () => {
     apiGet.mockImplementation((path) => {
-      if (path === '/admin/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
+      if (path === '/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
       if (path.includes('organization_id=18')) return Promise.resolve({ data: [{ ...userRecord, organization_id: 18 }], current_page: 1, last_page: 1, per_page: 20, total: 1 });
       return Promise.resolve({ data: [], current_page: 1, last_page: 1, per_page: 20, total: 0 });
     });
@@ -238,14 +239,14 @@ describe('admin user contracts', () => {
     const organization = await screen.findByLabelText(i18n.t('admin.organizations.title'));
     await actor.selectOptions(organization, '18');
 
-    await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/admin/users?organization_id=18&page=1&per_page=20'));
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/users?organization_id=18&page=1&per_page=20'));
   });
 
   it('keeps department choices from the latest organization request', async () => {
     let resolveNorth!: (value: unknown) => void;
     apiGet.mockImplementation((path) => {
-      if (path === '/admin/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
-      if (path === '/admin/roles') return Promise.resolve({ data: [] });
+      if (path === '/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
+      if (path === '/roles') return Promise.resolve({ data: [] });
       if (path.includes('organization_id=17')) return new Promise((resolve) => { resolveNorth = resolve; });
       if (path.includes('organization_id=18')) return Promise.resolve({ data: [{ id: 8, name: 'South Department' }], current_page: 1, last_page: 1, per_page: 100, total: 1 });
       return Promise.resolve({ data: [] });
@@ -267,7 +268,7 @@ describe('admin user contracts', () => {
   it('keeps the latest user rows when an older request resolves last', async () => {
     let resolveNorth!: (value: unknown) => void;
     apiGet.mockImplementation((path) => {
-      if (path === '/admin/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
+      if (path === '/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
       if (path.includes('organization_id=17')) return new Promise((resolve) => { resolveNorth = resolve; });
       if (path.includes('organization_id=18')) return Promise.resolve({ data: [{ ...userRecord, id: 18, name: 'South User', organization_id: 18 }], current_page: 1, last_page: 1, per_page: 20, total: 1 });
       return Promise.resolve({ data: [] });
@@ -288,7 +289,7 @@ describe('admin user contracts', () => {
   it('does not let an older user-list failure replace a successful latest load', async () => {
     let rejectNorth!: (reason: unknown) => void;
     apiGet.mockImplementation((path) => {
-      if (path === '/admin/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
+      if (path === '/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
       if (path.includes('organization_id=17')) return new Promise((_resolve, reject) => { rejectNorth = reject; });
       if (path.includes('organization_id=18')) return Promise.resolve({ data: [{ ...userRecord, id: 18, name: 'South User', organization_id: 18 }], current_page: 1, last_page: 1, per_page: 20, total: 1 });
       return Promise.resolve({ data: [] });

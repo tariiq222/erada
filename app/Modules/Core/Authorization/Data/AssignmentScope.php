@@ -8,6 +8,8 @@ final readonly class AssignmentScope
 {
     public const ALL = 'all';
 
+    public const ORGANIZATION = 'organization';
+
     public const OWN = 'own';
 
     public const TYPES = [

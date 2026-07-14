@@ -373,6 +373,15 @@ final class Capability
 
     const ROLES_DELETE = 'roles.delete';
 
+    /**
+     * CSD-CA23078-CORE-009 (OrgSuper rewrite).
+     *
+     * Held by `organization_super_admin` ONLY (Task 3 curated set). Gates
+     * the dedicated `POST /api/org-super/role-assignments` route. Distinct
+     * from `core.assign_roles` (canonical super_admin-only path). The
+     * curated `admin` role does NOT hold this capability — the OrgSuper
+     * role is the single boundary actor for organizational role assignment.
+     */
     const ROLES_ASSIGN = 'roles.assign';
 
     const USERS_VIEW = 'users.view';
@@ -472,6 +481,44 @@ final class Capability
     const SETTINGS_EDIT = 'settings.edit';
 
     const SETTINGS_MANAGE = 'settings.manage';
+
+    // ========================================================
+    // Organization-level user lifecycle (Phase 0)
+    // ========================================================
+    //
+    // Held by the `organization_super_admin` role; required to express
+    // the spec's actor / permission matrix. NOT granted to `admin` —
+    // the curated OrgAdmin role remains a read-mostly surface.
+    const USERS_ACTIVATE = 'users.activate';
+
+    const USERS_DEACTIVATE = 'users.deactivate';
+
+    /**
+     * Phase 0 — Organization Super Admin user-account unlock primitive.
+     *
+     * Held by the `organization_super_admin` role alongside
+     * `USERS_ACTIVATE` / `USERS_DEACTIVATE`. Gates the admin-spa
+     * "Unlock account" action that clears a locked user's
+     * `failed_attempts` / `locked_until` state. NOT granted to
+     * `admin` — the curated OrgAdmin role remains a read-mostly
+     * surface and only the explicit `organization_super_admin`
+     * boundary can re-enable a locked org-scoped account.
+     *
+     * Routes through `CapabilityToAuthorizationRolePermission::map()`
+     * with the standard `users.* -> User::class` resource mapping.
+     */
+    const USERS_UNLOCK = 'users.unlock';
+
+    // ========================================================
+    // Organization-scoped settings (Phase 0)
+    // ========================================================
+    //
+    // Distinct from `settings.view` / `settings.edit` (platform-wide
+    // SystemSettings). Held by `organization_super_admin` only;
+    // PlatformSuperAdmin retains both via Capability::all().
+    const ORGANIZATION_SETTINGS_VIEW = 'organization.settings.view';
+
+    const ORGANIZATION_SETTINGS_EDIT = 'organization.settings.edit';
 
     // ========================================================
     // المرفقات — Attachments

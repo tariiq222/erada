@@ -24,7 +24,7 @@ export function SuperAdminBoundary() {
     return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   }
 
-  if (!user?.roles.includes('super_admin')) {
+  if (user?.is_super_admin !== true) {
     return <Forbidden />;
   }
 

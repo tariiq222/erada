@@ -5,6 +5,7 @@ namespace App\Modules\Core\Authorization\Support;
 use App\Modules\Core\Authorization\Capability;
 use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Models\Organization;
+use App\Modules\Core\Models\OrganizationSettings;
 use App\Modules\Core\Models\SystemSettings;
 use App\Modules\Core\Models\User;
 use App\Modules\HR\Models\Department;
@@ -77,6 +78,19 @@ final class CapabilityToAuthorizationRolePermission
         'audit' => ActivityLog::class,
         'core' => Organization::class,
         'core.cluster_tree' => Organization::class,
+        // Phase 0 — `organization.settings.*` is the org-scoped settings
+        // boundary (held by `organization_super_admin` only, distinct
+        // from the platform-wide `settings.*` SystemSettings resource).
+        // The mapper splits on the LAST `.`, so the full
+        // `organization.settings` prefix must be present explicitly.
+        // Resolves to the new `OrganizationSettings` model so the
+        // `Organization × view`/`edit` pivot slots remain reserved for
+        // `cluster_auditor` (cluster_tree primitives) and are NOT
+        // overloaded by OrgSuper's org-settings capabilities. The
+        // targeted sweep migration 2026_07_14_000022 removes any
+        // pre-existing obsolete OrgSuper Organization × view/edit pivots
+        // that the previous mapping alias would have inserted.
+        'organization.settings' => OrganizationSettings::class,
         'roles' => AuthorizationRole::class,
         // Phase 8-C: dashboards are organization-scoped; map to the
         // Organization resource (the closest existing FQCN — the

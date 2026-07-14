@@ -328,3 +328,36 @@ export interface ScopeType {
   sort_order: number;
   is_active: boolean;
 }
+
+/**
+ * Wire-shape of `GET/PUT /api/organizations/{organization}/settings`.
+ *
+ * Mirrors the canonical controller payload in
+ * `app/Modules/Core/Http/Controllers/OrganizationSettingsController.php`.
+ *
+ * - `locale_overrides.*`           → free-form locale code strings (max 16).
+ * - `branding_overrides.primary_color` → `#RRGGBB` hex string (nullable clears).
+ * - `branding_overrides.logo_path` → asset path (max 255).
+ * - `notification_templates`       → `{ [templateKey: string]: template }`.
+ *
+ * The PUT is deep-merged server-side: only the keys present in the
+ * payload are written; siblings are preserved. Sending an empty
+ * `{}` for any top-level key is a no-op (the merge helper treats
+ * empty objects as "no changes"), so the FE only sends the keys the
+ * actor actually edited.
+ */
+export interface OrganizationSettingsPayload {
+  locale_overrides: {
+    ar: string | null;
+    en: string | null;
+  };
+  branding_overrides: {
+    primary_color: string | null;
+    logo_path: string | null;
+  };
+  notification_templates: Record<string, string>;
+}
+
+export interface OrganizationSettingsEnvelope {
+  data: OrganizationSettingsPayload;
+}

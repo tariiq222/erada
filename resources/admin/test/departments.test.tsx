@@ -8,7 +8,7 @@ import { api } from '@shared/api/client';
 import { AdminRouter } from '@admin/app/AdminRouter';
 import { adminApi } from '@admin/api/adminApi';
 
-const authState = { user: { id: 1, name: 'Control Admin', email: 'admin@example.test', department_id: null, phone: null, extension: null, job_title: null, is_active: true, roles: ['super_admin'], organization_id: 17 } satisfies User & { organization_id: number }, isLoading: false, isAuthenticated: true };
+const authState = { user: { id: 1, name: 'Control Admin', email: 'admin@example.test', department_id: null, phone: null, extension: null, job_title: null, is_active: true, is_super_admin: true, is_org_admin: false, organization_id: 17 } satisfies User & { organization_id: number }, isLoading: false, isAuthenticated: true };
 vi.mock('@shared/contexts/AuthContext', () => ({ AuthProvider: ({ children }: { children: React.ReactNode }) => children, useAuth: () => ({ ...authState, logout: vi.fn(), refreshUser: vi.fn() }) }));
 vi.mock('@shared/contexts/LocaleContext', () => ({ LocaleProvider: ({ children }: { children: React.ReactNode }) => children, useLocale: () => ({ locale: 'ar', direction: 'rtl', setLocale: vi.fn() }) }));
 vi.mock('@shared/contexts/ThemeContext', () => ({ ThemeProvider: ({ children }: { children: React.ReactNode }) => children, useTheme: () => ({ resolvedTheme: 'light', toggleTheme: vi.fn() }) }));
@@ -77,10 +77,10 @@ describe('admin department contracts', () => {
 
   it('reloads parent choices when the selected organization changes', async () => {
     apiGet.mockImplementation((path) => {
-      if (path === '/admin/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
+      if (path === '/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
       if (path.includes('/admin/departments?organization_id=17')) return Promise.resolve({ data: [{ id: 4, name: 'North Parent' }], current_page: 1, last_page: 1, per_page: 100, total: 1 });
       if (path.includes('/admin/departments?organization_id=18')) return Promise.resolve({ data: [{ id: 8, name: 'South Parent' }], current_page: 1, last_page: 1, per_page: 100, total: 1 });
-      if (path.startsWith('/admin/users?')) return Promise.resolve({ data: [], current_page: 1, last_page: 1, per_page: 100, total: 0 });
+      if (path.startsWith('/users?')) return Promise.resolve({ data: [], current_page: 1, last_page: 1, per_page: 100, total: 0 });
       return Promise.resolve({ data: [] });
     });
     const actor = userEvent.setup();
@@ -111,7 +111,7 @@ describe('admin department contracts', () => {
 
   it('loads the selected organization from the query and filters the department list', async () => {
     apiGet.mockImplementation((path) => {
-      if (path === '/admin/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
+      if (path === '/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
       if (path.includes('organization_id=18')) return Promise.resolve({ data: [{ ...department, id: 8, organization_id: 18, name: 'South Quality' }], current_page: 1, last_page: 1, per_page: 20, total: 1 });
       return Promise.resolve({ data: [], current_page: 1, last_page: 1, per_page: 20, total: 0 });
     });
@@ -126,7 +126,7 @@ describe('admin department contracts', () => {
   it('keeps the latest department rows when an older request resolves last', async () => {
     let resolveNorth!: (value: unknown) => void;
     apiGet.mockImplementation((path) => {
-      if (path === '/admin/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
+      if (path === '/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
       if (path.includes('organization_id=17')) return new Promise((resolve) => { resolveNorth = resolve; });
       if (path.includes('organization_id=18')) return Promise.resolve({ data: [{ ...department, id: 18, organization_id: 18, name: 'South Department' }], current_page: 1, last_page: 1, per_page: 20, total: 1 });
       return Promise.resolve({ data: [] });
@@ -147,7 +147,7 @@ describe('admin department contracts', () => {
   it('does not let an older department-list failure replace a successful latest load', async () => {
     let rejectNorth!: (reason: unknown) => void;
     apiGet.mockImplementation((path) => {
-      if (path === '/admin/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
+      if (path === '/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
       if (path.includes('organization_id=17')) return new Promise((_resolve, reject) => { rejectNorth = reject; });
       if (path.includes('organization_id=18')) return Promise.resolve({ data: [{ ...department, id: 18, organization_id: 18, name: 'South Department' }], current_page: 1, last_page: 1, per_page: 20, total: 1 });
       return Promise.resolve({ data: [] });
@@ -167,9 +167,9 @@ describe('admin department contracts', () => {
 
   it('scopes manager choices to the selected organization and preserves it after create', async () => {
     apiGet.mockImplementation((path) => {
-      if (path === '/admin/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
+      if (path === '/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
       if (path.includes('/admin/departments?organization_id=17')) return Promise.resolve({ data: [], current_page: 1, last_page: 1, per_page: 100, total: 0 });
-      if (path.includes('/admin/users?organization_id=17')) return Promise.resolve({ data: [{ id: 9, name: 'North Manager' }], current_page: 1, last_page: 1, per_page: 100, total: 1 });
+      if (path.includes('/users?organization_id=17')) return Promise.resolve({ data: [{ id: 9, name: 'North Manager' }], current_page: 1, last_page: 1, per_page: 100, total: 1 });
       return Promise.resolve({ data: [] });
     });
     apiPost.mockResolvedValue({ department });
@@ -189,11 +189,11 @@ describe('admin department contracts', () => {
   it('ignores a stale parent response after switching organizations', async () => {
     let resolveNorth!: (value: unknown) => void;
     apiGet.mockImplementation((path) => {
-      if (path === '/admin/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
+      if (path === '/organizations?per_page=100&page=1') return Promise.resolve({ data: [{ id: 17, name: 'North' }, { id: 18, name: 'South' }], meta: { current_page: 1, last_page: 1, per_page: 100, total: 2 } });
       if (path.includes('/admin/departments?organization_id=17')) return new Promise((resolve) => { resolveNorth = resolve; });
-      if (path.includes('/admin/users?organization_id=17')) return Promise.resolve({ data: [], current_page: 1, last_page: 1, per_page: 100, total: 0 });
+      if (path.includes('/users?organization_id=17')) return Promise.resolve({ data: [], current_page: 1, last_page: 1, per_page: 100, total: 0 });
       if (path.includes('/admin/departments?organization_id=18')) return Promise.resolve({ data: [{ id: 8, name: 'South Parent' }], current_page: 1, last_page: 1, per_page: 100, total: 1 });
-      if (path.includes('/admin/users?organization_id=18')) return Promise.resolve({ data: [], current_page: 1, last_page: 1, per_page: 100, total: 0 });
+      if (path.includes('/users?organization_id=18')) return Promise.resolve({ data: [], current_page: 1, last_page: 1, per_page: 100, total: 0 });
       return Promise.resolve({ data: [] });
     });
     const actor = userEvent.setup();

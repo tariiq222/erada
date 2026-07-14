@@ -457,7 +457,7 @@ const App: React.FC = () => {
 																<RequirePermission
 																	requirement={{
 																		capability:
-																			"risks.view",
+																			"risks.view_reports",
 																	}}
 																>
 																	<RiskStatistics />
@@ -710,17 +710,24 @@ const App: React.FC = () => {
 														/>
 
 														{/* OVR Module */}
+														{/* Phase Task-13: the authenticated incident-detail route
+														   is keyed on the enumerable report_number (via
+														   IncidentReport::getRouteKeyName()), NOT the
+														   per-report tracking_token. Laravel route-model
+														   binding would otherwise call ::resolveRouteBinding()
+														   with a value that matches no row because every
+														   IncidentReport row's report_number is the
+														   OVR-YYYY-NNNN identifier, while tracking_token is
+														   only valid on the public /ovr/track endpoint. The
+														   `:tracking_token` duplicate in anyCapabilities was
+														   noise — removed. */}
 														<Route
 															path="/ovr/incidents"
 															element={
 																<RequirePermission
 																	requirement={{
-																		anyCapabilities:
-																			[
-																				"ovr.view_all",
-																				"ovr.view_all",
-																				"ovr.view_all",
-																			],
+																		capability:
+																			"ovr.view_all",
 																	}}
 																>
 																	<IncidentsList />
@@ -741,16 +748,12 @@ const App: React.FC = () => {
 															}
 														/>
 														<Route
-															path="/ovr/incidents/:tracking_token"
+															path="/ovr/incidents/:reportNumber"
 															element={
 																<RequirePermission
 																	requirement={{
-																		anyCapabilities:
-																			[
-																				"ovr.view_all",
-																				"ovr.view_all",
-																				"ovr.view_all",
-																			],
+																		capability:
+																			"ovr.view_all",
 																	}}
 																>
 																	<IncidentView />
@@ -762,11 +765,8 @@ const App: React.FC = () => {
 															element={
 																<RequirePermission
 																	requirement={{
-																		anyCapabilities:
-																			[
-																				"ovr.edit",
-																				"ovr.edit",
-																			],
+																		capability:
+																			"ovr.edit",
 																	}}
 																>
 																	<IncidentForm />
@@ -1074,16 +1074,34 @@ const App: React.FC = () => {
 												/>
 
 												{/* Performance KPIs */}
+												{/* Phase Task-13: KPI route guards use the canonical
+												   `kpis.*` capabilities listed under
+												   App\Modules\Core\Authorization\Capability::KPIS_*.
+												   The previous `strategy.*` mapping was wrong: the
+												   strategy capability family does not authorize KPI
+												   routes — the unified AccessDecision engine resolves
+												   `kpis.*` against Capability constants + canonical
+												   role grants surfaced through
+												   User::canonicalCapabilityNames(), not through the
+												   legacy/advisory CapabilityProvider tag. Users who
+												   legitimately hold `kpis.view` on actor.org were
+												   silently denied because the gate asked for a
+												   capability they were never granted.
+
+												   The /performance/kpis/new gate is `kpis.manage`
+												   (not the dormant `kpis.create` constant — see
+												   KpiController::authorizePerformance lines 188-191,
+												   which matches 'create' to Capability::KPIS_MANAGE;
+												   StoreKpiRequest::authorize() line 37 and
+												   KpiPolicy::create() line 104 likewise resolve to
+												   KPIS_MANAGE). A `kpis.create`-only user would
+												   reach the SPA form only to receive a backend 403. */}
 												<Route
 													path="/performance/kpis"
 													element={
 														<RequirePermission
 															requirement={{
-																anyCapabilities:
-																	[
-																		"strategy.view",
-																		"strategy.view",
-																	],
+																capability: "kpis.view",
 															}}
 														>
 															<PerformanceKPIsList />
@@ -1096,7 +1114,7 @@ const App: React.FC = () => {
 														<RequirePermission
 															requirement={{
 																capability:
-																	"strategy.create",
+																	"kpis.manage",
 															}}
 														>
 															<PerformanceKPIForm />
@@ -1108,11 +1126,7 @@ const App: React.FC = () => {
 													element={
 														<RequirePermission
 															requirement={{
-																anyCapabilities:
-																	[
-																		"strategy.view",
-																		"strategy.view",
-																	],
+																capability: "kpis.view",
 															}}
 														>
 															<PerformanceKPIDetail />
@@ -1125,7 +1139,7 @@ const App: React.FC = () => {
 														<RequirePermission
 															requirement={{
 																capability:
-																	"strategy.edit",
+																	"kpis.edit",
 															}}
 														>
 															<PerformanceKPIForm />

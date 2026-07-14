@@ -18,7 +18,8 @@ const authState = {
     extension: null,
     job_title: null,
     is_active: true,
-    roles: ['super_admin'],
+    is_super_admin: true,
+    is_org_admin: false,
   } satisfies User,
   isLoading: false,
   isAuthenticated: true,
@@ -106,11 +107,11 @@ describe('admin organization contracts', () => {
     await adminApi.organizations.update(7, { name: 'North Updated' });
     await adminApi.organizations.delete(7);
 
-    expect(apiGet).toHaveBeenNthCalledWith(1, '/admin/organizations?search=north&page=2');
-    expect(apiGet).toHaveBeenNthCalledWith(2, '/admin/organizations/7');
-    expect(apiPost).toHaveBeenCalledWith('/admin/organizations', { name: 'North', code: 'NORTH' });
-    expect(apiPut).toHaveBeenCalledWith('/admin/organizations/7', { name: 'North Updated' });
-    expect(apiDelete).toHaveBeenCalledWith('/admin/organizations/7');
+    expect(apiGet).toHaveBeenNthCalledWith(1, '/organizations?search=north&page=2');
+    expect(apiGet).toHaveBeenNthCalledWith(2, '/organizations/7');
+    expect(apiPost).toHaveBeenCalledWith('/organizations', { name: 'North', code: 'NORTH' });
+    expect(apiPut).toHaveBeenCalledWith('/organizations/7', { name: 'North Updated' });
+    expect(apiDelete).toHaveBeenCalledWith('/organizations/7');
   });
 
   it('renders the organization list and confirms deletion before mutating', async () => {
@@ -127,7 +128,7 @@ describe('admin organization contracts', () => {
     await user.click(screen.getByRole('button', { name: i18n.t('common.delete') }));
 
     expect(confirm).toHaveBeenCalledWith(i18n.t('admin.organizations.confirmDelete'));
-    expect(apiDelete).toHaveBeenCalledWith('/admin/organizations/7');
+    expect(apiDelete).toHaveBeenCalledWith('/organizations/7');
   });
 
   it('blocks an invalid create and submits exact FormRequest field names', async () => {
@@ -146,7 +147,7 @@ describe('admin organization contracts', () => {
     await user.type(screen.getByLabelText(i18n.t('admin.organizations.fields.code')), 'NEW-ORG');
     await user.click(screen.getByRole('button', { name: i18n.t('common.create') }));
 
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/admin/organizations', expect.objectContaining({
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/organizations', expect.objectContaining({
       name: 'New Organization',
       code: 'NEW-ORG',
       type: 'organization',
@@ -170,7 +171,7 @@ describe('admin organization contracts', () => {
     await user.click(screen.getByRole('button', { name: i18n.t('common.save_changes') }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Code already exists');
-    expect(apiPut).toHaveBeenCalledWith('/admin/organizations/7', expect.objectContaining({
+    expect(apiPut).toHaveBeenCalledWith('/organizations/7', expect.objectContaining({
       name: 'North Cluster Updated',
       code: 'NHC',
     }));
