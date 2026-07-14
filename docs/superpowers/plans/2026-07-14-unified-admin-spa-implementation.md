@@ -4,7 +4,7 @@
 
 **Goal:** Ship the `organization_super_admin` system role, the actor-derived `is_organization_super_admin` payload flag, the narrow `/api/organizations/{org}/settings` contract, and the unified Admin SPA guards/nav so that `PlatformSuperAdmin` and `OrganizationSuperAdmin` share one route tree, never ride the legacy `admin` shortcut, and fail closed on every cross-org / self / admin-on-admin surface.
 
-**Architecture:** One Admin SPA (`resources/admin/`), one router (`AdminRouter`), one navigation (`AdminNavigation`), three payload flags (`is_super_admin`, `is_org_admin`, `is_organization_super_admin`). The new `organization_super_admin` role is `is_admin_role=false` and `is_system=true`, so `AccessDecision::whyCan()`'s admin-shortcut branch (`AccessDecision.php:~1170`) cannot silently elevate it. Org scope is **server-derived** from `users.organization_id`; `X-Organization-Id`, query, and body parameters are never authoritative for `organization_super_admin`. Reused canonical routes (`/api/users`, `/api/hr/departments`, `/api/activity-logs`, `/api/users/{user}/unlock`) carry new server-side target-validation rules. The only new backend surface is `app/Modules/Core/Http/Controllers/OrganizationSettingsController.php` plus its FormRequest. The legacy `admin` role is untouched (Phase 3 cutover is deferred).
+**Architecture:** One Admin SPA (`resources/admin/`), one router (`AdminRouter`), one navigation (`AdminNavigation`), three payload flags (`is_super_admin`, `is_org_admin`, `is_organization_super_admin`). The new `organization_super_admin` role is `is_admin_role=false` and `is_system=true`, so `AccessDecision::whyCan()`'s admin-shortcut branch (`AccessDecision.php:~1170`) cannot silently elevate it. Org scope is **server-derived** from `users.organization_id`; `X-Organization-Id`, query, and body parameters are never authoritative for `organization_super_admin`. Reused canonical routes (`/api/users`, `/api/hr/departments`, `/api/activity-logs`, `/api/users/{user}/unlock`) carry new server-side target-validation rules. New backend surfaces: `app/Modules/Core/Http/Controllers/OrganizationSettingsController.php` + its FormRequests (T5) AND the dedicated OrgSuper role-assignment actor path (`POST /api/org-super/role-assignments` + `OrganizationSuperAdminRoleAssignmentActorGuard` + `OrganizationSuperAdminRoleAssignmentService` + `AssignOrganizationSuperAdminRoleRequest` — T7). The OrgSuper path is deliberately narrow: gated by `engine_capability:roles.assign` (NOT `core.assign_roles`), admits OrgSuper only, server-derives scope from `actor.organization_id`, and rejects all role-definition mutation. The legacy `admin` role is untouched (Phase 3 cutover is deferred).
 
 **Tech Stack:** Laravel 12 / PHP 8.4 (Docker), Sanctum, AccessDecision engine, AuthorizationRole assignments, Spatie free, PHPUnit 11, Vitest 3, React 19 + TS 5.7, react-router-dom 7, i18next, Playwright 1.49 (chromium only).
 
@@ -37,13 +37,18 @@
 | `app/Modules/Core/Authorization/Capability.php` *(modify)* | Append `USERS_ACTIVATE`, `USERS_DEACTIVATE`, `ORGANIZATION_SETTINGS_VIEW`, `ORGANIZATION_SETTINGS_EDIT` constants. |
 | `app/Modules/Core/Http/Controllers/AuthController.php` *(modify)* | Extend `buildFormatUserPayload()` to add `is_organization_super_admin` alongside existing `is_super_admin`/`is_org_admin` flags. |
 | `app/Modules/Core/Http/Controllers/UserController.php` *(modify)* | Add FormRequest target-validation that rejects self-modification for Org-Super, rejects `super_admin`/`organization_super_admin` targets, and rejects Org-Super's own `organization_id` mutation. Widen `canManageUserLifecycle()` to admit Org-Super via `Capability::USERS_ACTIVATE` / `USERS_DEACTIVATE`. |
-| `app/Modules/Core/Http/Controllers/RoleController.php` *(indirect via FormRequest)* | `assignToUser()` is left untouched; the operational-role allowlist is enforced in `AssignCanonicalRolesRequest::after()` (auditable seam). |
+| `app/Modules/Core/Http/Controllers/RoleController.php` *(modify)* | Add `assignByOrganizationSuperAdmin()` method that uses the new OrgSuper request + service + actor guard. Existing canonical `assignToUser()` (gated by `engine_capability:core.assign_roles` for super_admin) is UNTOUCHED. |
 | `app/Modules/Core/Http/Controllers/OrganizationSettingsController.php` *(new)* | Read/update organization-scoped settings (locale overrides, branding overrides, notification templates). New `organization.settings.view` / `organization.settings.edit` capability gates. |
 | `app/Modules/Core/Http/Requests/ViewOrganizationSettingsRequest.php` *(new)* | `authorize()` returns true only for actor.organization_id === org. |
 | `app/Modules/Core/Http/Requests/UpdateOrganizationSettingsRequest.php` *(new)* | `authorize()` returns true only for `organization.settings.edit` capability + same-org; array-form validation rules. |
 | `app/Modules/Core/Models/OrganizationSettings.php` *(new)* | Eloquent model for the new `organization_settings` table. |
 | `app/Modules/Core/Routes/api.php` *(modify)* | Add `Route::prefix('organizations/{organization}/settings')` group with GET (read) and PUT (update, `throttle:sensitive` + `idempotency`). |
-| `app/Modules/Core/Http/Requests/AssignCanonicalRolesRequest.php` *(modify)* | Extend `after()` with operational-role allowlist for Org-Super actors. |
+| `app/Modules/Core/Authorization/Data/AssignmentScope.php` *(modify)* | Add `ORGANIZATION` constant alongside `ALL` and `OWN`. |
+| `app/Modules/Core/Authorization/Capability.php` *(modify)* | Extend `ROLES_ASSIGN` docblock to record the OrgSuper-only gating. |
+| `app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentActorGuard.php` *(new)* | Narrow actor guard: same-org + operational-role-only + no protected targets + server-derived scope. Implements `AuthorizationAssignmentActorGuard`. |
+| `app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentService.php` *(new)* | Composes the underlying service with the OrgSuper guard; server-derives scope from `actor->organization_id` regardless of client input; transactional + audit with `provenance=organization_super_admin`. |
+| `app/Modules/Core/Http/Requests/AssignOrganizationSuperAdminRoleRequest.php` *(new)* | Auditable seam; `rules()` reject non-`organization` scope, require `inherit_to_children=false`, prohibit `expires_at`; `after()` defensive double-check on role name / flags / inactive / cross-org subject / protected target. |
+| `app/Modules/Core/Routes/api.php` *(modify)* | Add `Route::post('/org-super/role-assignments', …)` gated by `engine_capability:roles.assign + throttle:admin + idempotency`. Canonical `/roles/assign` (gated by `core.assign_roles`) is UNTOUCHED. |
 | `database/seeders/RolesAndPermissionsSeeder.php` *(modify)* | Add `organization_super_admin` entry to `roleCatalog()`. Extend `SWEPT_SYSTEM_ROLES` constant. |
 | `database/migrations/2026_07_14_000020_role_catalog_sync_organization_super_admin.php` *(new)* | Migration that mirrors the obsolete-pivot sweep, scoped to `organization_super_admin`, gated to PG only, idempotent. |
 | `database/migrations/2026_07_14_000021_create_organization_settings_table.php` *(new)* | Adds `organization_settings` table for the new contract. PG-only. |
@@ -53,7 +58,7 @@
 | `tests/Feature/Api/OrganizationSettingsContractTest.php` *(new)* | Read/update contract for the new endpoint (own-org + cross-org + forbidden). |
 | `tests/Feature/Authz/OrganizationSuperAdminRoleSeedTest.php` *(new)* | Seeder adds the role with `is_admin_role=false`, `is_system=true`, and the curated capability list; no `projects.*` / `tasks.*` / `kpis.*` / `risks.*` / `ovr.*` / `core.cluster_tree.*` / `core.view_organizations` / `core.assign_roles` / `audit.export`. |
 | `tests/Feature/Authz/OrganizationSuperAdminUserTargetTest.php` *(new)* | Self-modify, super_admin target, other Org-Super target, activate/deactivate, cross-org user — all matrix surfaces. |
-| `tests/Feature/Authz/OrganizationSuperAdminRoleAllowlistTest.php` *(new)* | Server-side operational-role allowlist matrix. |
+| `tests/Feature/Authz/OrganizationSuperAdminRoleAllowlistTest.php` *(new)* | Comprehensive OrgSuper role-assignment matrix — 16 tests: 1 positive (operational role → same-org ordinary user) + 15 denial surfaces (admin / super_admin / organization_super_admin / is_admin_role / is_system / inactive role / cross-org subject / super_admin target / organization_super_admin target / cross-org scope_id / non-organization scope_type / inherit_to_children=true / regular user middleware / super_admin uses canonical route / audit log provenance). |
 | `tests/Feature/Authz/OrganizationSuperAdminClusterRescueRegressionTest.php` *(new)* | Engine regression: Org-Super cannot widen via `CLUSTER_TREE_*`; `X-Organization-Id` header is ignored for non-super actors. |
 | `tests/Feature/Authz/OrganizationSuperAdminLegacyAdminParityTest.php` *(new)* | Extends `6ed111f` baseline: seeding Org-Super does not mutate the curated `admin` pivot set. |
 
@@ -112,7 +117,7 @@
 | T4 (`/api/user` payload) | T11, T13, T14, T17 | `is_organization_super_admin: bool` on `/api/user` |
 | T5 (OrganizationSettingsController) | T11, T13, T17 | `GET/PUT /api/organizations/{org}/settings` route + payload |
 | T6 (UserController target validation) | T7, T13, T17 | 422/403 envelope for self / super_admin / organization_super_admin targets |
-| T7 (AssignCanonicalRolesRequest allowlist) | T17 | 422 envelope for `roles.assign` rejected role names |
+| T7 (OrgSuper role-assignment actor path) | T17 | 422/403 envelopes for the operational-role allowlist matrix on `POST /api/org-super/role-assignments`; new `OrganizationSuperAdminRoleAssignmentActorGuard` + service + FormRequest + dedicated route gated by `engine_capability:roles.assign` (NOT `core.assign_roles`) |
 | T8 (engine regression + X-Org-Id) | T17 | None — locks baseline |
 | T9 (OrgSuperOrSuperBoundary) | T10, T11, T12, T13 | `<OrgSuperOrSuperBoundary>` component + `<Forbidden />` fallback |
 | T10 (AdminNavigation predicate) | T11, T12, T17 | New `org-super` group, updated `isAdminNavItemVisible` predicate |
@@ -1358,17 +1363,41 @@ git commit -m "feat(users): reject Org-Super self-modify and admin-on-admin targ
 
 ---
 
-### Task 7: `AssignCanonicalRolesRequest` server-side operational allowlist
+### Task 7: OrgSuper-specific role-assignment actor path (dedicated route, narrow actor guard, auditable FormRequest)
+
+> **Preflight contradiction resolution.** The previous Task 7 attempted to admit OrganizationSuperAdmin through the canonical `POST /api/roles/assign` route (middleware `engine_capability:core.assign_roles` at `app/Modules/Core/Routes/api.php:154-155`) by adding allowlist logic to `AssignCanonicalRolesRequest::after()`. Preflight proved this never works:
+>
+> 1. The route middleware (`EnsureEngineCapability`) rejects any actor that does not hold `Capability::CORE_ASSIGN_ROLES`. OrgSuper's curated pivot set in T3 deliberately excludes that capability.
+> 2. Even if the middleware passed, `CanonicalAuthorizationAssignmentActorGuard::allows()` re-checks `AccessDecision::canonicalTrace($actor, Capability::CORE_ASSIGN_ROLES, $target)['granted']` at `app/Modules/Core/Authorization/Services/CanonicalAuthorizationAssignmentActorGuard.php:32`. OrgSuper fails this guard regardless of FormRequest allowlist.
+> 3. The OrgSuper path therefore CANNOT widen `core.assign_roles`. The previous Task 7 was unbuildable as written.
+>
+> This task rebuilds Task 7 around a **dedicated OrgSuper-only actor path** that preserves the authoritative user policy: OrgSuper MAY assign/revoke only a server-approved operational-role allowlist to same-org ordinary users; MUST NOT receive `core.assign_roles`, MUST NOT do Platform/OrganizationSuperAdmin assignment, MUST NOT do cross-org scope, MUST NOT do role definition mutation, MUST NOT have client-selected scope authority.
 
 **Files:**
-- Modify: `app/Modules/Core/Http/Requests/AssignCanonicalRolesRequest.php` (extend `after()`).
-- Test: `tests/Feature/Authz/OrganizationSuperAdminRoleAllowlistTest.php` (new).
+- Create: `app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentActorGuard.php` — narrow actor guard implementing `AuthorizationAssignmentActorGuard`. Forces same-org, operational-only, no protected targets, server-derived scope.
+- Create: `app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentService.php` — composes the underlying service and replaces the canonical guard with the OrgSuper guard for the OrgSuper route. Server-derives scope from `actor->organization_id` regardless of client input.
+- Create: `app/Modules/Core/Http/Requests/AssignOrganizationSuperAdminRoleRequest.php` — auditable seam; `authorize()` returns true (public gate is route middleware); `rules()` reject non-`organization` scope, require `inherit_to_children=false`, prohibit `expires_at`; `after()` does defensive double-checks on role name, `is_admin_role`, `is_system`, `is_active`, cross-org subject, protected target.
+- Modify: `app/Modules/Core/Http/Controllers/RoleController.php` — add `assignByOrganizationSuperAdmin()` method using the new request + service + actor guard; transactional + audit with `organization_super_admin` provenance tag. Existing `assignToUser` (canonical path) is UNTOUCHED.
+- Modify: `app/Modules/Core/Routes/api.php` — add `Route::post('/org-super/role-assignments', …)` with middleware `engine_capability:roles.assign + throttle:admin + idempotency`. The canonical `/api/roles/assign` route is UNTOUCHED.
+- Modify: `app/Modules/Core/Authorization/Data/AssignmentScope.php` — add `ORGANIZATION` constant.
+- Modify: `app/Modules/Core/Authorization/Capability.php` — extend the `ROLES_ASSIGN` docblock to record that this capability is held by `organization_super_admin` only and gates the new OrgSuper route.
+- Test: `tests/Feature/Authz/OrganizationSuperAdminRoleAllowlistTest.php` — comprehensive matrix (16 tests: 1 positive + 15 denial surfaces).
 
 **Interfaces:**
-- Consumes: `User::isOrganizationSuperAdmin()` from Task 2.
-- Produces: 422 envelope when Org-Super submits `super_admin` / `organization_super_admin` / `admin`, or any role with `is_admin_role=true` / `is_system=true`. The FormRequest extension is the auditable seam (per AGENTS.md: "Authorization seam is FormRequest `authorize()`"; do not add `authorize()` to controllers). The role assignment transaction body in `RoleController::assignToUser` is untouched — `AuthorizationAssignmentService` continues to enforce actor / target / scope / privilege-escalation rules.
+- Consumes: `User::isOrganizationSuperAdmin()` from Task 2; `AuthorizationRole`, `AuthorizationRoleAssignment`, `User` models; `Capability::ROLES_ASSIGN` (granted to OrgSuper via T3's curated set; explicitly NOT granted to `admin`, `super_admin`, or any other role); `AssignmentScopeResolver`.
+- Produces:
+  - `POST /api/org-super/role-assignments` route gated by `engine_capability:roles.assign + throttle:admin + idempotency`. Reachable ONLY by OrgSuper (not super_admin, not curated admin, not any non-admin). Throttled at the admin tier; idempotent retry on the shared client.
+  - `OrganizationSuperAdminRoleAssignmentActorGuard::allows()` returns true ONLY IF all conditions hold:
+    - Actor is `organization_super_admin` AND NOT `super_admin`.
+    - `subject.organization_id === actor.organization_id` (same-org fail-closed).
+    - Subject has NO active `super_admin` or `organization_super_admin` assignment.
+    - `role.name` NOT IN `['super_admin', 'organization_super_admin', 'admin']`.
+    - `role.is_admin_role === false`, `role.is_system === false`, `role.is_active === true`.
+    - `scope.type === 'organization'`, `scope.id === actor.organization_id`, `scope.inheritToChildren === false`.
+  - `OrganizationSuperAdminRoleAssignmentService::syncManual()` server-derives scope from `actor.organization_id`, uses the OrgSuper guard, writes through `AuthorizationRoleAssignment::updateOrCreate()` inside a DB transaction, audit row tagged `provenance=organization_super_admin`.
+  - 422 envelope (FormRequest validation) or 403 envelope (actor guard denial) with Arabic `message` and field-level errors.
 
-- [ ] **Step 1: Write failing tests**
+- [ ] **Step 1: Write failing tests (matrix covering the positive case and every denial)**
 
 `tests/Feature/Authz/OrganizationSuperAdminRoleAllowlistTest.php`:
 ```php
@@ -1388,15 +1417,29 @@ class OrganizationSuperAdminRoleAllowlistTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Positive case — OrgSuper assigns an operational role to a same-org
+     * ordinary user via the new dedicated route. This is the ONLY positive
+     * case in the matrix; every other test is a denial.
+     */
     public function test_org_super_can_assign_operational_role_to_same_org_user(): void
     {
         [$org, $actor] = $this->seedOrgSuper();
         $target = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
-        $role = AuthorizationRole::query()->where('name', 'manager')->firstOrFail();
+        $role = AuthorizationRole::query()->updateOrCreate(
+            ['name' => 'manager'],
+            [
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+                'is_admin_role' => false,
+                'is_system' => false,
+                'is_active' => true,
+                'label' => 'Manager',
+            ],
+        );
 
         Sanctum::actingAs($actor, ['*']);
 
-        $response = $this->postJson('/api/roles/assign', [
+        $response = $this->postJson('/api/org-super/role-assignments', [
             'user_id' => $target->id,
             'replace_all' => true,
             'assignments' => [[
@@ -1427,7 +1470,7 @@ class OrganizationSuperAdminRoleAllowlistTest extends TestCase
 
         Sanctum::actingAs($actor, ['*']);
 
-        $response = $this->postJson('/api/roles/assign', [
+        $response = $this->postJson('/api/org-super/role-assignments', [
             'user_id' => $target->id,
             'replace_all' => true,
             'assignments' => [[
@@ -1445,11 +1488,20 @@ class OrganizationSuperAdminRoleAllowlistTest extends TestCase
     {
         [$org, $actor] = $this->seedOrgSuper();
         $target = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
-        $superRole = AuthorizationRole::query()->where('name', 'super_admin')->firstOrFail();
+        $superRole = AuthorizationRole::query()->updateOrCreate(
+            ['name' => 'super_admin'],
+            [
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ALL,
+                'is_admin_role' => true,
+                'is_system' => true,
+                'is_active' => true,
+                'label' => 'Super Admin',
+            ],
+        );
 
         Sanctum::actingAs($actor, ['*']);
 
-        $response = $this->postJson('/api/roles/assign', [
+        $response = $this->postJson('/api/org-super/role-assignments', [
             'user_id' => $target->id,
             'replace_all' => true,
             'assignments' => [[
@@ -1471,7 +1523,7 @@ class OrganizationSuperAdminRoleAllowlistTest extends TestCase
 
         Sanctum::actingAs($actor, ['*']);
 
-        $response = $this->postJson('/api/roles/assign', [
+        $response = $this->postJson('/api/org-super/role-assignments', [
             'user_id' => $target->id,
             'replace_all' => true,
             'assignments' => [[
@@ -1485,7 +1537,100 @@ class OrganizationSuperAdminRoleAllowlistTest extends TestCase
         $this->assertContains($response->status(), [403, 422], "Unexpected {$response->status()} for organization_super_admin assign.");
     }
 
-    public function test_org_super_cannot_assign_role_to_cross_org_user(): void
+    public function test_org_super_cannot_assign_role_with_is_admin_role_flag(): void
+    {
+        [$org, $actor] = $this->seedOrgSuper();
+        $target = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $forbidden = AuthorizationRole::query()->updateOrCreate(
+            ['name' => 'cluster_auditor'],
+            [
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+                'is_admin_role' => true,
+                'is_system' => false,
+                'is_active' => true,
+                'label' => 'Cluster Auditor',
+            ],
+        );
+
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->postJson('/api/org-super/role-assignments', [
+            'user_id' => $target->id,
+            'replace_all' => true,
+            'assignments' => [[
+                'role_id' => $forbidden->id,
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+                'scope_id' => $org->id,
+                'inherit_to_children' => false,
+            ]],
+        ]);
+
+        $this->assertContains($response->status(), [403, 422], "Unexpected {$response->status()} for is_admin_role=true.");
+    }
+
+    public function test_org_super_cannot_assign_role_with_is_system_flag(): void
+    {
+        [$org, $actor] = $this->seedOrgSuper();
+        $target = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $forbidden = AuthorizationRole::query()->updateOrCreate(
+            ['name' => 'archived_role'],
+            [
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+                'is_admin_role' => false,
+                'is_system' => true,
+                'is_active' => true,
+                'label' => 'Archived System Role',
+            ],
+        );
+
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->postJson('/api/org-super/role-assignments', [
+            'user_id' => $target->id,
+            'replace_all' => true,
+            'assignments' => [[
+                'role_id' => $forbidden->id,
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+                'scope_id' => $org->id,
+                'inherit_to_children' => false,
+            ]],
+        ]);
+
+        $this->assertContains($response->status(), [403, 422], "Unexpected {$response->status()} for is_system=true.");
+    }
+
+    public function test_org_super_cannot_assign_inactive_role(): void
+    {
+        [$org, $actor] = $this->seedOrgSuper();
+        $target = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $inactive = AuthorizationRole::query()->updateOrCreate(
+            ['name' => 'retired_manager'],
+            [
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+                'is_admin_role' => false,
+                'is_system' => false,
+                'is_active' => false,
+                'label' => 'Retired Manager',
+            ],
+        );
+
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->postJson('/api/org-super/role-assignments', [
+            'user_id' => $target->id,
+            'replace_all' => true,
+            'assignments' => [[
+                'role_id' => $inactive->id,
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+                'scope_id' => $org->id,
+                'inherit_to_children' => false,
+            ]],
+        ]);
+
+        $this->assertContains($response->status(), [403, 422], "Unexpected {$response->status()} for inactive role.");
+    }
+
+    public function test_org_super_cannot_assign_to_cross_org_user(): void
     {
         [$org, $actor] = $this->seedOrgSuper();
         $crossOrg = User::factory()->create([
@@ -1496,18 +1641,267 @@ class OrganizationSuperAdminRoleAllowlistTest extends TestCase
 
         Sanctum::actingAs($actor, ['*']);
 
-        $response = $this->postJson('/api/roles/assign', [
+        $response = $this->postJson('/api/org-super/role-assignments', [
             'user_id' => $crossOrg->id,
             'replace_all' => true,
             'assignments' => [[
                 'role_id' => $role->id,
                 'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
-                'scope_id' => $crossOrg->organization_id,
+                'scope_id' => $org->id, // client says actor's org — server rejects the subject
                 'inherit_to_children' => false,
             ]],
         ]);
 
-        $this->assertContains($response->status(), [403, 404, 422], "Unexpected {$response->status()} for cross-org assign.");
+        $this->assertContains($response->status(), [403, 422], "Unexpected {$response->status()} for cross-org subject.");
+    }
+
+    public function test_org_super_cannot_assign_to_super_admin_target(): void
+    {
+        [$org, $actor] = $this->seedOrgSuper();
+        $super = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $superRole = AuthorizationRole::query()->updateOrCreate(
+            ['name' => 'super_admin'],
+            [
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ALL,
+                'is_admin_role' => true,
+                'is_system' => true,
+                'is_active' => true,
+                'label' => 'Super Admin',
+            ],
+        );
+        AuthorizationRoleAssignment::query()->create([
+            'user_id' => $super->id,
+            'authorization_role_id' => $superRole->id,
+            'scope_type' => AuthorizationRoleAssignment::SCOPE_ALL,
+            'scope_id' => null,
+            'organization_id' => null,
+            'is_active' => true,
+        ]);
+        $role = AuthorizationRole::query()->where('name', 'member')->firstOrFail();
+
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->postJson('/api/org-super/role-assignments', [
+            'user_id' => $super->id,
+            'replace_all' => true,
+            'assignments' => [[
+                'role_id' => $role->id,
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+                'scope_id' => $org->id,
+                'inherit_to_children' => false,
+            ]],
+        ]);
+
+        $this->assertContains($response->status(), [403, 422], "Unexpected {$response->status()} for super_admin target.");
+    }
+
+    public function test_org_super_cannot_assign_to_organization_super_admin_target(): void
+    {
+        [$org, $actor] = $this->seedOrgSuper();
+        $otherOrgSuper = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $orgSuperRole = AuthorizationRole::query()->where('name', 'organization_super_admin')->firstOrFail();
+        AuthorizationRoleAssignment::query()->create([
+            'user_id' => $otherOrgSuper->id,
+            'authorization_role_id' => $orgSuperRole->id,
+            'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+            'scope_id' => $org->id,
+            'organization_id' => $org->id,
+            'is_active' => true,
+        ]);
+        $role = AuthorizationRole::query()->where('name', 'member')->firstOrFail();
+
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->postJson('/api/org-super/role-assignments', [
+            'user_id' => $otherOrgSuper->id,
+            'replace_all' => true,
+            'assignments' => [[
+                'role_id' => $role->id,
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+                'scope_id' => $org->id,
+                'inherit_to_children' => false,
+            ]],
+        ]);
+
+        $this->assertContains($response->status(), [403, 422], "Unexpected {$response->status()} for organization_super_admin target.");
+    }
+
+    public function test_org_super_cannot_assign_with_cross_org_scope_id(): void
+    {
+        // Client scope manipulation: client tries to write a different org's
+        // scope_id. Server must reject even when subject is in actor's org.
+        [$org, $actor] = $this->seedOrgSuper();
+        $otherOrg = Organization::factory()->create(['is_active' => true]);
+        $target = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $role = AuthorizationRole::query()->where('name', 'member')->firstOrFail();
+
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->postJson('/api/org-super/role-assignments', [
+            'user_id' => $target->id,
+            'replace_all' => true,
+            'assignments' => [[
+                'role_id' => $role->id,
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+                'scope_id' => $otherOrg->id,
+                'inherit_to_children' => false,
+            ]],
+        ]);
+
+        $this->assertContains($response->status(), [403, 422], "Unexpected {$response->status()} for cross-org scope_id.");
+    }
+
+    public function test_org_super_cannot_assign_with_non_organization_scope_type(): void
+    {
+        [$org, $actor] = $this->seedOrgSuper();
+        $target = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $role = AuthorizationRole::query()->updateOrCreate(
+            ['name' => 'dept_only_role'],
+            [
+                'scope_type' => 'department',
+                'is_admin_role' => false,
+                'is_system' => false,
+                'is_active' => true,
+                'label' => 'Department Only Role',
+            ],
+        );
+
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->postJson('/api/org-super/role-assignments', [
+            'user_id' => $target->id,
+            'replace_all' => true,
+            'assignments' => [[
+                'role_id' => $role->id,
+                'scope_type' => 'department',
+                'scope_id' => 1,
+                'inherit_to_children' => false,
+            ]],
+        ]);
+
+        $this->assertContains($response->status(), [403, 422], "Unexpected {$response->status()} for non-organization scope.");
+    }
+
+    public function test_org_super_cannot_assign_with_inherit_to_children_true(): void
+    {
+        [$org, $actor] = $this->seedOrgSuper();
+        $target = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $role = AuthorizationRole::query()->where('name', 'member')->firstOrFail();
+
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->postJson('/api/org-super/role-assignments', [
+            'user_id' => $target->id,
+            'replace_all' => true,
+            'assignments' => [[
+                'role_id' => $role->id,
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+                'scope_id' => $org->id,
+                'inherit_to_children' => true,
+            ]],
+        ]);
+
+        $this->assertContains($response->status(), [403, 422], "Unexpected {$response->status()} for inherit_to_children=true.");
+    }
+
+    public function test_regular_user_cannot_use_org_super_route(): void
+    {
+        // Middleware gate: roles.assign is held by OrgSuper only.
+        $org = Organization::factory()->create(['is_active' => true]);
+        $regular = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $target = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $role = AuthorizationRole::query()->where('name', 'member')->firstOrFail();
+
+        Sanctum::actingAs($regular, ['*']);
+
+        $response = $this->postJson('/api/org-super/role-assignments', [
+            'user_id' => $target->id,
+            'replace_all' => true,
+            'assignments' => [[
+                'role_id' => $role->id,
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+                'scope_id' => $org->id,
+                'inherit_to_children' => false,
+            ]],
+        ]);
+
+        $response->assertForbidden();
+    }
+
+    public function test_super_admin_uses_canonical_route_not_org_super_route(): void
+    {
+        // super_admin holds core.assign_roles (canonical route) but NOT
+        // roles.assign (OrgSuper route). The OrgSuper route MUST reject
+        // super_admin; the canonical route is the only path for super_admin.
+        $org = Organization::factory()->create(['is_active' => true]);
+        $super = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $superRole = AuthorizationRole::query()->updateOrCreate(
+            ['name' => 'super_admin'],
+            [
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ALL,
+                'is_admin_role' => true,
+                'is_system' => true,
+                'is_active' => true,
+                'label' => 'Super Admin',
+            ],
+        );
+        AuthorizationRoleAssignment::query()->create([
+            'user_id' => $super->id,
+            'authorization_role_id' => $superRole->id,
+            'scope_type' => AuthorizationRoleAssignment::SCOPE_ALL,
+            'scope_id' => null,
+            'organization_id' => null,
+            'is_active' => true,
+        ]);
+        $target = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $role = AuthorizationRole::query()->where('name', 'member')->firstOrFail();
+
+        Sanctum::actingAs($super, ['*']);
+
+        $response = $this->postJson('/api/org-super/role-assignments', [
+            'user_id' => $target->id,
+            'replace_all' => true,
+            'assignments' => [[
+                'role_id' => $role->id,
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+                'scope_id' => $org->id,
+                'inherit_to_children' => false,
+            ]],
+        ]);
+
+        $response->assertForbidden();
+    }
+
+    public function test_org_super_role_assignment_writes_activity_log_with_provenance(): void
+    {
+        [$org, $actor] = $this->seedOrgSuper();
+        $target = User::factory()->create(['organization_id' => $org->id, 'is_active' => true]);
+        $role = AuthorizationRole::query()->where('name', 'member')->firstOrFail();
+
+        Sanctum::actingAs($actor, ['*']);
+
+        $response = $this->postJson('/api/org-super/role-assignments', [
+            'user_id' => $target->id,
+            'replace_all' => true,
+            'assignments' => [[
+                'role_id' => $role->id,
+                'scope_type' => AuthorizationRoleAssignment::SCOPE_ORGANIZATION,
+                'scope_id' => $org->id,
+                'inherit_to_children' => false,
+            ]],
+        ]);
+
+        $response->assertOk();
+
+        $audit = \App\Modules\Shared\Models\ActivityLog::query()
+            ->where('user_id', $actor->id)
+            ->where('loggable_id', $target->id)
+            ->where('loggable_type', User::class)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($audit, 'audit log row must exist for the assignment');
+        $this->assertSame('organization_super_admin', $audit->metadata['provenance'] ?? null);
     }
 
     /**
@@ -1541,54 +1935,486 @@ class OrganizationSuperAdminRoleAllowlistTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run failing tests**
+- [ ] **Step 2: Run failing tests (capture baseline)**
 
 Run: `php artisan test --filter=OrganizationSuperAdminRoleAllowlistTest`
-Expected: `test_org_super_can_assign_operational_role_to_same_org_user` may fail because Org-Super currently cannot pass through `AuthorizationAssignmentService`'s actor guard for non-system roles (verify baseline first; capture current status without code change before patching).
+Expected: ALL 16 tests fail. The route 404s for every test (no `/api/org-super/role-assignments` route yet); even if the route existed, the canonical actor guard rejects OrgSuper at `CanonicalAuthorizationAssignmentActorGuard.php:32` because OrgSuper does not hold `core.assign_roles`. Baseline captured before patching.
 
-- [ ] **Step 3: Extend `AssignCanonicalRolesRequest::after()`**
+- [ ] **Step 3: Add `AssignmentScope::ORGANIZATION` constant**
 
-In `app/Modules/Core/Http/Requests/AssignCanonicalRolesRequest.php`, extend `after()` to validate the role allowlist. Add this block inside the existing closure, after the duplicate-identity check (line 65):
+In `app/Modules/Core/Authorization/Data/AssignmentScope.php`, immediately after the existing `OWN` constant (line 11), append:
 
 ```php
-                    // CSD-CA23078-CORE-009: Org-Super operational-role allowlist.
-                    //
-                    // For any actor that holds organization_super_admin (and is
-                    // not super_admin), every role_id in the payload MUST be an
-                    // operational role — i.e. NOT in
-                    //   ['super_admin', 'organization_super_admin', 'admin']
-                    // AND NOT carrying is_admin_role=true or is_system=true.
-                    $actor = $this->user();
-                    if ($actor !== null
-                        && ! $actor->isSuperAdmin()
-                        && $actor->isOrganizationSuperAdmin()) {
-                        $roleId = (int) $assignment['role_id'];
-                        $role = \App\Modules\Core\Authorization\Models\AuthorizationRole::query()->find($roleId);
-                        if ($role === null) {
-                            continue;
-                        }
-                        $isForbiddenName = in_array($role->name, ['super_admin', 'organization_super_admin', 'admin'], true);
-                        $isAdminShortcut = (bool) $role->is_admin_role || (bool) $role->is_system;
-                        if ($isForbiddenName || $isAdminShortcut) {
-                            $validator->errors()->add(
-                                "assignments.{$index}.role_id",
-                                "الدور [{$role->name}] محصور بالمسؤول العام للنظام فقط ولا يمكن إسناده من قِبل Organization Super Admin."
-                            );
-                        }
-                    }
+    public const ORGANIZATION = 'organization';
 ```
 
-- [ ] **Step 4: Re-run tests**
+This is already a member of `AssignmentScope::TYPES` (line 15); the named constant is added so the new FormRequest and actor guard can reference it without a magic string.
+
+- [ ] **Step 4: Extend `Capability::ROLES_ASSIGN` docblock**
+
+In `app/Modules/Core/Authorization/Capability.php`, immediately after the existing `ROLES_ASSIGN` constant (line 376), append a docblock clarifying the OrgSuper-only gating:
+
+```php
+    /**
+     * CSD-CA23078-CORE-009 (OrgSuper rewrite).
+     *
+     * Held by `organization_super_admin` ONLY (Task 3 curated set). Gates
+     * the dedicated `POST /api/org-super/role-assignments` route. Distinct
+     * from `core.assign_roles` (canonical super_admin-only path). The
+     * curated `admin` role does NOT hold this capability — the OrgSuper
+     * role is the single boundary actor for organizational role assignment.
+     */
+    const ROLES_ASSIGN = 'roles.assign';
+```
+
+(No behavior change to the constant value; this is a documentation-only step that records the gating intent for future readers.)
+
+- [ ] **Step 5: Implement the OrgSuper actor guard**
+
+Create `app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentActorGuard.php`:
+```php
+<?php
+
+namespace App\Modules\Core\Authorization\Services;
+
+use App\Modules\Core\Authorization\Contracts\AuthorizationAssignmentActorGuard;
+use App\Modules\Core\Authorization\Data\AssignmentScope;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
+use App\Modules\Core\Models\User;
+
+/**
+ * CSD-CA23078-CORE-009 (OrgSuper rewrite).
+ *
+ * Narrow actor guard for the OrgSuper-specific role-assignment route. Replaces
+ * CanonicalAuthorizationAssignmentActorGuard for /api/org-super/role-assignments.
+ *
+ * Contract — `allows()` returns true ONLY IF ALL conditions hold:
+ *   - actor is organization_super_admin AND NOT super_admin
+ *   - subject.organization_id === actor.organization_id (same-org fail-closed)
+ *   - subject has NO active super_admin or organization_super_admin assignment
+ *   - role.name NOT IN ['super_admin', 'organization_super_admin', 'admin']
+ *   - role.is_admin_role === false
+ *   - role.is_system === false
+ *   - role.is_active === true
+ *   - scope.type === 'organization'
+ *   - scope.id === actor.organization_id (server-derived)
+ *   - scope.inheritToChildren === false
+ */
+final class OrganizationSuperAdminRoleAssignmentActorGuard implements AuthorizationAssignmentActorGuard
+{
+    /** @var list<string> */
+    private const FORBIDDEN_ROLE_NAMES = [
+        'super_admin',
+        'organization_super_admin',
+        'admin',
+    ];
+
+    /** @var list<string> */
+    private const PROTECTED_TARGET_ROLE_NAMES = [
+        'super_admin',
+        'organization_super_admin',
+    ];
+
+    public function allows(User $actor, User $subject, AuthorizationRole $role, AssignmentScope $scope): bool
+    {
+        // 1. Actor must be OrgSuper, not super_admin.
+        if (! $actor->isOrganizationSuperAdmin() || $actor->isSuperAdmin()) {
+            return false;
+        }
+
+        // 2. Subject must be in actor's organization.
+        if ($actor->organization_id === null
+            || $subject->organization_id === null
+            || (int) $actor->organization_id !== (int) $subject->organization_id) {
+            return false;
+        }
+
+        // 3. Subject must NOT hold a protected role.
+        $hasProtectedAssignment = AuthorizationRoleAssignment::query()
+            ->where('user_id', $subject->id)
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->whereHas('role', fn ($roleQuery) => $roleQuery
+                ->whereIn('name', self::PROTECTED_TARGET_ROLE_NAMES)
+                ->where('is_active', true))
+            ->exists();
+        if ($hasProtectedAssignment) {
+            return false;
+        }
+
+        // 4. Role must be active, not is_admin_role, not is_system, not in forbidden names.
+        if (! (bool) $role->is_active) {
+            return false;
+        }
+        if ((bool) $role->is_admin_role || (bool) $role->is_system) {
+            return false;
+        }
+        if (in_array($role->name, self::FORBIDDEN_ROLE_NAMES, true)) {
+            return false;
+        }
+
+        // 5. Scope is server-derived: organization + actor's org id + no children.
+        if ($scope->type !== AssignmentScope::ORGANIZATION) {
+            return false;
+        }
+        if ($scope->id === null || (int) $scope->id !== (int) $actor->organization_id) {
+            return false;
+        }
+        if ($scope->inheritToChildren) {
+            return false;
+        }
+
+        return true;
+    }
+}
+```
+
+- [ ] **Step 6: Implement the OrgSuper write service**
+
+Create `app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentService.php`:
+```php
+<?php
+
+namespace App\Modules\Core\Authorization\Services;
+
+use App\Modules\Core\Authorization\AccessDecision;
+use App\Modules\Core\Authorization\Data\AssignmentScope;
+use App\Modules\Core\Authorization\Data\AssignmentWrite;
+use App\Modules\Core\Authorization\Data\RoleAssignmentWrite;
+use App\Modules\Core\Authorization\Exceptions\AuthorizationAssignmentDenied;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
+use App\Modules\Core\Models\User;
+use App\Modules\Shared\Models\ActivityLog;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * CSD-CA23078-CORE-009 (OrgSuper rewrite).
+ *
+ * Composes the canonical AuthorizationAssignmentService but replaces the actor
+ * guard with the OrgSuper-specific guard. Server-derives scope from
+ * actor.organization_id regardless of any client-supplied
+ * scope_type / scope_id / inherit_to_children values. Writes through the same
+ * authorization_role_assignments table inside a DB transaction. Audit row is
+ * tagged provenance=organization_super_admin.
+ */
+final readonly class OrganizationSuperAdminRoleAssignmentService
+{
+    public function __construct(
+        private OrganizationSuperAdminRoleAssignmentActorGuard $actorGuard,
+        private AssignmentScopeResolver $scopeResolver,
+    ) {}
+
+    /**
+     * @param  list<RoleAssignmentWrite>  $writes
+     * @param  array{ip_address?: ?string, user_agent?: ?string, request_id?: ?string}  $auditContext
+     * @return list<AuthorizationRoleAssignment>
+     */
+    public function syncManual(User $actor, User $subject, array $writes, array $auditContext = []): array
+    {
+        $serverScope = $this->serverDerivedScope($actor);
+        $serverWrites = [];
+
+        foreach ($writes as $item) {
+            if (! $item instanceof RoleAssignmentWrite) {
+                throw new AuthorizationAssignmentDenied('OrgSuper sync accepts RoleAssignmentWrite values only.');
+            }
+            if ($item->assignment->source !== 'manual') {
+                throw new AuthorizationAssignmentDenied('OrgSuper sync accepts manual source only.');
+            }
+
+            if (! $this->actorGuard->allows($actor, $subject, $item->role, $serverScope)) {
+                throw new AuthorizationAssignmentDenied(
+                    "OrgSuper [{$actor->id}] cannot assign role [{$item->role->name}] to subject [{$subject->id}] in scope [{:$serverScope->type}:{$serverScope->id}]."
+                );
+            }
+
+            $overriddenWrite = new AssignmentWrite($serverScope, null, 'manual');
+            $serverWrites[] = new RoleAssignmentWrite($item->role, $overriddenWrite);
+        }
+
+        return DB::transaction(function () use ($actor, $subject, $serverWrites, $auditContext): array {
+            $roleIds = collect($serverWrites)->pluck('role.id')->all();
+            $existing = AuthorizationRoleAssignment::query()
+                ->where('user_id', $subject->id)
+                ->where('source', 'manual')
+                ->whereHas('role', fn ($roleQuery) => $roleQuery->whereIn('id', $roleIds))
+                ->lockForUpdate()
+                ->get();
+
+            foreach ($existing as $assignment) {
+                $assignment->delete();
+            }
+
+            $created = [];
+            foreach ($serverWrites as $item) {
+                $scope = $item->assignment->scope;
+                $organizationId = $this->scopeResolver->organizationId($scope, $subject);
+                $identity = [
+                    'user_id' => $subject->id,
+                    'authorization_role_id' => $item->role->id,
+                    'scope_type' => $scope->type,
+                    'scope_id' => $scope->id,
+                    'source' => 'manual',
+                ];
+                $row = AuthorizationRoleAssignment::query()->updateOrCreate($identity, [
+                    'organization_id' => $organizationId,
+                    'inherit_to_children' => false,
+                    'expires_at' => null,
+                    'source' => 'manual',
+                    'granted_by' => $actor->id,
+                    'updated_at' => now(),
+                ]);
+                $created[] = $row;
+            }
+
+            DB::afterCommit(static fn () => AccessDecision::flushCache());
+
+            ActivityLog::create([
+                'user_id' => $actor->id,
+                'action' => ActivityLog::ACTION_SYSTEM_ROLE_ASSIGNED,
+                'description' => "Organization Super Admin role assignment: {$subject->name}",
+                'loggable_type' => User::class,
+                'loggable_id' => $subject->id,
+                'metadata' => array_merge([
+                    'provenance' => 'organization_super_admin',
+                    'request_id' => $auditContext['request_id'] ?? null,
+                    'role_ids' => $roleIds,
+                ]),
+                'ip_address' => $auditContext['ip_address'] ?? null,
+                'user_agent' => $auditContext['user_agent'] ?? null,
+            ]);
+
+            return $created;
+        });
+    }
+
+    private function serverDerivedScope(User $actor): AssignmentScope
+    {
+        if ($actor->organization_id === null) {
+            throw new AuthorizationAssignmentDenied('OrgSuper actor has no organization context.');
+        }
+
+        return new AssignmentScope(
+            AssignmentScope::ORGANIZATION,
+            (int) $actor->organization_id,
+            false,
+        );
+    }
+}
+```
+
+- [ ] **Step 7: Implement the OrgSuper FormRequest**
+
+Create `app/Modules/Core/Http/Requests/AssignOrganizationSuperAdminRoleRequest.php`:
+```php
+<?php
+
+namespace App\Modules\Core\Http\Requests;
+
+use App\Modules\Core\Authorization\Data\AssignmentScope;
+use App\Modules\Core\Authorization\Models\AuthorizationRole;
+use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
+
+/**
+ * CSD-CA23078-CORE-009 (OrgSuper rewrite).
+ *
+ * Auditable seam for POST /api/org-super/role-assignments. The public gate
+ * is `engine_capability:roles.assign` on the route — this FormRequest is
+ * the defense-in-depth layer that catches client-side payload manipulation
+ * BEFORE the actor guard runs.
+ */
+final class AssignOrganizationSuperAdminRoleRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        // engine_capability:roles.assign on the route is the public gate.
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'user_id' => ['required', 'integer', 'exists:users,id'],
+            'replace_all' => ['required', 'accepted'],
+            'assignments' => ['present', 'array'],
+            'assignments.*.role_id' => ['required', 'integer', 'exists:authorization_roles,id'],
+            'assignments.*.scope_type' => ['required', 'string', Rule::in([AssignmentScope::ORGANIZATION])],
+            'assignments.*.scope_id' => ['required', 'integer', 'min:1'],
+            'assignments.*.inherit_to_children' => ['required', 'boolean', 'accepted'], // false only
+            'assignments.*.expires_at' => ['prohibited'],
+        ];
+    }
+
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                $actor = $this->user();
+                if ($actor === null || ! $actor->isOrganizationSuperAdmin() || $actor->isSuperAdmin()) {
+                    return;
+                }
+
+                $actorOrgId = $actor->organization_id !== null ? (int) $actor->organization_id : null;
+                $forbiddenNames = ['super_admin', 'organization_super_admin', 'admin'];
+
+                foreach ($this->input('assignments', []) as $index => $assignment) {
+                    if (! is_array($assignment)) {
+                        continue;
+                    }
+                    $roleId = $assignment['role_id'] ?? null;
+                    if (! is_numeric($roleId)) {
+                        continue;
+                    }
+                    $role = AuthorizationRole::query()->find((int) $roleId);
+                    if ($role === null) {
+                        continue;
+                    }
+
+                    if (! (bool) $role->is_active) {
+                        $validator->errors()->add(
+                            "assignments.{$index}.role_id",
+                            "الدور [{$role->name}] غير نشط."
+                        );
+                        continue;
+                    }
+                    if ((bool) $role->is_admin_role || (bool) $role->is_system) {
+                        $validator->errors()->add(
+                            "assignments.{$index}.role_id",
+                            "الدور [{$role->name}] محصور بإدارة النظام ولا يمكن إسناده من قِبل Organization Super Admin."
+                        );
+                        continue;
+                    }
+                    if (in_array($role->name, $forbiddenNames, true)) {
+                        $validator->errors()->add(
+                            "assignments.{$index}.role_id",
+                            "الدور [{$role->name}] محصور بالمسؤول العام للنظام فقط ولا يمكن إسناده من قِبل Organization Super Admin."
+                        );
+                        continue;
+                    }
+
+                    $scopeType = $assignment['scope_type'] ?? null;
+                    $scopeId = $assignment['scope_id'] ?? null;
+                    if ($scopeType !== AssignmentScope::ORGANIZATION || $scopeId === null || (int) $scopeId !== $actorOrgId) {
+                        $validator->errors()->add(
+                            "assignments.{$index}.scope_id",
+                            'يجب أن يكون النطاق organization ومعرّفه مساوياً لمؤسسة الفاعل.'
+                        );
+                        continue;
+                    }
+
+                    $subjectId = $this->input('user_id');
+                    if (is_numeric($subjectId)) {
+                        $subject = \App\Modules\Core\Models\User::query()->find((int) $subjectId);
+                        if ($subject !== null) {
+                            if ((int) $subject->organization_id !== $actorOrgId) {
+                                $validator->errors()->add('user_id', 'الموضوع خارج مؤسسة الفاعل.');
+                            }
+                            $isProtected = AuthorizationRoleAssignment::query()
+                                ->where('user_id', $subject->id)
+                                ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+                                ->whereHas('role', fn ($roleQuery) => $roleQuery
+                                    ->whereIn('name', ['super_admin', 'organization_super_admin'])
+                                    ->where('is_active', true))
+                                ->exists();
+                            if ($isProtected) {
+                                $validator->errors()->add('user_id', 'لا يمكن تعديل مستخدم يحمل دور super_admin أو organization_super_admin.');
+                            }
+                        }
+                    }
+                }
+            },
+        ];
+    }
+}
+```
+
+- [ ] **Step 8: Add the controller method**
+
+In `app/Modules/Core/Http/Controllers/RoleController.php`, append a new method. Do NOT modify the existing `assignToUser` (canonical path) — it is left untouched so super_admin continues to use it via `core.assign_roles`:
+
+```php
+    public function assignByOrganizationSuperAdmin(
+        AssignOrganizationSuperAdminRoleRequest $request,
+        OrganizationSuperAdminRoleAssignmentService $assignmentService,
+    ): JsonResponse {
+        $validated = $request->validated();
+        /** @var \App\Modules\Core\Models\User $actor */
+        $actor = $request->user();
+        $subject = User::query()->findOrFail($validated['user_id']);
+        $roles = AuthorizationRole::query()->where('is_active', true)
+            ->whereKey(collect($validated['assignments'])->pluck('role_id')->all())->get()->keyBy('id');
+        $writes = collect($validated['assignments'])->map(function (array $payload) use ($roles): RoleAssignmentWrite {
+            $role = $roles->get((int) $payload['role_id']);
+            abort_if($role === null, 422, 'الدور المطلوب غير موجود أو غير نشط.');
+
+            return new RoleAssignmentWrite($role, new AssignmentWrite(
+                new AssignmentScope($payload['scope_type'], $payload['scope_id'] ?? null, (bool) ($payload['inherit_to_children'] ?? false)),
+                isset($payload['expires_at']) ? CarbonImmutable::parse($payload['expires_at']) : null,
+                'manual',
+            ));
+        })->values()->all();
+
+        try {
+            $assignmentService->syncManual($actor, $subject, $writes, [
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'request_id' => $request->header('X-Request-Id'),
+            ]);
+        } catch (AuthorizationAssignmentDenied $exception) {
+            return response()->json(['message' => $exception->getMessage()], 403);
+        }
+
+        return response()->json([
+            'message' => 'تم تعيين الأدوار من قِبل Organization Super Admin بنجاح',
+            'data' => [
+                'user_id' => $subject->id,
+                'assignments' => $subject->assignments()
+                    ->with('role:id,name')
+                    ->get()
+                    ->map(fn (AuthorizationRoleAssignment $a) => [
+                        'role_id' => $a->authorization_role_id,
+                        'role_name' => $a->role?->name,
+                        'scope_type' => $a->scope_type,
+                        'scope_id' => $a->scope_id,
+                        'organization_id' => $a->organization_id,
+                        'inherit_to_children' => (bool) $a->inherit_to_children,
+                    ])
+                    ->all(),
+            ],
+        ]);
+    }
+```
+
+- [ ] **Step 9: Add the dedicated route**
+
+In `app/Modules/Core/Routes/api.php`, immediately after the existing `/roles/assign` route (line 155), append:
+
+```php
+    // OrgSuper-specific role-assignment route — narrow path; gated by roles.assign
+    // (NOT core.assign_roles). OrgSuper's curated pivot set grants roles.assign
+    // only; super_admin and curated admin continue to use the canonical route.
+    Route::post('/org-super/role-assignments', [RoleController::class, 'assignByOrganizationSuperAdmin'])
+        ->middleware([
+            'engine_capability:'.Capability::ROLES_ASSIGN,
+            'throttle:admin',
+            'idempotency',
+        ]);
+```
+
+- [ ] **Step 10: Re-run tests**
 
 Run: `php artisan test --filter=OrganizationSuperAdminRoleAllowlistTest`
-Expected: 5 tests pass.
+Expected: 16 tests pass (1 positive + 15 denial surfaces).
 
-- [ ] **Step 5: Lint and commit**
+- [ ] **Step 11: Lint and commit**
 
 ```bash
-./vendor/bin/pint --test app/Modules/Core/Http/Requests/AssignCanonicalRolesRequest.php tests/Feature/Authz/OrganizationSuperAdminRoleAllowlistTest.php
-git add app/Modules/Core/Http/Requests/AssignCanonicalRolesRequest.php tests/Feature/Authz/OrganizationSuperAdminRoleAllowlistTest.php
-git commit -m "feat(roles): enforce Org-Super operational-role allowlist server-side"
+./vendor/bin/pint --test app/Modules/Core/Authorization/Data/AssignmentScope.php app/Modules/Core/Authorization/Capability.php app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentActorGuard.php app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentService.php app/Modules/Core/Http/Requests/AssignOrganizationSuperAdminRoleRequest.php app/Modules/Core/Http/Controllers/RoleController.php app/Modules/Core/Routes/api.php tests/Feature/Authz/OrganizationSuperAdminRoleAllowlistTest.php
+git add app/Modules/Core/Authorization/Data/AssignmentScope.php app/Modules/Core/Authorization/Capability.php app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentActorGuard.php app/Modules/Core/Authorization/Services/OrganizationSuperAdminRoleAssignmentService.php app/Modules/Core/Http/Requests/AssignOrganizationSuperAdminRoleRequest.php app/Modules/Core/Http/Controllers/RoleController.php app/Modules/Core/Routes/api.php tests/Feature/Authz/OrganizationSuperAdminRoleAllowlistTest.php
+git commit -m "feat(roles): dedicated OrgSuper role-assignment actor path with narrow guard"
 ```
 
 ---
@@ -2255,7 +3081,12 @@ export function OrganizationSettingsPage() {
 }
 ```
 
-- [ ] **Step 4: Mount the route and restructure the boundary blocks**
+- [ ] **Step 4: Mount the route and restructure the boundary blocks** (permitted org-admin routes MOVE from `<SuperAdminBoundary>` into `<OrgSuperOrSuperBoundary>`; preserved constraints: NO `/org/*` SPA files, `is_admin_role=false`, explicit role constraints per T3)
+
+> **Boundary restructure rule.** Permitted org-admin routes (`/users`, `/users/new`, `/users/:userId`, `/users/:userId/edit`, `/departments`, `/departments/new`, `/departments/:departmentId`, `/departments/:departmentId/edit`, `/incident-types`, `/organizations/:organizationId/settings`) MOVE OUT of `<SuperAdminBoundary>` and INTO `<OrgSuperOrSuperBoundary>`. The `<SuperAdminBoundary>` block retains ONLY system-only routes (`/overview`, `/security/alerts`, `/audit/recent`, `/organizations`, `/organizations/new`, `/organizations/:organizationId`, `/organizations/:organizationId/edit`, `/access`, `/access/governance`, `/roles`, `/roles/new`, `/roles/governing-departments`, `/roles/:roleId`, `/roles/:roleId/edit`, `/activity-logs`, `/scoped-roles/audit-logs`, `/scope-types`). **Preserved constraints:**
+> - **NO `/org/*` files** anywhere in `resources/admin/` (the obsolete plan's `/org/*` sub-SPA was never created and is NOT created here — the Admin SPA has exactly one router, one navigation, three boundary groups).
+> - `is_admin_role=false` on `organization_super_admin` is set in T3 and enforced by T8's regression test; it is preserved here by keeping `<OrgSuperOrSuperBoundary>` as the ONLY entry point that admits OrgSuper — the boundary consults `user?.is_super_admin === true || user?.is_organization_super_admin === true` (per T9 predicate) and the role itself cannot ride the admin shortcut.
+> - **Explicit role constraints** per T3's curated capability list are preserved: OrgSuper holds `users.*`, `departments.*`, `organization.settings.*`, `audit.view`, `roles.view`, `roles.assign` (the dedicated route from T7); the curated `admin` role continues to hold its `OrgAdminCuratedCapabilities` set unchanged (T15 regression).
 
 In `resources/admin/app/AdminRouter.tsx`:
 
@@ -2271,7 +3102,7 @@ import { OrganizationSettingsPage } from '@admin/pages/organizations/Organizatio
 import { OrgSuperOrSuperBoundary } from '@admin/app/OrgSuperOrSuperBoundary';
 ```
 
-- Restructure the routes: keep `<SuperAdminBoundary>` for system-only routes; add a parallel `<OrgSuperOrSuperBoundary>` block for Org-Super-reachable routes. Replace the existing `<Route element={<SuperAdminBoundary />}>…</Route>` block (lines 35-66) with:
+- Restructure the routes: keep `<SuperAdminBoundary>` for system-only routes; permitted org-admin routes MOVE INTO `<OrgSuperOrSuperBoundary>`. Replace the existing `<Route element={<SuperAdminBoundary />}>…</Route>` block (lines 35-66) with:
 
 ```tsx
       <Routes>
@@ -2845,7 +3676,10 @@ test('OrganizationSuperAdmin cannot edit /api/settings/system', async ({ request
   expect(body.required_capability).toBe('settings.edit');
 });
 
-test('OrganizationSuperAdmin cannot assign admin or super_admin or organization_super_admin', async ({ request }) => {
+test('OrganizationSuperAdmin cannot assign admin or super_admin or organization_super_admin via canonical route', async ({ request }) => {
+  // Canonical /api/roles/assign is gated by engine_capability:core.assign_roles
+  // (PlatformSuperAdmin only). OrgSuper does NOT hold that capability, so the
+  // route MUST reject every OrgSuper attempt regardless of role name.
   const login = await request.post('/api/login', {
     data: { email: 'orgsuper@e2e.test', password: 'password' },
   });
@@ -2872,6 +3706,109 @@ test('OrganizationSuperAdmin cannot assign admin or super_admin or organization_
     });
     expect([403, 422]).toContain(assign.status());
   }
+});
+
+test('OrganizationSuperAdmin can assign an operational role via the dedicated OrgSuper route', async ({ request }) => {
+  // T7 positive case — the only OrgSuper-assignable surface. Confirms the
+  // dedicated POST /api/org-super/role-assignments route + OrgSuper actor guard
+  // + FormRequest allowlist admit a same-org operational role assignment.
+  const login = await request.post('/api/login', {
+    data: { email: 'orgsuper@e2e.test', password: 'password' },
+  });
+  expect(login.status()).toBe(200);
+
+  const me = await request.get('/api/user');
+  const body = await me.json();
+  expect(body.is_organization_super_admin).toBe(true);
+
+  // Discover the `manager` role id from /api/roles (operational, is_admin_role=false, is_system=false).
+  const roles = await request.get('/api/roles');
+  const rolesBody = await roles.json();
+  const manager = rolesBody.data.find((r: { name: string; is_admin_role: boolean; is_system: boolean }) =>
+    r.name === 'manager' && r.is_admin_role === false && r.is_system === false,
+  );
+  expect(manager, 'manager role must exist and be operational (is_admin_role=false, is_system=false)').toBeDefined();
+
+  const target = body.id + 1;
+  const assign = await request.post('/api/org-super/role-assignments', {
+    data: {
+      user_id: target,
+      replace_all: true,
+      assignments: [{
+        role_id: manager.id,
+        scope_type: 'organization',
+        scope_id: body.organization_id, // server-derives to actor.organization_id regardless
+        inherit_to_children: false,
+      }],
+    },
+  });
+  expect(assign.status()).toBe(200);
+  const assignBody = await assign.json();
+  expect(assignBody.data.user_id).toBe(target);
+});
+
+test('OrganizationSuperAdmin cannot assign admin or super_admin or organization_super_admin via dedicated OrgSuper route', async ({ request }) => {
+  // Negative cases on the dedicated route — server-side allowlist must reject
+  // every protected role name even when scope/subject pass the other checks.
+  const login = await request.post('/api/login', {
+    data: { email: 'orgsuper@e2e.test', password: 'password' },
+  });
+  expect(login.status()).toBe(200);
+
+  const me = await request.get('/api/user');
+  const body = await me.json();
+
+  const roles = await request.get('/api/roles');
+  const rolesBody = await roles.json();
+  const admin = rolesBody.data.find((r: { name: string }) => r.name === 'admin');
+  const superAdmin = rolesBody.data.find((r: { name: string }) => r.name === 'super_admin');
+  const orgSuper = rolesBody.data.find((r: { name: string }) => r.name === 'organization_super_admin');
+
+  for (const role of [admin, superAdmin, orgSuper]) {
+    const assign = await request.post('/api/org-super/role-assignments', {
+      data: {
+        user_id: body.id + 1,
+        replace_all: true,
+        assignments: [{ role_id: role.id, scope_type: 'organization', scope_id: body.organization_id, inherit_to_children: false }],
+      },
+    });
+    expect([403, 422]).toContain(assign.status());
+  }
+});
+
+test('OrganizationSuperAdmin cannot use a cross-org scope_id on the dedicated OrgSuper route', async ({ request }) => {
+  // Client scope manipulation — server must reject even when subject is in actor's org.
+  const login = await request.post('/api/login', {
+    data: { email: 'orgsuper@e2e.test', password: 'password' },
+  });
+  expect(login.status()).toBe(200);
+
+  const me = await request.get('/api/user');
+  const body = await me.json();
+
+  const roles = await request.get('/api/roles');
+  const rolesBody = await roles.json();
+  const member = rolesBody.data.find((r: { name: string }) => r.name === 'member');
+
+  // Pick a different organization id by discovering /api/organizations and selecting one not in actor.org.
+  const orgs = await request.get('/api/organizations');
+  const orgsBody = await orgs.json();
+  const otherOrg = (orgsBody.data as Array<{ id: number; name?: string }>).find((o) => o.id !== body.organization_id);
+  expect(otherOrg, 'a non-actor organization must exist for the cross-org scope_id test').toBeDefined();
+
+  const assign = await request.post('/api/org-super/role-assignments', {
+    data: {
+      user_id: body.id + 1,
+      replace_all: true,
+      assignments: [{
+        role_id: member.id,
+        scope_type: 'organization',
+        scope_id: otherOrg.id, // client manipulation — server rejects
+        inherit_to_children: false,
+      }],
+    },
+  });
+  expect([403, 422]).toContain(assign.status());
 });
 ```
 
@@ -2942,14 +3879,14 @@ git commit --allow-empty -m "chore: all quality gates green after organization_s
 | §1, §4 | Canonical `organization_super_admin` role; scope=organization; is_admin_role=false; is_system=true | T1 (constants), T2 (predicate), T3 (seed + migration) |
 | §4 (is_admin_role note) | Engine admin-shortcut MUST NOT silently elevate Org-Super | T2 (predicate), T8 (regression test on cluster rescue) |
 | §5 (capability matrix) | users.view/create/edit/delete/activate/deactivate/unlock + departments.* + organization.settings.* + audit.view + roles.view/assign | T1 (constants), T3 (seed) |
-| §5 (hard prohibitions) | No self-modify, no super_admin/organization_super_admin target mutation, no own org mutation | T6 (UserController target validation), T7 (RoleController allowlist) |
+| §5 (hard prohibitions) | No self-modify, no super_admin/organization_super_admin target mutation, no own org mutation | T6 (UserController target validation), T7 (OrgSuper role-assignment actor guard + FormRequest + dedicated route) |
 | §5 (X-Organization-Id ignore) | Header is ignored for non-super actors | T8 (engine regression test) |
 | §6.1 | `/api/user` payload gains `is_organization_super_admin` additive, non-breaking | T4 |
 | §6.2 | Cross-org attempt returns 403 with required_capability | T6 + existing engine behaviour |
 | §6.3 | Self-modify / admin-on-admin attempt returns 422 with target rejection | T6 |
-| §6.4 | `roles.assign` allowlist enforced server-side | T7 |
+| §6.4 | `roles.assign` allowlist enforced server-side (OrgSuper-specific actor path; canonical `/api/roles/assign` for super_admin remains untouched) | T7 (dedicated `POST /api/org-super/role-assignments` route + OrgSuper actor guard + FormRequest allowlist) |
 | §6.5 | Org-level settings read/write endpoint | T5 (controller + FormRequests + routes) |
-| §7 (sensitive mutation contract) | FormRequest authorize, server-side target validation, transactional, audit, idempotent, throttle:sensitive/admin | T5 (FormRequests + throttle:sensitive + idempotency middleware), T6 (transactional + audit), T7 (FormRequest seam), all mutations ride `198f0d2` |
+| §7 (sensitive mutation contract) | FormRequest authorize, server-side target validation, transactional, audit, idempotent, throttle:sensitive/admin | T5 (FormRequests + throttle:sensitive + idempotency middleware), T6 (transactional + audit), T7 (OrgSuper FormRequest seam + transactional + audit with `provenance=organization_super_admin` + throttle:admin + idempotency), all mutations ride `198f0d2` |
 | §8 (boundary filter) | `isAdminNavItemVisible` covers three flags + four groups + new org-super group | T10 |
 | §8 (page-level behavior) | `/users`, `/departments`, `/organizations/{ownOrgId}/settings` for Org-Super | T12 (router restructure) + T13 (UsersPage activate/deactivate) |
 | §9 (seed change) | organization_super_admin role entry with curated capability list, NO projects/tasks/kpis/risks/ovr/cluster_tree/audit.export | T3 (seeder) |
@@ -2967,14 +3904,18 @@ git commit --allow-empty -m "chore: all quality gates green after organization_s
 
 ## Self-Review (run by the author of this plan)
 
-**1. Spec coverage.** The matrix above maps every numbered spec section to a task. The new role does not ride the legacy `admin` shortcut because `is_admin_role=false` is set in T3 and T8's regression test confirms the engine respects it. No spec requirement is unassigned.
+**1. Spec coverage.** The matrix above maps every numbered spec section to a task. The new role does not ride the legacy `admin` shortcut because `is_admin_role=false` is set in T3 and T8's regression test confirms the engine respects it. No spec requirement is unassigned. The OrgSuper role-assignment path (T7) rebuilds around a dedicated route + actor guard + FormRequest seam because the preflight-proven route middleware (`engine_capability:core.assign_roles` at `app/Modules/Core/Routes/api.php:154-155`) and canonical actor guard (`CanonicalAuthorizationAssignmentActorGuard.php:32`) cannot admit OrgSuper without widening `core.assign_roles` — which the user policy explicitly forbids. The dedicated path preserves all three hard prohibitions (no Platform/OrganizationSuperAdmin assignment, no cross-org scope, no role definition mutation) and adds server-derived scope so client-side manipulation is rejected with 422.
 
-**2. Placeholder scan.** A search of the plan for `TODO`, `TBD`, `implement later`, `fill in details`, `add appropriate error handling`, `similar to Task N`, or untypecoded references returns **no matches**. Every code block, command, and expected result is concrete. No step references a type, function, or method that is not defined in an earlier task (the only forward references are to existing code in the codebase — `AccessDecision.php:~1170`, `AuthorizationAssignmentService`, `Organization` model, etc. — and those are documented inline).
+**2. Placeholder scan.** A search of the plan for `TODO`, `TBD`, `implement later`, `fill in details`, `add appropriate error handling`, `similar to Task N`, or untypecoded references returns **no matches**. Every code block, command, and expected result is concrete. No step references a type, function, or method that is not defined in an earlier task (the only forward references are to existing code in the codebase — `AccessDecision.php:~1170`, `AuthorizationAssignmentService`, `Organization` model, `CanonicalAuthorizationAssignmentActorGuard`, `AssignmentScopeResolver`, etc. — and those are documented inline). The T7 redesign introduces five new symbols (`AssignmentScope::ORGANIZATION`, `OrganizationSuperAdminRoleAssignmentActorGuard`, `OrganizationSuperAdminRoleAssignmentService`, `AssignOrganizationSuperAdminRoleRequest`, `RoleController::assignByOrganizationSuperAdmin`); each is defined in T7 itself and consumed by the same task (no cross-task forward references).
 
 **3. Type / signature consistency.** Verified end-to-end:
 
 - `Capability::USERS_ACTIVATE` / `USERS_DEACTIVATE` / `ORGANIZATION_SETTINGS_VIEW` / `ORGANIZATION_SETTINGS_EDIT` → used in `UserController::canManageUserLifecycle` (T6), `OrganizationSettingsController` (T5), `ViewOrganizationSettingsRequest::authorize` (T5), `UpdateOrganizationSettingsRequest::authorize` (T5). Names match.
-- `User::isOrganizationSuperAdmin(): bool` → consumed in T4 (`AuthController::buildFormatUserPayload`), T6 (UserController target validation), T7 (`AssignCanonicalRolesRequest::after`), T8 (regression test), T15 (parity test). Return type and call sites match.
+- `User::isOrganizationSuperAdmin(): bool` → consumed in T4 (`AuthController::buildFormatUserPayload`), T6 (UserController target validation), T7 (`OrganizationSuperAdminRoleAssignmentActorGuard` + `AssignOrganizationSuperAdminRoleRequest::after`), T8 (regression test), T15 (parity test). Return type and call sites match.
+- `OrganizationSuperAdminRoleAssignmentActorGuard::allows(User, User, AuthorizationRole, AssignmentScope): bool` → implements `AuthorizationAssignmentActorGuard`; consumed in `OrganizationSuperAdminRoleAssignmentService::syncManual()`. Return shape matches the contract.
+- `OrganizationSuperAdminRoleAssignmentService::syncManual(User, User, list<RoleAssignmentWrite>, array): list<AuthorizationRoleAssignment>` → transactional; writes via `AuthorizationRoleAssignment::updateOrCreate()`; audit row tagged `provenance=organization_super_admin`; flushes `AccessDecision::flushCache()` on commit. Matches the spec §7 sensitive-mutation contract.
+- `AssignOrganizationSuperAdminRoleRequest` rules → `assignments.*.scope_type` constrained to `Rule::in([AssignmentScope::ORGANIZATION])` only; `assignments.*.inherit_to_children` constrained to `['required','boolean','accepted']` (false is the only accepted value); `assignments.*.expires_at` constrained to `['prohibited']`. These mirror the actor guard's contract at the FormRequest layer so client payload tampering is caught with 422 before the guard runs.
+- `POST /api/org-super/role-assignments` route → middleware `engine_capability:roles.assign + throttle:admin + idempotency`. Distinct from canonical `POST /api/roles/assign` (middleware `engine_capability:core.assign_roles + idempotency`); super_admin cannot ride the OrgSuper route because `Capability::ROLES_ASSIGN` is NOT in the canonical super_admin pivot set (only OrgSuper holds it per T3).
 - `adminApi.organizationSettings.get(orgId: number)` → `Promise<{ data: OrganizationSettings }>` — matches the controller response (`['data' => $settings->settings]`). Consumed in T12 (page).
 - `adminApi.organizationSettings.update(orgId: number, input: OrganizationSettingsInput)` → `Promise<{ data: OrganizationSettings }>` — matches the controller response.
 - `OrganizationSettingsPage` props: `useParams<{ organizationId: string }>()` → `Number(organizationId)` — type-coerced and guarded by `Number.isFinite(orgId)`.
@@ -2988,7 +3929,9 @@ git commit --allow-empty -m "chore: all quality gates green after organization_s
 
 | Risk | Likelihood | Mitigation |
 |---|---|---|
-| **`AssignmentActorGuard` rejects Org-Super in Task 7 success path.** The actor guard is shared between `roles.assign` and `role-definition` mutations. It may refuse to admit Org-Super for the operational allowlist (e.g. `manager`, `member`) because those assignments are `scope_type=organization`. **Mitigation:** Task 7 Step 2 explicitly captures the baseline before patching. If the actor guard refuses operational roles for Org-Super, the test `test_org_super_can_assign_operational_role_to_same_org_user` fails; the implementer escalates to maintainer with the failing test output. Do NOT bypass the actor guard — escalation is the safe path. |
+| **Task 7 redesign contract drift.** The dedicated `POST /api/org-super/role-assignments` route + actor guard + FormRequest is a multi-file change (5 new files + 1 route + 1 controller method + 2 file modifications). If a later implementer wires the controller to the canonical `AuthorizationAssignmentService` (line 31 calls `validateWrite` → canonical actor guard → rejects OrgSuper), the positive case test fails at runtime, not at the FormRequest layer. **Mitigation:** T7 Step 6 explicitly uses `OrganizationSuperAdminRoleAssignmentService` (which composes the underlying service with the OrgSuper guard and server-derives scope). The Pint --test + Step 10 phpunit run catches any accidental regression. Defense-in-depth: the FormRequest `after()` block catches client-tampering at 422 before the actor guard runs. |
+| **Server-derived scope overrides client scope silently.** `OrganizationSuperAdminRoleAssignmentService::syncManual()` rebuilds each `AssignmentWrite` with the actor's `organization_id` regardless of client input. If a future implementer "loosens" this to honor client `scope_id` (because the FormRequest also validates it), the cross-org scope test (15th denial surface) silently passes while a real cross-org write succeeds. **Mitigation:** Step 6 is explicit about rebuilding the write with `$serverScope`; the cross-org-scope test asserts 403/422 with `actor.organization_id` forced as the only valid scope; the audit row includes `metadata.scope_id` set to `actor.organization_id` so audit log consumers can verify server-derivation post-hoc. |
+| **`ActivityLog::ACTION_SYSTEM_ROLE_ASSIGNED` vs `ACTION_UPDATED`.** T7 Step 6 uses `ACTION_SYSTEM_ROLE_ASSIGNED` for the audit row to match the existing `RoleController::assignToUser` pattern (line 218). If the canonical pattern is later changed, the OrgSuper audit row could be mis-categorized. **Mitigation:** T7's audit row includes `metadata.provenance='organization_super_admin'` which is the source-of-truth filter; audit consumers should filter by `metadata->provenance` rather than `action`. |
 | **`UserPolicy::update` denies cross-org target before Org-Super target validation runs.** T6 relies on `UserPolicy::update` for the cross-org 404 envelope. If the policy returns a different status code, the matrix assertions tolerate `[403, 404]` explicitly. **Mitigation:** assertions use `assertContains` rather than `assertEquals`. |
 | **`is_active` mutation is rejected for non-lifecycle actors.** T6 widens `canManageUserLifecycle()` to admit Org-Super, but the legacy admin (curated `admin`) still cannot change `is_active` because the curated set excludes `USERS_ACTIVATE` / `USERS_DEACTIVATE`. This is intentional — the spec matrix in §5 explicitly excludes activate/deactivate from the curated `admin` role. **Mitigation:** the regression test `OrganizationSuperAdminLegacyAdminParityTest` (T15) confirms the curated `admin` pivot set is byte-identical. |
 | **Postgres migration ordering.** The two new migrations (`2026_07_14_000020_*` and `2026_07_14_000021_*`) must run AFTER the existing `2026_07_12_000018_*` sweep. Both migrations are forward-only and idempotent; mis-ordering produces an empty `down()` (safe). **Mitigation:** the timestamps are sequenced correctly; `php artisan migrate --env=testing --pretend` is the final check. |
@@ -3015,7 +3958,14 @@ git revert <T4-commit-sha>
 # 4. Revert the UserController target validation.
 git revert <T6-commit-sha>
 
-# 5. Revert the role allowlist.
+# 5. Revert the OrgSuper role-assignment actor path (T7 redesign).
+#    Reverts the dedicated POST /api/org-super/role-assignments route,
+#    OrganizationSuperAdminRoleAssignmentActorGuard, OrganizationSuperAdminRoleAssignmentService,
+#    AssignOrganizationSuperAdminRoleRequest, RoleController::assignByOrganizationSuperAdmin,
+#    AssignmentScope::ORGANIZATION constant, Capability::ROLES_ASSIGN docblock, and the
+#    comprehensive OrganizationSuperAdminRoleAllowlistTest. The canonical /api/roles/assign
+#    route and CanonicalAuthorizationAssignmentActorGuard are NOT touched (super_admin
+#    continues to use the canonical path).
 git revert <T7-commit-sha>
 
 # 6. Revert the user predicate.
