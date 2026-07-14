@@ -330,34 +330,42 @@ export interface ScopeType {
 }
 
 /**
- * Wire-shape of `GET/PUT /api/organizations/{organization}/settings`.
+ * Organization-scoped settings persisted in the `organization_settings`
+ * pivot table. The legacy `organizations.settings` JSON column is NOT
+ * the source of truth and is no longer written by the backend
+ * (see `app/Modules/Core/Http/Controllers/OrganizationSettingsController.php`).
  *
- * Mirrors the canonical controller payload in
- * `app/Modules/Core/Http/Controllers/OrganizationSettingsController.php`.
+ * The backend exposes `GET /api/organizations/{organization}/settings`
+ * and `PUT /api/organizations/{organization}/settings`, where the
+ * `{organization}` route binder carries the scope — no
+ * `X-Organization-Id` request header is involved. Reads and writes
+ * take the actor's `user.organization_id` (or backend `super_admin`
+ * short-circuit) into account server-side.
  *
- * - `locale_overrides.*`           → free-form locale code strings (max 16).
- * - `branding_overrides.primary_color` → `#RRGGBB` hex string (nullable clears).
- * - `branding_overrides.logo_path` → asset path (max 255).
- * - `notification_templates`       → `{ [templateKey: string]: template }`.
- *
- * The PUT is deep-merged server-side: only the keys present in the
- * payload are written; siblings are preserved. Sending an empty
- * `{}` for any top-level key is a no-op (the merge helper treats
- * empty objects as "no changes"), so the FE only sends the keys the
- * actor actually edited.
+ * Each top-level key is deep-merged independently on PUT, so a
+ * partial update of one key never clobbers sibling keys in another.
+ * Empty objects are intentional no-ops (the merge helper treats
+ * `[]` as "no changes"); explicit `null` on a scalar field clears
+ * that single field.
  */
 export interface OrganizationSettingsPayload {
   locale_overrides: {
-    ar: string | null;
-    en: string | null;
+    ar?: string | null;
+    en?: string | null;
   };
   branding_overrides: {
-    primary_color: string | null;
-    logo_path: string | null;
+    primary_color?: string | null;
+    logo_path?: string | null;
   };
   notification_templates: Record<string, string>;
 }
 
-export interface OrganizationSettingsEnvelope {
+export type OrganizationSettingsInput = Partial<{
+  locale_overrides: Partial<OrganizationSettingsPayload['locale_overrides']>;
+  branding_overrides: Partial<OrganizationSettingsPayload['branding_overrides']>;
+  notification_templates: OrganizationSettingsPayload['notification_templates'];
+}>;
+
+export interface OrganizationSettingsResponse {
   data: OrganizationSettingsPayload;
 }

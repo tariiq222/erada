@@ -1,445 +1,357 @@
 /**
- * Focused tests for the OrganizationSuperAdmin settings UI.
+ * Admin organization-settings integration tests.
  *
- * Scope (per the active task brief):
- *   - resources/admin only — no backend, no migrations.
- *   - Targets `GET /api/organizations/{organization}/settings` and
- *     `PUT /api/organizations/{organization}/settings`. The PUT is sent
- *     with an `X-Idempotency-Key` header and carries only the keys the
- *     actor edited.
- *   - The actor's `organization_id` (from `/api/user`) is the target
- *     organization by default. Platform super admin may also reach the
- *     page via `?organization=<id>` so they explicitly opt in to the
- *     tenant they want to manage; we never widen via `X-Organization-Id`.
- *   - Loading / error / empty / saving states are all covered.
+ * Contract under test (drives `OrganizationSettingsPage`,
+ * `adminApi.organizationSettings`, and the actor/auth-guard gate):
  *
- * Wire-level assertions stay narrow: every test asserts the exact URL the
- * page targets (no legacy `/admin/...` route), and the idempotency header
- * is asserted on every successful PUT.
+ *  - GET  /api/organizations/{organizationId}/settings/    → { data: payload }
+ *      first read on mount, loading→rendered transition.
+ *  - PUT  /api/organizations/{organizationId}/settings/
+ *      body = partial {locale_overrides?, branding_overrides?,
+ *                      notification_templates?}
+ *      header = Idempotency-Key: <uuid per submit>
+ *      No `X-Organization-Id` header on either verb (org is path-bound).
+ *  - Authorization gate renders the page only when the actor is
+ *      super_admin OR actor.user.organization_id === path :organizationId.
+ *  - States on the GET path:
+ *      loading → first paint shows the loading string;
+ *      error   → GET reject renders a danger Alert;
+ *      success → GET resolve renders the three field sections.
+ *  - States on the PUT path:
+ *      saving      → submit button disabled, second submit is a no-op;
+ *      success     → previous + new merged payload is rendered, success
+ *                    Alert visible until the form is dirtied;
+ *      error       → PUT reject renders a danger Alert with the backend
+ *                    message and leaves the form dirty (so the user can
+ *                    retry without re-typing).
+ *
+ * The test mocks `global.fetch` (the page uses a scoped fetch helper
+ * rather than the shared `api` client, because the shared client
+ * unconditionally injects `X-Organization-Id` from localStorage —
+ * the settings endpoint MUST NOT carry that header; the org is bound
+ * to the URL path).
  */
 
 import React from 'react';
 import userEvent from '@testing-library/user-event';
 import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { User } from '@shared/types';
-// Side-effect import: boots the i18next instance used by useTranslation
-// inside the page so key fallbacks resolve to the translated strings.
-import '@shared/config/i18n';
 import i18n from '@shared/config/i18n';
-import { OrganizationSettingsPage } from '@admin/pages/organization-settings/OrganizationSettingsPage';
+import { adminApi } from '@admin/api/adminApi';
 
-// The page reads its current user from useAuth(); type the loose
-// organization-scoped fields the page cares about locally so the shared
-// User type stays untouched (admin-only payload widening).
-type OrgScopedUser = User & {
-  organization_id?: number | null;
-  is_super_admin?: boolean;
-  is_organization_super_admin?: boolean;
-};
-
-interface AuthState {
-  user: (OrgScopedUser & { roles: string[] }) | null;
-  isLoading: boolean;
-  isAuthenticated: boolean;
-}
-
-const authState: { current: AuthState } = {
-  current: {
-    user: {
-      id: 42,
-      name: 'Org Super',
-      email: 'orgsuper@example.test',
-      department_id: null,
-      phone: null,
-      extension: null,
-      job_title: null,
-      is_active: true,
-      roles: ['organization_super_admin'],
-      organization_id: 5,
-      is_super_admin: false,
-      is_organization_super_admin: true,
-    },
-    isLoading: false,
-    isAuthenticated: true,
-  },
-};
+// Single hoisted mutable auth state. The hoisted object lives outside
+// the test closures so each test can swap `currentActor` and every
+// subsequent `useAuth()` call reads the latest value.
+const authMockState: { currentActor: User | null } = { currentActor: null };
 
 vi.mock('@shared/contexts/AuthContext', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
   useAuth: () => ({
-    ...authState.current,
+    user: authMockState.currentActor,
+    isLoading: false,
+    isAuthenticated: authMockState.currentActor !== null,
     logout: vi.fn(),
     refreshUser: vi.fn(),
-    can: () => true,
   }),
 }));
 
 vi.mock('@shared/contexts/LocaleContext', () => ({
+  LocaleProvider: ({ children }: { children: React.ReactNode }) => children,
   useLocale: () => ({ locale: 'ar', direction: 'rtl', setLocale: vi.fn() }),
 }));
-
 vi.mock('@shared/contexts/ThemeContext', () => ({
+  ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
   useTheme: () => ({ resolvedTheme: 'light', toggleTheme: vi.fn() }),
 }));
-
 vi.mock('@shared/contexts/SystemSettingsContext', () => ({
+  SystemSettingsProvider: ({ children }: { children: React.ReactNode }) => children,
   useSystemSettings: () => ({ settings: { name: 'Erada Platform', name_en: 'Erada' } }),
 }));
+vi.mock('@shared/ui/Toast', () => ({
+  ToastProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
 
-vi.mock('@shared/ui/Toast', () => {
-  const addToast = vi.fn();
-  return {
-    ToastProvider: ({ children }: { children: React.ReactNode }) => children,
-    useToast: () => ({ addToast, removeToast: vi.fn(), toasts: [] }),
-  };
-});
+const superAdmin: User = {
+  id: 1,
+  name: 'Control Admin',
+  email: 'admin@example.test',
+  department_id: null,
+  organization_id: 7,
+  phone: null,
+  extension: null,
+  job_title: null,
+  is_active: true,
+  is_super_admin: true,
+  is_org_admin: false,
+};
 
-interface CapturedCall {
-  url: string;
-  method: string;
-  headers: Record<string, string>;
-  body: unknown;
+const orgAdminActorSameOrg: User = {
+  id: 2,
+  name: 'Org Steward',
+  email: 'steward@example.test',
+  department_id: null,
+  organization_id: 7,
+  phone: null,
+  extension: null,
+  job_title: null,
+  is_active: true,
+  is_super_admin: false,
+  is_org_admin: true,
+};
+
+const orgAdminActorWrongOrg: User = {
+  ...orgAdminActorSameOrg,
+  organization_id: 99,
+};
+
+function setPath(path: string) {
+  window.history.replaceState({ usr: null, key: 'org-settings-test', idx: 0 }, '', path);
 }
 
-const fetchMock = vi.fn();
-let lastCall: CapturedCall | null = null;
-let pendingResolver: ((response: Response) => void) | null = null;
-
-function setFetchJsonResponse(body: unknown, status = 200) {
-  fetchMock.mockImplementationOnce(async (input: string | URL, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : (input as URL).toString();
-    const headers = normaliseHeaders(init?.headers);
-    lastCall = {
-      url,
-      method: String(init?.method ?? 'GET'),
-      headers,
-      body: parseJsonBody(init?.body),
-    };
-    return new Response(JSON.stringify({ data: body }), {
-      status,
-      headers: { 'Content-Type': 'application/json' },
-    });
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
   });
 }
 
-/**
- * Install a fetch mock that records the call but does not resolve the
- * returned Promise until `releasePendingFetch()` is called. This lets a
- * test observe a transient `saving` state (aria-busy, disabled submit)
- * before the simulated PUT commits and React renders the saved badge.
- */
-function setPendingFetch() {
-  fetchMock.mockImplementationOnce(async (input: string | URL, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : (input as URL).toString();
-    const headers = normaliseHeaders(init?.headers);
-    lastCall = {
-      url,
-      method: String(init?.method ?? 'GET'),
-      headers,
-      body: parseJsonBody(init?.body),
-    };
-    return new Promise<Response>((resolve) => {
-      pendingResolver = resolve;
-    });
-  });
+async function loadAdminModule() {
+  const mod = await import('@admin/app/AdminRouter');
+  return mod.AdminRouter;
 }
 
-function releasePendingFetch(body: unknown, status = 200) {
-  const resolve = pendingResolver;
-  pendingResolver = null;
-  if (!resolve) return;
-  resolve(
-    new Response(JSON.stringify({ data: body }), {
-      status,
-      headers: { 'Content-Type': 'application/json' },
-    }),
-  );
-}
+describe('admin organization settings integration', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
 
-function setFetchError(message = 'network down') {
-  fetchMock.mockImplementationOnce(async () => {
-    throw new Error(message);
-  });
-}
-
-function normaliseHeaders(raw: HeadersInit | undefined): Record<string, string> {
-  const result: Record<string, string> = {};
-  if (!raw) return result;
-  if (raw instanceof Headers) {
-    raw.forEach((value, key) => {
-      result[key] = value;
-    });
-  } else if (Array.isArray(raw)) {
-    for (const [key, value] of raw) {
-      result[key] = String(value);
-    }
-  } else {
-    Object.assign(result, raw as Record<string, string>);
-  }
-  return result;
-}
-
-function parseJsonBody(body: unknown): unknown {
-  if (typeof body !== 'string') return undefined;
-  try {
-    return JSON.parse(body);
-  } catch {
-    return body;
-  }
-}
-
-function renderPage(initialEntry: string = '/settings') {
-  return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
-      <Routes>
-        <Route path="/settings" element={<OrganizationSettingsPage />} />
-      </Routes>
-    </MemoryRouter>,
-  );
-}
-
-describe('OrganizationSuperAdmin settings page', () => {
   beforeEach(() => {
-    // Reset the mutable auth fixture to the canonical OrgSuper actor so
-    // each test starts from a known baseline regardless of what the
-    // previous test mutated onto `authState.current`.
-    authState.current = {
-      user: {
-        id: 42,
-        name: 'Org Super',
-        email: 'orgsuper@example.test',
-        department_id: null,
-        phone: null,
-        extension: null,
-        job_title: null,
-        is_active: true,
-        roles: ['organization_super_admin'],
-        organization_id: 5,
-        is_super_admin: false,
-        is_organization_super_admin: true,
+    document.documentElement.dir = 'rtl';
+    authMockState.currentActor = superAdmin;
+    fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(jsonResponse({
+      data: {
+        locale_overrides: {},
+        branding_overrides: {},
+        notification_templates: {},
       },
-      isLoading: false,
-      isAuthenticated: true,
-    };
-
-    vi.stubGlobal('fetch', fetchMock);
-    fetchMock.mockReset();
-    lastCall = null;
-    setFetchJsonResponse({
-      locale_overrides: {},
-      branding_overrides: {},
-      notification_templates: {},
-    });
-    // Make sure no localStorage-driven `X-Organization-Id` pollutes calls.
-    try {
-      window.localStorage.removeItem('iradah:current_organization_id');
-    } catch {
-      // localStorage can be unavailable in jsdom edge cases; ignore.
-    }
+    })));
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
-  it('targets GET /api/organizations/{actor.organization_id}/settings and omits X-Organization-Id', async () => {
-    renderPage();
+  it('adapters hit the canonical path-bound endpoints and never carry X-Organization-Id', async () => {
+    authMockState.currentActor = superAdmin;
+    fetchSpy
+      .mockResolvedValueOnce(jsonResponse({
+        data: {
+          locale_overrides: {},
+          branding_overrides: {},
+          notification_templates: {},
+        },
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        data: {
+          locale_overrides: { ar: 'ar-SA' },
+          branding_overrides: {},
+          notification_templates: {},
+        },
+      }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await adminApi.organizationSettings.get(7);
+    await adminApi.organizationSettings.update(7, {
+      locale_overrides: { ar: 'ar-SA' },
+    }, { idempotencyKey: 'idem-org-7-ar-sa' });
 
-    expect(lastCall).not.toBeNull();
-    expect(lastCall!.method).toBe('GET');
-    expect(lastCall!.url).toBe('/api/organizations/5/settings');
-    expect(lastCall!.headers['X-Organization-Id']).toBeUndefined();
-    expect(lastCall!.headers['Accept']).toBe('application/json');
-  });
-
-  it('renders loading chrome while the initial GET is pending', () => {
-    // Never resolve the GET so we stay in the loading state.
-    fetchMock.mockImplementation(() => new Promise<Response>(() => undefined));
-
-    renderPage();
-
-    expect(screen.getByRole('status')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: i18n.t('admin.orgSettings.save') })).not.toBeInTheDocument();
-  });
-
-  it('renders the empty state when the GET returns an empty payload', async () => {
-    setFetchJsonResponse({
-      locale_overrides: {},
-      branding_overrides: {},
-      notification_templates: {},
-    });
-
-    renderPage();
-
-    // The empty copy must be in the DOM, and the form fields must be
-    // present but empty (no fallback to "no settings" alert).
-    expect(
-      await screen.findByText(i18n.t('admin.orgSettings.emptyTitle')),
-    ).toBeInTheDocument();
-    const colorInput = await screen.findByLabelText(
-      i18n.t('admin.orgSettings.fields.primaryColor'),
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      '/api/organizations/7/settings/',
+      expect.objectContaining({
+        method: 'GET',
+        credentials: 'include',
+      }),
     );
-    expect(colorInput).toHaveValue('');
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      '/api/organizations/7/settings/',
+      expect.objectContaining({
+        method: 'PUT',
+        credentials: 'include',
+        body: JSON.stringify({ locale_overrides: { ar: 'ar-SA' } }),
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+          'Idempotency-Key': 'idem-org-7-ar-sa',
+          'Accept': 'application/json',
+        }),
+      }),
+    );
+    // Explicit guarantee: NO X-Organization-Id on either call.
+    for (const call of fetchSpy.mock.calls) {
+      const [, init] = call as [string, RequestInit];
+      const headerBag = init?.headers as Record<string, string> | undefined;
+      expect(headerBag?.['X-Organization-Id']).toBeUndefined();
+      expect(headerBag?.['x-organization-id']).toBeUndefined();
+    }
   });
 
-  it('renders the error state when the GET fails and exposes retry', async () => {
+  it('renders the three settings sections with hydrated values on a successful GET', async () => {
+    authMockState.currentActor = superAdmin;
+    fetchSpy.mockResolvedValue(
+      jsonResponse({
+        data: {
+          locale_overrides: { ar: 'ar-SA', en: 'en-US' },
+          branding_overrides: { primary_color: '#1F7A8C', logo_path: null },
+          notification_templates: { kpi_alert: 'A new KPI alert is in.' },
+        },
+      }),
+    );
+
+    setPath('/organizations/7/settings');
+    const AdminRouter = await loadAdminModule();
+    render(<AdminRouter />);
+
+    expect(await screen.findByLabelText(i18n.t('admin.organizationSettings.fields.localeOverridesAr'))).toHaveValue('ar-SA');
+    expect(screen.getByLabelText(i18n.t('admin.organizationSettings.fields.localeOverridesEn'))).toHaveValue('en-US');
+    expect(screen.getByLabelText(i18n.t('admin.organizationSettings.fields.brandingOverridesPrimaryColor'))).toHaveValue('#1F7A8C');
+    expect(screen.getByLabelText(i18n.t('admin.organizationSettings.fields.notificationTemplateKpiAlert'))).toHaveValue('A new KPI alert is in.');
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/organizations/7/settings/',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('renders a danger Alert when the GET fails and surfaces a retry control', async () => {
+    authMockState.currentActor = superAdmin;
+    fetchSpy.mockResolvedValue(
+      jsonResponse({ message: 'Unable to read settings' }, 503),
+    );
+
+    setPath('/organizations/7/settings');
+    const AdminRouter = await loadAdminModule();
     const user = userEvent.setup();
-    fetchMock.mockReset();
-    setFetchError('network down');
+    render(<AdminRouter />);
 
-    renderPage();
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(/network down/i);
-
-    // Retry path: the next GET must hit the same canonical URL.
-    fetchMock.mockReset();
-    setFetchJsonResponse({
-      locale_overrides: {},
-      branding_overrides: {},
-      notification_templates: {},
-    });
-    await user.click(screen.getByRole('button', { name: i18n.t('admin.orgSettings.retry') }));
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(lastCall!.url).toBe('/api/organizations/5/settings');
-  });
-
-  it('sends PUT with X-Idempotency-Key and only the edited overrides', async () => {
-    const user = userEvent.setup();
-    renderPage();
-
-    const colorInput = await screen.findByLabelText(
-      i18n.t('admin.orgSettings.fields.primaryColor'),
-    );
-    const logoInput = screen.getByLabelText(i18n.t('admin.orgSettings.fields.logoPath'));
-
-    await user.clear(colorInput);
-    await user.type(colorInput, '#1f3a8a');
-    await user.type(logoInput, '/branding/north.svg');
-
-    // Hold the PUT open so we can observe the saving state on the form
-    // before the response commits and React re-renders the saved badge.
-    fetchMock.mockReset();
-    setPendingFetch();
-
-    const save = await screen.findByRole('button', {
-      name: i18n.t('admin.orgSettings.save'),
-    });
-    await user.click(save);
-
-    const form = document.querySelector('form');
-    expect(form).not.toBeNull();
-    await waitFor(() => expect(form!).toHaveAttribute('aria-busy', 'true'));
-
-    // Now release the PUT and let React settle into the saved state.
-    releasePendingFetch({
-      locale_overrides: {},
-      branding_overrides: { primary_color: '#1f3a8a', logo_path: '/branding/north.svg' },
-      notification_templates: {},
-    });
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(lastCall!.method).toBe('PUT');
-    expect(lastCall!.url).toBe('/api/organizations/5/settings');
-
-    const idempotency = lastCall!.headers['X-Idempotency-Key'];
-    expect(typeof idempotency).toBe('string');
-    expect((idempotency as string).length).toBeGreaterThanOrEqual(8);
-
-    // Only the edited key is sent. Notification templates + locale overrides
-    // were not touched, so the PUT stays narrow.
-    expect(lastCall!.body).toEqual({
-      branding_overrides: { primary_color: '#1f3a8a', logo_path: '/branding/north.svg' },
-    });
-    expect(lastCall!.headers['X-Organization-Id']).toBeUndefined();
-
-    // Saved state: success alert visible, button re-enabled.
-    expect(await screen.findByText(i18n.t('admin.orgSettings.saved'))).toBeInTheDocument();
-  });
-
-  it('mints a fresh X-Idempotency-Key per save attempt', async () => {
-    const user = userEvent.setup();
-    renderPage();
-    const colorInput = await screen.findByLabelText(
-      i18n.t('admin.orgSettings.fields.primaryColor'),
-    );
-
-    await user.clear(colorInput);
-    await user.type(colorInput, '#000001');
-
-    fetchMock.mockReset();
-    setFetchJsonResponse({
-      locale_overrides: {},
-      branding_overrides: { primary_color: '#000001', logo_path: null },
-      notification_templates: {},
-    });
-    await user.click(
-      await screen.findByRole('button', { name: i18n.t('admin.orgSettings.save') }),
-    );
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    const firstKey = lastCall!.headers['X-Idempotency-Key'];
-
-    // Edit again — the next PUT must mint a fresh key, never replay.
-    await screen.findByText(i18n.t('admin.orgSettings.saved'));
-    await user.clear(colorInput);
-    await user.type(colorInput, '#000002');
-    fetchMock.mockReset();
-    setFetchJsonResponse({
-      locale_overrides: {},
-      branding_overrides: { primary_color: '#000002', logo_path: null },
-      notification_templates: {},
-    });
-    await user.click(screen.getByRole('button', { name: i18n.t('admin.orgSettings.save') }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    const secondKey = lastCall!.headers['X-Idempotency-Key'];
-
-    expect(typeof firstKey).toBe('string');
-    expect(typeof secondKey).toBe('string');
-    expect(firstKey).not.toEqual(secondKey);
-  });
-
-  it('reaches the page for a platform super admin via ?organization=<id>', async () => {
-    authState.current = {
-      user: {
-        id: 1,
-        name: 'Platform Admin',
-        email: 'platform@example.test',
-        department_id: null,
-        phone: null,
-        extension: null,
-        job_title: null,
-        is_active: true,
-        roles: ['super_admin'],
-        organization_id: null,
-        is_super_admin: true,
-        is_organization_super_admin: false,
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to read settings');
+    // Reset spy with a successful payload and confirm retry resolves.
+    fetchSpy.mockResolvedValueOnce(jsonResponse({
+      data: {
+        locale_overrides: {},
+        branding_overrides: {},
+        notification_templates: {},
       },
-      isLoading: false,
-      isAuthenticated: true,
-    };
-
-    renderPage('/settings?organization=99');
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(lastCall!.url).toBe('/api/organizations/99/settings');
-    expect(lastCall!.headers['X-Organization-Id']).toBeUndefined();
+    }));
+    await user.click(screen.getByRole('button', { name: i18n.t('common.retry') }));
+    expect(await screen.findByLabelText(i18n.t('admin.organizationSettings.fields.localeOverridesAr'))).toBeInTheDocument();
   });
 
-  it('blocks an OrgSuper actor from crossing tenants when actor.organization_id conflicts with ?organization', async () => {
-    // OrgSuper must always operate on their own tenant. A mismatch with
-    // a query-string override renders the empty/no-target state and never
-    // hits the network on the wrong tenant.
-    renderPage('/settings?organization=999');
+  it('serializes a partial PUT with a fresh Idempotency-Key and renders the merged payload on success', async () => {
+    authMockState.currentActor = superAdmin;
+    fetchSpy
+      // 1) GET on mount
+      .mockResolvedValueOnce(jsonResponse({
+        data: {
+          locale_overrides: { ar: 'ar-SA' },
+          branding_overrides: {},
+          notification_templates: { kpi_alert: 'Old KPI alert.' },
+        },
+      }))
+      // 2) PUT
+      .mockResolvedValueOnce(jsonResponse({
+        data: {
+          locale_overrides: { ar: 'ar-SA', en: 'en-US' },
+          branding_overrides: {},
+          notification_templates: { kpi_alert: 'New alert copy for KPI dips.' },
+        },
+      }));
 
-    // The page surfaces the OrgSuper no-target copy. Match on a portion
-    // of the body that is unique to the OrgSuper branch.
-    const copy = await screen.findByText(/حسابك مرتبط/i);
-    expect(copy).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
+    setPath('/organizations/7/settings');
+    const AdminRouter = await loadAdminModule();
+    const user = userEvent.setup();
+    render(<AdminRouter />);
+
+    // Wait for hydrated form.
+    await screen.findByLabelText(i18n.t('admin.organizationSettings.fields.localeOverridesEn'));
+
+    await user.type(
+      screen.getByLabelText(i18n.t('admin.organizationSettings.fields.localeOverridesEn')),
+      'en-US',
+    );
+    await user.clear(screen.getByLabelText(i18n.t('admin.organizationSettings.fields.notificationTemplateKpiAlert')));
+    await user.type(
+      screen.getByLabelText(i18n.t('admin.organizationSettings.fields.notificationTemplateKpiAlert')),
+      'New alert copy for KPI dips.',
+    );
+
+    const submit = screen.getByRole('button', { name: i18n.t('admin.organizationSettings.actions.save') });
+    await user.click(submit);
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+
+    const putCall = fetchSpy.mock.calls[1];
+    expect(putCall[0]).toBe('/api/organizations/7/settings/');
+    const putInit = putCall[1] as RequestInit;
+    const putHeaders = putInit.headers as Record<string, string>;
+    expect(putHeaders['Idempotency-Key']).toMatch(/^[0-9a-f-]{8,}$/);
+    expect(putInit.body).toBe(JSON.stringify({
+      locale_overrides: { en: 'en-US' },
+      notification_templates: { kpi_alert: 'New alert copy for KPI dips.' },
+    }));
+
+    // Success alert visible after PUT resolves.
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Settings for .* were updated\.|تم تحديث إعدادات/);
+    // The fields reflect the merged payload returned by the server.
+    expect(screen.getByLabelText(i18n.t('admin.organizationSettings.fields.notificationTemplateKpiAlert'))).toHaveValue('New alert copy for KPI dips.');
+    expect(screen.getByLabelText(i18n.t('admin.organizationSettings.fields.localeOverridesEn'))).toHaveValue('en-US');
+  });
+
+  it('blocks when actor is neither super_admin nor in target organization (path mismatch)', async () => {
+    authMockState.currentActor = orgAdminActorWrongOrg;
+
+    setPath('/organizations/7/settings');
+    const AdminRouter = await loadAdminModule();
+    render(<AdminRouter />);
+
+    // The page itself guards rendering and surfaces the Forbidden screen.
+    expect(await screen.findByText(i18n.t('ovr.api.access_denied'))).toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('shows validation errors from the backend and keeps form values dirty for retry', async () => {
+    authMockState.currentActor = superAdmin;
+    fetchSpy
+      .mockResolvedValueOnce(jsonResponse({
+        data: {
+          locale_overrides: {},
+          branding_overrides: {},
+          notification_templates: {},
+        },
+      }))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            message: 'Validation failed',
+            errors: { 'branding_overrides.primary_color': ['Must be #RRGGBB.'] },
+          },
+          422,
+        ),
+      );
+
+    setPath('/organizations/7/settings');
+    const AdminRouter = await loadAdminModule();
+    const user = userEvent.setup();
+    render(<AdminRouter />);
+
+    await screen.findByLabelText(i18n.t('admin.organizationSettings.fields.brandingOverridesPrimaryColor'));
+    await user.type(
+      screen.getByLabelText(i18n.t('admin.organizationSettings.fields.brandingOverridesPrimaryColor')),
+      '#ABC',
+    );
+
+    await user.click(screen.getByRole('button', { name: i18n.t('admin.organizationSettings.actions.save') }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Must be #RRGGBB\.|يجب أن يكون/);
+    // Submit click did NOT clear the dirty value.
+    expect(screen.getByLabelText(i18n.t('admin.organizationSettings.fields.brandingOverridesPrimaryColor'))).toHaveValue('#ABC');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });

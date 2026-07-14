@@ -15,8 +15,8 @@ import type {
   IncidentTypeInput,
   Organization,
   OrganizationInput,
-  OrganizationSettingsEnvelope,
-  OrganizationSettingsPayload,
+  OrganizationSettingsInput,
+  OrganizationSettingsResponse,
   OverviewCounts,
   PaginatedResponse,
   RoleDefinition,
@@ -30,6 +30,98 @@ import type {
 
 type QueryValue = string | number | boolean | null | undefined;
 type DepartmentPage = { data: DepartmentSummary[]; current_page?: number; last_page?: number; per_page?: number; total?: number };
+
+/**
+ * Read the XSRF-TOKEN cookie value Laravel/Sanctum sets as the JS-readable
+ * CSRF token echo (the encrypted token, NOT the raw `csrf-token` meta tag).
+ * The admin SPA has no `csrf-token` meta tag in its HTML shell, so we rely
+ * on the cookie the framework always writes for stateful SPA traffic.
+ */
+function readXsrfCookie(): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie
+    .split('; ')
+    .find((row) => row.startsWith('XSRF-TOKEN='));
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match.split('=', 2)[1] ?? '');
+  } catch {
+    return null;
+  }
+}
+
+function generateIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // Math.random fallback for environments without crypto.randomUUID
+  // (older jsdom in unit tests still resolves `crypto.randomUUID`).
+  return `idem-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+}
+
+/**
+ * Path-bound admin fetch. Used for endpoints whose scope is the URL path
+ * (`/organizations/{id}/settings`), not a header-driven org switch.
+ *
+ * Explicitly does NOT inject `X-Organization-Id` — the shared
+ * `ApiClient` reads `iradah:current_organization_id` from localStorage
+ * and unconditionally attaches that header, but the settings endpoint
+ * is org-bound on the URL and must never carry the legacy header.
+ *
+ * Honors:
+ *   - `credentials: 'include'` (Sanctum HttpOnly cookies)
+ *   - XSRF-TOKEN cookie (`X-XSRF-TOKEN` header) for mutating verbs
+ *   - optional per-call `Idempotency-Key` (PUT only — the backend
+ *     registers `idempotency` middleware only on the settings PUT and
+ *     on the org tree PUT)
+ */
+async function pathBoundFetch<T>(
+  endpoint: string,
+  options: {
+    method: 'GET' | 'PUT';
+    body?: unknown;
+    idempotencyKey?: string;
+  },
+): Promise<T> {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  };
+  if (options.method !== 'GET') {
+    headers['Content-Type'] = 'application/json';
+    const xsrf = readXsrfCookie();
+    if (xsrf) headers['X-XSRF-TOKEN'] = xsrf;
+    if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
+  }
+
+  const init: RequestInit = {
+    method: options.method,
+    credentials: 'include',
+    headers,
+  };
+  if (options.body !== undefined) {
+    init.body = JSON.stringify(options.body);
+  }
+
+  const response = await fetch(`/api${endpoint}`, init);
+  if (!response.ok) {
+    let errorBody: { message?: string; errors?: Record<string, string[]> } = {};
+    try {
+      errorBody = await response.json();
+    } catch {
+      // non-JSON error response — keep defaults
+    }
+    const firstValidation = errorBody.errors
+      ? Object.values(errorBody.errors).flat()[0]
+      : undefined;
+    const error: { message?: string; errors?: Record<string, string[]>; status?: number } = {
+      message: firstValidation ?? errorBody.message ?? 'Request failed',
+      errors: errorBody.errors,
+      status: response.status,
+    };
+    throw error;
+  }
+  return response.json() as Promise<T>;
+}
 
 function queryString(params?: Record<string, QueryValue>): string {
   if (!params) return '';
@@ -84,6 +176,31 @@ export const adminApi = {
       return { data };
     },
   },
+  /**
+   * Organization-scoped settings (Phase 0). Path-bound; never carries
+   * `X-Organization-Id`. The persisted row lives in `organization_settings`,
+   * not the legacy `organizations.settings` JSON column.
+   */
+  organizationSettings: {
+    get: (organizationId: number) =>
+      pathBoundFetch<OrganizationSettingsResponse>(
+        `/organizations/${organizationId}/settings/`,
+        { method: 'GET' },
+      ),
+    update: (
+      organizationId: number,
+      data: OrganizationSettingsInput,
+      options: { idempotencyKey?: string } = {},
+    ) =>
+      pathBoundFetch<OrganizationSettingsResponse>(
+        `/organizations/${organizationId}/settings/`,
+        {
+          method: 'PUT',
+          body: data,
+          idempotencyKey: options.idempotencyKey ?? generateIdempotencyKey(),
+        },
+      ),
+  },
   roles: {
     list: () => api.get<{ data: RoleDefinition[]; meta: { total: number } }>('/roles'),
     get: (id: number) => api.get<{ data: RoleDefinition }>(`/roles/${id}`),
@@ -103,15 +220,6 @@ export const adminApi = {
     update: (id: number, data: Partial<AdminUserInput>) => api.put(`/users/${id}`, data),
     unlock: (id: number) => api.post(`/users/${id}/unlock`, undefined),
     delete: (id: number) => api.delete(`/users/${id}`),
-    /**
-     * Activate / deactivate alias for `update(id, { is_active })`. The backend
-     * routes the mutation through the canonical FormRequest that authorizes
-     * OrgSuper against ordinary same-org targets only; protected admins
-     * (`super_admin`, `organization_super_admin`) are rejected, so the FE
-     * also hides the controls via `canMutateTargetLifecycle`.
-     */
-    setActive: (id: number, isActive: boolean) =>
-      api.put(`/users/${id}`, { is_active: isActive }),
     all: async (organizationId: number) => {
       const data: AdminUser[] = [];
       let page = 1;
@@ -180,90 +288,4 @@ export const adminApi = {
     addReportableType: (id: string, data: { name: string; name_ar: string }) =>
       api.post(`/admin/incident-types/${id}/reportable-types`, data),
   },
-  organizationSettings: {
-    /**
-     * GET /api/organizations/{organization}/settings
-     *
-     * Strictly non-mutating on the server (no row write, no audit row).
-     * Reads the persisted payload or the default payload if no row exists.
-     */
-    get: (organizationId: number) =>
-      api.get<OrganizationSettingsEnvelope>(`/organizations/${organizationId}/settings`),
-    /**
-     * PUT /api/organizations/{organization}/settings
-     *
-     * Sends an `X-Idempotency-Key` header so that retries within the
-     * backend's 300s idempotency window don't double-apply the merge.
-     * The endpoint is mounted behind `idempotency` middleware
-     * (`App\Http\Middleware\IdempotencyKey`); without the header the
-     * request still works, but the dedup guarantee is lost.
-     *
-     * Scope is `resources/admin` only: we use raw fetch here (instead
-     * of `api.put`) so the extra header can ride along without
-     * modifying the shared `@shared/api/client` surface.
-     */
-    update: async (
-      organizationId: number,
-      payload: Partial<OrganizationSettingsPayload>,
-      idempotencyKey: string,
-    ): Promise<OrganizationSettingsEnvelope> => {
-      const csrfToken = readMetaCsrfToken();
-      const headers: Record<string, string> = {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-        'X-Idempotency-Key': idempotencyKey,
-      };
-      if (csrfToken) {
-        headers['X-CSRF-TOKEN'] = csrfToken;
-      }
-      const xsrf = readCookie('XSRF-TOKEN');
-      if (xsrf) {
-        headers['X-XSRF-TOKEN'] = xsrf;
-      }
-      const response = await fetch(`/api/organizations/${organizationId}/settings`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers,
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        const errorBody = await safeReadJson(response);
-        throw {
-          status: response.status,
-          message: errorBody?.message ?? `Request failed (${response.status})`,
-          errors: errorBody?.errors,
-        };
-      }
-      return (await response.json()) as OrganizationSettingsEnvelope;
-    },
-  },
 };
-
-/**
- * Read the same CSRF token the shared ApiClient uses. Mirrors
- * `getCsrfToken` in `resources/js/shared/api/client.ts` so the admin
- * PUT path picks up the latest token without us touching the shared
- * client surface.
- */
-function readMetaCsrfToken(): string | null {
-  if (typeof document === 'undefined') return null;
-  return document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content || null;
-}
-
-function readCookie(name: string): string | null {
-  if (typeof document === 'undefined') return null;
-  const cookie = document.cookie
-    .split('; ')
-    .find((row) => row.startsWith(`${name}=`));
-  if (!cookie) return null;
-  return decodeURIComponent(cookie.split('=')[1] ?? '');
-}
-
-async function safeReadJson(response: Response): Promise<{ message?: string; errors?: Record<string, string[]> } | null> {
-  try {
-    return (await response.json()) as { message?: string; errors?: Record<string, string[]> };
-  } catch {
-    return null;
-  }
-}

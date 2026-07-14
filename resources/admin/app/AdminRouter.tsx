@@ -11,6 +11,7 @@ import { AuditRecent } from '@admin/pages/audit-recent/AuditRecent';
 import { OrganizationsPage } from '@admin/pages/organizations/OrganizationsPage';
 import { OrganizationForm } from '@admin/pages/organizations/OrganizationForm';
 import { OrganizationDetails } from '@admin/pages/organizations/OrganizationDetails';
+import { OrganizationSettingsPage } from '@admin/pages/organizations/OrganizationSettingsPage';
 import { RolesPage } from '@admin/pages/roles/RolesPage';
 import { RoleForm } from '@admin/pages/roles/RoleForm';
 import { AccessPage } from '@admin/pages/access/AccessPage';
@@ -46,6 +47,7 @@ export function AdminRouter() {
             <Route path="/organizations/new" element={<OrganizationForm />} />
             <Route path="/organizations/:organizationId" element={<OrganizationDetails />} />
             <Route path="/organizations/:organizationId/edit" element={<OrganizationForm />} />
+            <Route path="/organizations/:organizationId/settings" element={<OrganizationSettingsPage />} />
             <Route path="/access" element={<AccessPage />} />
             <Route path="/access/governance" element={<GovernanceRulesPage />} />
             <Route path="/roles" element={<RolesPage />} />

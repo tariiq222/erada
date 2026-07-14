@@ -24,6 +24,15 @@ export interface User {
   name: string;
   email: string;
   department_id: number | null;
+  /**
+   * Backend-computed current organization id from `/api/user` (see
+   * AuthController::user). Authoritative for actor-identity checks on
+   * org-scoped routes — never trust the `X-Organization-Id` request
+   * header for that purpose. `null` when the user is not currently
+   * bound to any organization (e.g. global super_admin before first
+   * org switch, or recently unassigned user).
+   */
+  organization_id?: number | null;
   phone: string | null;
   extension: string | null;
   job_title: string | null;
