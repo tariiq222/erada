@@ -15,8 +15,10 @@ use App\Modules\Core\Authorization\Models\AuthorizationRole;
 use App\Modules\Core\Authorization\Models\AuthorizationRoleAssignment;
 use App\Modules\Core\Authorization\Models\AuthorizationRolePermission;
 use App\Modules\Core\Authorization\Services\AuthorizationAssignmentService;
+use App\Modules\Core\Authorization\Services\OrganizationSuperAdminRoleAssignmentService;
 use App\Modules\Core\Authorization\Support\CapabilityToAuthorizationRolePermission;
 use App\Modules\Core\Http\Requests\AssignCanonicalRolesRequest;
+use App\Modules\Core\Http\Requests\AssignOrganizationSuperAdminRoleRequest;
 use App\Modules\Core\Http\Requests\DeleteRoleRequest;
 use App\Modules\Core\Http\Requests\StoreRoleRequest;
 use App\Modules\Core\Http\Requests\UpdateRoleRequest;
@@ -231,6 +233,71 @@ class RoleController extends Controller
         return response()->json(['message' => 'تم تعيين الأدوار والنطاقات بنجاح', 'data' => [
             'user_id' => $subject->id, 'assignments' => $this->canonicalAssignmentsFor($subject),
         ]]);
+    }
+
+    /**
+     * CSD-CA23078-CORE-009 — OrgSuper-specific role-assignment actor path.
+     *
+     * Distinct from canonical `assignToUser()`:
+     *   - Public gate is `ensure.org_super_only` middleware (not auth-only).
+     *   - Capability gate is `roles.assign` (OrgSuper-only), NOT
+     *     `core.assign_roles` (super_admin-only).
+     *   - FormRequest is `AssignOrganizationSuperAdminRoleRequest` with
+     *     narrow rules and `after()` defense-in-depth checks.
+     *   - Service is `OrganizationSuperAdminRoleAssignmentService` with its
+     *     own actor guard + server-derived scope.
+     *
+     * super_admin continues to use the canonical `/api/roles/assign` route.
+     */
+    public function assignByOrganizationSuperAdmin(
+        AssignOrganizationSuperAdminRoleRequest $request,
+        OrganizationSuperAdminRoleAssignmentService $assignmentService,
+    ): JsonResponse {
+        $validated = $request->validated();
+        /** @var User $actor */
+        $actor = $request->user();
+        $subject = User::query()->findOrFail($validated['user_id']);
+        $roles = AuthorizationRole::query()->where('is_active', true)
+            ->whereKey(collect($validated['assignments'])->pluck('role_id')->all())->get()->keyBy('id');
+        $writes = collect($validated['assignments'])->map(function (array $payload) use ($roles): RoleAssignmentWrite {
+            $role = $roles->get((int) $payload['role_id']);
+            abort_if($role === null, 422, 'الدور المطلوب غير موجود أو غير نشط.');
+
+            return new RoleAssignmentWrite($role, new AssignmentWrite(
+                new AssignmentScope($payload['scope_type'], $payload['scope_id'] ?? null, (bool) ($payload['inherit_to_children'] ?? false)),
+                isset($payload['expires_at']) ? CarbonImmutable::parse($payload['expires_at']) : null,
+                'manual',
+            ));
+        })->values()->all();
+
+        try {
+            $assignmentService->syncManual($actor, $subject, $writes, [
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'request_id' => $request->header('X-Request-Id'),
+            ]);
+        } catch (AuthorizationAssignmentDenied $exception) {
+            return response()->json(['message' => $exception->getMessage()], 403);
+        }
+
+        return response()->json([
+            'message' => 'تم تعيين الأدوار من قِبل Organization Super Admin بنجاح',
+            'data' => [
+                'user_id' => $subject->id,
+                'assignments' => $subject->canonicalRoleAssignments()
+                    ->with('role:id,name')
+                    ->get()
+                    ->map(fn (AuthorizationRoleAssignment $a) => [
+                        'role_id' => $a->authorization_role_id,
+                        'role_name' => $a->role?->name,
+                        'scope_type' => $a->scope_type,
+                        'scope_id' => $a->scope_id,
+                        'organization_id' => $a->organization_id,
+                        'inherit_to_children' => (bool) $a->inherit_to_children,
+                    ])
+                    ->all(),
+            ],
+        ]);
     }
 
     private function disableRole(Request $request, AuthorizationRole $role): JsonResponse

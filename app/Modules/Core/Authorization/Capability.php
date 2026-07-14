@@ -373,6 +373,15 @@ final class Capability
 
     const ROLES_DELETE = 'roles.delete';
 
+    /**
+     * CSD-CA23078-CORE-009 (OrgSuper rewrite).
+     *
+     * Held by `organization_super_admin` ONLY (Task 3 curated set). Gates
+     * the dedicated `POST /api/org-super/role-assignments` route. Distinct
+     * from `core.assign_roles` (canonical super_admin-only path). The
+     * curated `admin` role does NOT hold this capability — the OrgSuper
+     * role is the single boundary actor for organizational role assignment.
+     */
     const ROLES_ASSIGN = 'roles.assign';
 
     const USERS_VIEW = 'users.view';
