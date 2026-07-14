@@ -15,6 +15,8 @@ import type {
   IncidentTypeInput,
   Organization,
   OrganizationInput,
+  OrganizationSettingsInput,
+  OrganizationSettingsResponse,
   OperationalRoleAssignmentInput,
   OverviewCounts,
   PaginatedResponse,
@@ -29,6 +31,25 @@ import type {
 
 type QueryValue = string | number | boolean | null | undefined;
 type DepartmentPage = { data: DepartmentSummary[]; current_page?: number; last_page?: number; per_page?: number; total?: number };
+
+async function pathBoundFetch<T>(endpoint: string, options: { method: 'GET' | 'PUT'; body?: unknown; idempotencyKey?: string }): Promise<T> {
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (options.method === 'PUT') {
+    headers['Content-Type'] = 'application/json';
+    if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
+  }
+  const response = await fetch(`/api${endpoint}`, {
+    method: options.method,
+    credentials: 'include',
+    headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { message?: string; errors?: Record<string, string[]> };
+    throw { message: body.errors ? Object.values(body.errors).flat()[0] : body.message, errors: body.errors, status: response.status };
+  }
+  return response.json() as Promise<T>;
+}
 
 function queryString(params?: Record<string, QueryValue>): string {
   if (!params) return '';
@@ -82,6 +103,13 @@ export const adminApi = {
       } while (page <= lastPage);
       return { data };
     },
+  },
+  organizationSettings: {
+    get: (organizationId: number) => pathBoundFetch<OrganizationSettingsResponse>(`/organizations/${organizationId}/settings/`, { method: 'GET' }),
+    update: (organizationId: number, data: OrganizationSettingsInput, options: { idempotencyKey?: string } = {}) =>
+      pathBoundFetch<OrganizationSettingsResponse>(`/organizations/${organizationId}/settings/`, {
+        method: 'PUT', body: data, idempotencyKey: options.idempotencyKey ?? crypto.randomUUID(),
+      }),
   },
   roles: {
     list: () => api.get<{ data: RoleDefinition[]; meta: { total: number } }>('/roles'),
